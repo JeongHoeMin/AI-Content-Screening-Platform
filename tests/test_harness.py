@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import timedelta
+
+import pytest
 
 from app.core import SkillResult
 from app.harness import Harness
@@ -15,6 +16,11 @@ from app.providers import (
     ProviderRegistry,
 )
 from app.skills import CollectPostsSkill
+
+
+@pytest.fixture
+def anyio_backend() -> str:
+    return "asyncio"
 
 
 def build_skill() -> CollectPostsSkill:
@@ -42,17 +48,14 @@ def build_request(limit: int) -> CollectPostsRequest:
     )
 
 
-def test_harness_run_matches_direct_skill_execution() -> None:
+@pytest.mark.anyio
+async def test_harness_run_matches_direct_skill_execution() -> None:
     skill: CollectPostsSkill = build_skill()
     harness: Harness = Harness()
     request: CollectPostsRequest = build_request(limit=2)
 
-    direct_result: SkillResult[CollectPostsData, CollectPostsMetadata] = asyncio.run(
-        skill.execute(request)
-    )
-    harness_result: SkillResult[CollectPostsData, CollectPostsMetadata] = asyncio.run(
-        harness.run(skill, request)
-    )
+    direct_result: SkillResult[CollectPostsData, CollectPostsMetadata] = await skill.execute(request)
+    harness_result: SkillResult[CollectPostsData, CollectPostsMetadata] = await harness.run(skill, request)
 
     assert [post.id for post in harness_result.data.posts] == [
         post.id for post in direct_result.data.posts
@@ -65,15 +68,18 @@ def test_harness_run_matches_direct_skill_execution() -> None:
     assert harness_result.errors == direct_result.errors
 
 
-def test_harness_reuse_does_not_leak_execution_state() -> None:
+@pytest.mark.anyio
+async def test_harness_reuse_does_not_leak_execution_state() -> None:
     skill: CollectPostsSkill = build_skill()
     harness: Harness = Harness()
 
-    first_result: SkillResult[CollectPostsData, CollectPostsMetadata] = asyncio.run(
-        harness.run(skill, build_request(limit=1))
+    first_result: SkillResult[CollectPostsData, CollectPostsMetadata] = await harness.run(
+        skill,
+        build_request(limit=1),
     )
-    second_result: SkillResult[CollectPostsData, CollectPostsMetadata] = asyncio.run(
-        harness.run(skill, build_request(limit=2))
+    second_result: SkillResult[CollectPostsData, CollectPostsMetadata] = await harness.run(
+        skill,
+        build_request(limit=2),
     )
 
     assert first_result.metadata.collected_count == 2
