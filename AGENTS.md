@@ -8,7 +8,7 @@
 - 데이터 검증, 입출력 스키마, 설정 모델, 도메인 모델에는 Pydantic을 사용한다.
 - `print` 사용은 금지한다.
 - 로깅은 `structlog`를 사용한다.
-- 프롬프트는 코드에 직접 작성하지 않고 `prompts/` 폴더에 저장한다.
+- 프롬프트 조립 코드는 `app/prompts/`에, 프롬프트 문자열과 표현 로직은 `app/prompt_templates/`에 둔다.
 - Skill은 하나의 책임만 가진다.
 - Agent는 Skill만 호출한다.
 - Harness만 상태를 변경한다.
@@ -33,7 +33,7 @@
 - Agent는 의사결정과 오케스트레이션만 담당한다.
 - Agent는 외부 API, 데이터베이스, 파일 시스템, 상태 저장소를 직접 변경하지 않는다.
 - Agent는 필요한 작업을 Skill 호출로만 수행한다.
-- Agent가 사용하는 프롬프트는 반드시 `prompts/`에서 로드한다.
+- Agent가 사용하는 프롬프트는 반드시 `app/prompts/`의 PromptBuilder를 통해 생성한다.
 
 ### Harness
 
@@ -80,9 +80,12 @@
 
 ## Prompt Management
 
-- 모든 프롬프트 파일은 `prompts/` 하위에 둔다.
-- 프롬프트 파일명은 역할과 목적이 드러나도록 작성한다.
-- 코드 안에는 프롬프트 본문을 인라인 문자열로 길게 작성하지 않는다.
+- PromptBuilder 코드는 `app/prompts/` 하위에 둔다.
+- 프롬프트 문자열과 표현 로직은 `app/prompt_templates/` 하위의 Python 상수와 함수로 관리한다.
+- PromptBuilder는 입력 DTO를 `ChatMessage`로 조립만 하고 문자열 치환이나 데이터 표현을 직접 수행하지 않는다.
+- PromptTemplate은 템플릿 치환과 JSON, YAML, Markdown 같은 Prompt 표현 방식을 담당한다.
+- PromptBuilder 입력 DTO는 내부 계층 간 전달용 immutable 객체로 관리한다. 외부 경계 입력은 Pydantic으로 검증한다.
+- 프롬프트 본문은 Evaluator, Generator, Skill 같은 비-PromptTemplate 코드에 인라인으로 작성하지 않는다.
 - 프롬프트 변경은 코드 변경과 동일하게 리뷰 가능한 단위로 관리한다.
 
 ## Logging
@@ -99,7 +102,7 @@
 - 외부 입력 또는 구조화 데이터에 Pydantic 모델을 사용했는가?
 - `print`가 추가되지 않았는가?
 - 로깅이 필요하다면 `structlog`를 사용했는가?
-- 새 프롬프트가 `prompts/`에 저장되었는가?
+- 새 프롬프트가 `app/prompt_templates/`에 저장되고 PromptBuilder가 `app/prompts/`에 있는가?
 - Skill이 하나의 책임만 가지고 있는가?
 - Agent가 Skill 외의 실행 단위를 직접 호출하지 않는가?
 - 상태 변경이 Harness 밖에서 발생하지 않는가?
