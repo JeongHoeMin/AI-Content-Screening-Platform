@@ -38,3 +38,11 @@
 ```text
 feat: introduce prompt builder abstraction
 ```
+
+## Change Log
+
+### 2026-07-29
+
+- PromptTemplate의 공개 API는 `build_evaluator_system_prompt()`와 `build_evaluator_user_prompt()`로 제한했다. 템플릿 문자열 상수와 직렬화 helper는 모듈 내부 구현으로 관리한다.
+- `EvaluatorPromptInput.posts`와 사용자 Prompt 생성 함수의 입력을 `Sequence[Post]`로 변경해 읽기 전용 입력 계약을 명확히 했다.
+- 게시글 JSON 표현은 PromptTemplate 내부 `_serialize_posts_for_prompt()` helper로 분리했다. PromptBuilder는 Template 함수 호출과 `ChatMessage` 조립만 담당한다.

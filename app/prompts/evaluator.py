@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List
+from typing import List, Sequence
 
 from app.llms.models import ChatMessage, ChatRole
 from app.models.post import Post
@@ -16,7 +16,7 @@ from app.prompts.base import PromptBuilder
 class EvaluatorPromptInput:
     """Validated data passed to the evaluator prompt builder."""
 
-    posts: List[Post]
+    posts: Sequence[Post]
 
 
 class EvaluatorPromptBuilder(PromptBuilder[EvaluatorPromptInput]):

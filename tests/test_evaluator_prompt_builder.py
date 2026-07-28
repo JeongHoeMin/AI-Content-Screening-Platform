@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import FrozenInstanceError
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Sequence
 
 import pytest
 
@@ -36,6 +36,13 @@ def test_evaluator_prompt_input_is_immutable() -> None:
 
     with pytest.raises(FrozenInstanceError):
         prompt_input.posts = []  # type: ignore[misc]
+
+
+def test_evaluator_prompt_input_accepts_read_only_post_sequence() -> None:
+    posts: Sequence[Post] = (build_post(),)
+    prompt_input: EvaluatorPromptInput = EvaluatorPromptInput(posts=posts)
+
+    assert prompt_input.posts == posts
 
 
 def test_evaluator_prompt_builder_uses_generic_prompt_builder_contract() -> None:
