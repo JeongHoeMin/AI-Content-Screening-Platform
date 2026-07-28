@@ -7,6 +7,13 @@ from app.models.collect_posts import (
     ProviderResultMetadata,
 )
 from app.models.community import CommunityType
+from app.models.generate_script import (
+    GeneratedScript,
+    GenerateScriptData,
+    GenerateScriptMetadata,
+    GenerateScriptRequest,
+    ScriptGenerationResult,
+)
 from app.models.normalize import NormalizeResult
 from app.models.post import Post
 from app.models.raw_post import RawDcInsidePost, RawPost, RawRedditPost
@@ -23,6 +30,10 @@ __all__ = [
     "CollectPostsMetadata",
     "CollectPostsRequest",
     "CommunityType",
+    "GeneratedScript",
+    "GenerateScriptData",
+    "GenerateScriptMetadata",
+    "GenerateScriptRequest",
     "NormalizeResult",
     "Post",
     "PostEvaluationResult",
@@ -34,4 +45,5 @@ __all__ = [
     "ScreenPostsData",
     "ScreenPostsMetadata",
     "ScreenPostsRequest",
+    "ScriptGenerationResult",
 ]
