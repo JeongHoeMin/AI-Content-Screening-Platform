@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import perf_counter
 from typing import List, Tuple
 
+from pydantic.dataclasses import dataclass
 import structlog
 
 from app.core.error import SkillError
@@ -27,10 +27,8 @@ from app.providers.registry import NormalizerRegistry, ProviderRegistry
 logger = structlog.get_logger(__name__)
 
 
-@dataclass
+@dataclass(slots=True)
 class ProviderExecution:
-    __slots__ = ("source", "raw_posts", "metadata", "errors")
-
     source: CommunityType
     raw_posts: List[RawPost]
     metadata: ProviderResultMetadata
