@@ -11,7 +11,7 @@ from app.models import CommunityType, Post
 from app.prompts import EvaluatorPromptInput, PromptBuilder
 
 
-class FakePromptBuilder:
+class FakePromptBuilder(PromptBuilder[EvaluatorPromptInput]):
     def __init__(
         self,
         messages: List[ChatMessage],
@@ -30,7 +30,7 @@ class FakePromptBuilder:
         return self.messages
 
 
-class FakeLLMClient:
+class FakeLLMClient(LLMClient):
     def __init__(
         self,
         response: ChatResponse,

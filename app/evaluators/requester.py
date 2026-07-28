@@ -10,10 +10,11 @@ class PostEvaluationRequester(Protocol):
     """Standard orchestration contract for post evaluation requests."""
 
     async def request(self, posts: Sequence[Post]) -> ChatResponse:
-        """Build one prompt request and return the unchanged LLM response.
+        """Orchestrate one post evaluation request.
 
-        Implementations call PromptBuilder once, pass its unchanged message
-        collection to LLMClient.chat(messages, config), and return the unchanged
-        ChatResponse. PromptBuilder and LLMClient exceptions are not wrapped.
+        Implementations call PromptBuilder exactly once, forward the resulting
+        messages unchanged to LLMClient.chat(messages, config), return the
+        unchanged ChatResponse, and never wrap PromptBuilder or LLMClient
+        exceptions.
         """
         ...
