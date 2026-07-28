@@ -24,11 +24,14 @@ from app.models.screen_posts import (
     ScreenPostsMetadata,
     ScreenPostsRequest,
 )
+from app.models.workflow import ContentPipelineRequest, ContentPipelineResult
 
 __all__ = [
     "CollectPostsData",
     "CollectPostsMetadata",
     "CollectPostsRequest",
+    "ContentPipelineRequest",
+    "ContentPipelineResult",
     "CommunityType",
     "GeneratedScript",
     "GenerateScriptData",
