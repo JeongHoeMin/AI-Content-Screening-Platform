@@ -1,0 +1,12 @@
+from __future__ import annotations
+
+from enum import Enum
+
+
+class CommunityType(str, Enum):
+    """Supported community sources."""
+
+    REDDIT = "reddit"
+    DCINSIDE = "dcinside"
+    RULIWEB = "ruliweb"
+    MOCK = "mock"
