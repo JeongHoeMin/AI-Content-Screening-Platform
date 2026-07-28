@@ -4,7 +4,15 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import List
 
+import pytest
+
 from app.core.error import SkillError
+from app.core.exceptions import (
+    AllProvidersFailedError,
+    NormalizerNotFoundError,
+    ProviderNotFoundError,
+)
+from app.core.stage import SkillStage
 from app.models import (
     CollectPostsRequest,
     CommunityType,
@@ -50,11 +58,11 @@ class SlowProvider(CommunityProvider):
 
 
 class ErrorNormalizer(CommunityNormalizer):
-    def normalize(self, raw_post: RawPost) -> NormalizeResult:
+    async def normalize(self, raw_post: RawPost) -> NormalizeResult:
         return NormalizeResult(
             error=SkillError(
                 code="normalization_skipped",
-                stage="normalize",
+                stage=SkillStage.NORMALIZE,
                 message="raw post could not be normalized",
                 source=raw_post.source.value,
             )
@@ -91,6 +99,7 @@ def test_collect_posts_merges_mock_provider_results() -> None:
     assert result.metadata.collected_count == 4
     assert result.metadata.provider_results[CommunityType.REDDIT].raw_count == 2
     assert result.metadata.provider_results[CommunityType.DCINSIDE].post_count == 2
+    assert result.metadata.provider_results[CommunityType.REDDIT].normalize_error_count == 0
     assert result.errors == []
 
 
@@ -131,10 +140,10 @@ def test_all_provider_failures_raise_exception() -> None:
 
     try:
         asyncio.run(skill.execute(build_request()))
-    except RuntimeError as exc:
-        assert "all providers failed" in str(exc)
+    except AllProvidersFailedError:
+        pass
     else:
-        raise AssertionError("Expected RuntimeError for all provider failures")
+        raise AssertionError("Expected AllProvidersFailedError for all provider failures")
 
 
 def test_normalizer_error_is_recorded_as_recoverable_observation() -> None:
@@ -152,7 +161,27 @@ def test_normalizer_error_is_recorded_as_recoverable_observation() -> None:
 
     assert result.data.posts == []
     assert result.errors[0].code == "normalization_skipped"
+    assert result.errors[0].stage is SkillStage.NORMALIZE
     assert result.metadata.provider_results[CommunityType.REDDIT].success is True
+    assert result.metadata.provider_results[CommunityType.REDDIT].normalize_error_count == 1
+
+
+def test_missing_normalizer_is_recorded_without_incrementing_normalize_error_count() -> None:
+    skill: CollectPostsSkill = CollectPostsSkill(
+        provider_registry=ProviderRegistry({CommunityType.REDDIT: MockRedditProvider()}),
+        normalizer_registry=NormalizerRegistry({}),
+    )
+    request: CollectPostsRequest = CollectPostsRequest(
+        sources=[CommunityType.REDDIT],
+        limit=1,
+        period=timedelta(hours=1),
+    )
+
+    result = asyncio.run(skill.execute(request))
+
+    assert result.data.posts == []
+    assert [error.code for error in result.errors] == ["normalizer_not_found"]
+    assert result.metadata.provider_results[CommunityType.REDDIT].normalize_error_count == 0
 
 
 def test_providers_run_in_parallel() -> None:
@@ -190,3 +219,28 @@ def test_registries_register_and_get_entries() -> None:
 
     assert provider_registry.get(CommunityType.REDDIT) is provider
     assert normalizer_registry.get(CommunityType.REDDIT) is normalizer
+
+
+def test_provider_registry_raises_custom_exception_for_missing_provider() -> None:
+    provider_registry: ProviderRegistry = ProviderRegistry({})
+
+    with pytest.raises(ProviderNotFoundError):
+        provider_registry.get(CommunityType.REDDIT)
+
+
+def test_normalizer_registry_raises_custom_exception_for_missing_normalizer() -> None:
+    normalizer_registry: NormalizerRegistry = NormalizerRegistry({})
+
+    with pytest.raises(NormalizerNotFoundError):
+        normalizer_registry.get(CommunityType.REDDIT)
+
+
+def test_skill_error_uses_skill_stage_enum() -> None:
+    error: SkillError = SkillError(
+        code="provider_collect_failed",
+        stage=SkillStage.PROVIDER_COLLECT,
+        message="provider timed out",
+        source=CommunityType.REDDIT.value,
+    )
+
+    assert error.stage is SkillStage.PROVIDER_COLLECT

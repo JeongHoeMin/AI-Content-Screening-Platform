@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import List
 
 from app.core.error import SkillError
+from app.core.stage import SkillStage
 from app.models.collect_posts import CollectPostsRequest
 from app.models.community import CommunityType
 from app.models.normalize import NormalizeResult
@@ -65,12 +66,12 @@ class MockDcInsideProvider(CommunityProvider):
 class MockRedditNormalizer(CommunityNormalizer):
     """Normalize mock Reddit raw posts."""
 
-    def normalize(self, raw_post: RawPost) -> NormalizeResult:
+    async def normalize(self, raw_post: RawPost) -> NormalizeResult:
         if not isinstance(raw_post, RawRedditPost):
             return NormalizeResult(
                 error=SkillError(
                     code="invalid_raw_post_type",
-                    stage="normalize",
+                    stage=SkillStage.NORMALIZE,
                     message="Expected RawRedditPost",
                     source=raw_post.source.value,
                 )
@@ -93,12 +94,12 @@ class MockRedditNormalizer(CommunityNormalizer):
 class MockDcInsideNormalizer(CommunityNormalizer):
     """Normalize mock DCInside raw posts."""
 
-    def normalize(self, raw_post: RawPost) -> NormalizeResult:
+    async def normalize(self, raw_post: RawPost) -> NormalizeResult:
         if not isinstance(raw_post, RawDcInsidePost):
             return NormalizeResult(
                 error=SkillError(
                     code="invalid_raw_post_type",
-                    stage="normalize",
+                    stage=SkillStage.NORMALIZE,
                     message="Expected RawDcInsidePost",
                     source=raw_post.source.value,
                 )

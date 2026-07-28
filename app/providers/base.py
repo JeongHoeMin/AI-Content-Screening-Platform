@@ -20,5 +20,5 @@ class CommunityNormalizer(ABC):
     """Converts raw community posts into normalized posts."""
 
     @abstractmethod
-    def normalize(self, raw_post: RawPost) -> NormalizeResult:
+    async def normalize(self, raw_post: RawPost) -> NormalizeResult:
         """Return a normalized post or a recoverable normalization error."""

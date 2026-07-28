@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from time import perf_counter
 from typing import List, Tuple
@@ -8,8 +9,10 @@ from typing import List, Tuple
 import structlog
 
 from app.core.error import SkillError
+from app.core.exceptions import AllProvidersFailedError
 from app.core.result import SkillResult
 from app.core.skill import Skill
+from app.core.stage import SkillStage
 from app.models.collect_posts import (
     CollectPostsData,
     CollectPostsMetadata,
@@ -23,7 +26,15 @@ from app.providers.registry import NormalizerRegistry, ProviderRegistry
 
 logger = structlog.get_logger(__name__)
 
-ProviderExecution = Tuple[CommunityType, List[RawPost], ProviderResultMetadata, List[SkillError]]
+
+@dataclass
+class ProviderExecution:
+    __slots__ = ("source", "raw_posts", "metadata", "errors")
+
+    source: CommunityType
+    raw_posts: List[RawPost]
+    metadata: ProviderResultMetadata
+    errors: List[SkillError]
 
 
 class CollectPostsSkill(Skill[CollectPostsRequest, CollectPostsData, CollectPostsMetadata]):
@@ -52,20 +63,24 @@ class CollectPostsSkill(Skill[CollectPostsRequest, CollectPostsData, CollectPost
         errors: List[SkillError] = []
         metadata_by_source: dict[CommunityType, ProviderResultMetadata] = {}
 
-        for source, raw_posts, provider_metadata, provider_errors in provider_results:
-            errors.extend(provider_errors)
-            normalized_posts, normalize_errors = self._normalize_posts(source, raw_posts)
+        for execution in provider_results:
+            errors.extend(execution.errors)
+            normalized_posts, normalize_errors, normalize_error_count = await self._normalize_posts(
+                execution.source,
+                execution.raw_posts,
+            )
             posts.extend(normalized_posts)
             errors.extend(normalize_errors)
 
-            provider_metadata.post_count = len(normalized_posts)
-            metadata_by_source[source] = provider_metadata
+            execution.metadata.post_count = len(normalized_posts)
+            execution.metadata.normalize_error_count = normalize_error_count
+            metadata_by_source[execution.source] = execution.metadata
 
         if not posts and all(not provider_metadata.success for provider_metadata in metadata_by_source.values()):
-            raise RuntimeError("all providers failed to collect posts")
+            raise AllProvidersFailedError()
 
         finished_at: datetime = datetime.now(timezone.utc)
-        metadata: CollectPostsMetadata = CollectPostsMetadata(
+        metadata: CollectPostsMetadata = self._build_metadata(
             started_at=started_at,
             finished_at=finished_at,
             duration_seconds=perf_counter() - execution_started,
@@ -107,11 +122,16 @@ class CollectPostsSkill(Skill[CollectPostsRequest, CollectPostsData, CollectPost
             )
             error: SkillError = SkillError(
                 code="provider_collect_failed",
-                stage="provider_collect",
+                stage=SkillStage.PROVIDER_COLLECT,
                 message=str(exc),
                 source=source.value,
             )
-            return source, [], metadata, [error]
+            return ProviderExecution(
+                source=source,
+                raw_posts=[],
+                metadata=metadata,
+                errors=[error],
+            )
 
         duration_seconds = perf_counter() - started
         logger.info(
@@ -127,15 +147,21 @@ class CollectPostsSkill(Skill[CollectPostsRequest, CollectPostsData, CollectPost
             success=True,
             duration_seconds=duration_seconds,
         )
-        return source, raw_posts, metadata, []
+        return ProviderExecution(
+            source=source,
+            raw_posts=raw_posts,
+            metadata=metadata,
+            errors=[],
+        )
 
-    def _normalize_posts(
+    async def _normalize_posts(
         self,
         source: CommunityType,
         raw_posts: List[RawPost],
-    ) -> Tuple[List[Post], List[SkillError]]:
+    ) -> Tuple[List[Post], List[SkillError], int]:
         posts: List[Post] = []
         errors: List[SkillError] = []
+        normalize_error_count: int = 0
 
         try:
             normalizer = self._normalizer_registry.get(source)
@@ -143,20 +169,21 @@ class CollectPostsSkill(Skill[CollectPostsRequest, CollectPostsData, CollectPost
             return [], [
                 SkillError(
                     code="normalizer_not_found",
-                    stage="normalize",
+                    stage=SkillStage.NORMALIZE,
                     message=str(exc),
                     source=source.value,
                 )
-            ]
+            ], 0
 
         for raw_post in raw_posts:
             try:
-                normalize_result = normalizer.normalize(raw_post)
+                normalize_result = await normalizer.normalize(raw_post)
             except Exception as exc:
+                normalize_error_count += 1
                 errors.append(
                     SkillError(
                         code="normalizer_failed",
-                        stage="normalize",
+                        stage=SkillStage.NORMALIZE,
                         message=str(exc),
                         source=source.value,
                     )
@@ -166,6 +193,23 @@ class CollectPostsSkill(Skill[CollectPostsRequest, CollectPostsData, CollectPost
             if normalize_result.post is not None:
                 posts.append(normalize_result.post)
             if normalize_result.error is not None:
+                normalize_error_count += 1
                 errors.append(normalize_result.error)
 
-        return posts, errors
+        return posts, errors, normalize_error_count
+
+    def _build_metadata(
+        self,
+        started_at: datetime,
+        finished_at: datetime,
+        duration_seconds: float,
+        provider_results: dict[CommunityType, ProviderResultMetadata],
+        collected_count: int,
+    ) -> CollectPostsMetadata:
+        return CollectPostsMetadata(
+            started_at=started_at,
+            finished_at=finished_at,
+            duration_seconds=duration_seconds,
+            provider_results=provider_results,
+            collected_count=collected_count,
+        )

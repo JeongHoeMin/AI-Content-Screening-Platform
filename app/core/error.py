@@ -5,12 +5,14 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.stage import SkillStage
+
 
 class SkillError(BaseModel):
     """Recoverable failure observed during a skill execution."""
 
     code: str = Field(min_length=1)
-    stage: str = Field(min_length=1)
+    stage: SkillStage
     message: str = Field(min_length=1)
     source: Optional[str] = None
     recoverable: bool = True

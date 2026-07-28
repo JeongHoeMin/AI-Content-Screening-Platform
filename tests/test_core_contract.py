@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from pydantic import ValidationError
 
-from app.core import SkillError, SkillMetadata, SkillResult
+from app.core import SkillError, SkillMetadata, SkillResult, SkillStage
 from app.models import CollectPostsData, CollectPostsMetadata, Post
 from app.models.community import CommunityType
 
@@ -45,7 +45,7 @@ def test_skill_result_supports_collect_posts_generics() -> None:
         errors=[
             SkillError(
                 code="observed_error",
-                stage="test",
+                stage=SkillStage.NORMALIZE,
                 message="recoverable observation",
             )
         ],
@@ -54,3 +54,4 @@ def test_skill_result_supports_collect_posts_generics() -> None:
     assert result.data.posts == [post]
     assert result.metadata.collected_count == 1
     assert result.errors[0].recoverable is True
+    assert result.errors[0].stage is SkillStage.NORMALIZE

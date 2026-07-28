@@ -32,6 +32,11 @@ class ProviderResultMetadata(BaseModel):
     source: CommunityType
     raw_count: int = Field(default=0, ge=0)
     post_count: int = Field(default=0, ge=0)
+    normalize_error_count: int = Field(
+        default=0,
+        ge=0,
+        description="RawPost to Post conversion failures; registry lookup failures are not included.",
+    )
     success: bool
     duration_seconds: float = Field(ge=0.0)
     error_message: Optional[str] = None
