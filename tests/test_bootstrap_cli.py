@@ -1,15 +1,23 @@
 from __future__ import annotations
 
 import json
+import asyncio
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
+import app.bootstrap as bootstrap
+from app import cli
 from app.bootstrap import ExecutionMode, create_screening_workflow
+from app.extractors import LLMNewsEventExtractor
 from app.mock_grouping import build_mock_grouping_key, normalize_mock_title
-from app.mock_screening import DeterministicMockExtractor
+from app.mock_screening import (
+    DeterministicMockCrossValidator,
+    DeterministicMockExtractor,
+    DeterministicMockScreener,
+)
 from app.models import Article, CrossValidationStatus, ResolvedDecisionType
 from app.workflows import ScreeningResult
 
@@ -85,14 +93,24 @@ def test_mock_bootstrap_creates_new_workflow_instances() -> None:
     assert first is not second
 
 
-def test_openai_bootstrap_creates_workflow_with_configured_key(
+def test_openai_bootstrap_assembles_only_the_extractor_as_llm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    class CapturingWorkflow:
+        def __init__(self, **components: object) -> None:
+            self.components: dict[str, object] = components
+
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(bootstrap, "ScreeningWorkflow", CapturingWorkflow)
 
-    workflow = create_screening_workflow(ExecutionMode.OPENAI)
+    first = bootstrap.create_screening_workflow(ExecutionMode.OPENAI)
+    second = bootstrap.create_screening_workflow(ExecutionMode.OPENAI)
 
-    assert isinstance(workflow, type(create_screening_workflow(ExecutionMode.MOCK)))
+    assert ExecutionMode.OPENAI in bootstrap._WORKFLOW_FACTORIES
+    assert isinstance(first.components["extractor"], LLMNewsEventExtractor)
+    assert isinstance(first.components["screener"], DeterministicMockScreener)
+    assert isinstance(first.components["cross_validator"], DeterministicMockCrossValidator)
+    assert first is not second
 
 
 def test_module_and_script_entrypoints_emit_identical_json() -> None:
@@ -117,7 +135,6 @@ def test_module_and_script_entrypoints_emit_identical_json() -> None:
     "arguments",
     (
         ("--input", "missing.json"),
-        ("--input", str(SAMPLE_INPUT), "--mode", "openai"),
     ),
 )
 def test_cli_input_errors_write_no_stdout_and_return_exit_two(
@@ -128,3 +145,53 @@ def test_cli_input_errors_write_no_stdout_and_return_exit_two(
     assert result.returncode == 2
     assert result.stdout == ""
     assert result.stderr
+
+
+def test_cli_openai_mode_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    result = _command("-m", "app", "--input", str(SAMPLE_INPUT), "--mode", "openai")
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "OPENAI_API_KEY is required" in result.stderr
+
+
+def test_cli_openai_mode_rejects_blank_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_MODEL", "   ")
+
+    result = _command("-m", "app", "--input", str(SAMPLE_INPUT), "--mode", "openai")
+
+    assert result.returncode == 2
+    assert result.stdout == ""
+    assert "OPENAI_MODEL must not be empty" in result.stderr
+
+
+def test_cli_returns_execution_error_when_workflow_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class FailingWorkflow:
+        async def run(self, articles: tuple[Article, ...]) -> ScreeningResult:
+            raise RuntimeError("all extraction batches failed")
+
+    class CapturingLogger:
+        def __init__(self) -> None:
+            self.events: list[str] = []
+
+        def error(self, event: str, **kwargs: object) -> None:
+            self.events.append(event)
+
+    logger = CapturingLogger()
+    monkeypatch.setattr(cli, "create_screening_workflow", lambda mode: FailingWorkflow())
+    monkeypatch.setattr(cli, "logger", logger)
+
+    exit_code: int = asyncio.run(
+        cli.run(("--input", str(SAMPLE_INPUT), "--mode", "openai"))
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert logger.events == ["cli_execution_failed"]

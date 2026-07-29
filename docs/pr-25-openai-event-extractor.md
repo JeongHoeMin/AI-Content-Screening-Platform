@@ -23,6 +23,9 @@ OPENAI_MAX_RETRIES=2
 ```
 
 No dotenv file is loaded automatically.
+`OPENAI_MODEL` must be non-empty after trimming, `OPENAI_TIMEOUT_SECONDS` must
+be a finite positive number, and `OPENAI_MAX_RETRIES` must be a non-negative
+integer.
 
 ```bash
 OPENAI_API_KEY="..." uv run screening \
@@ -35,6 +38,9 @@ OPENAI_API_KEY="..." uv run screening \
 The OpenAI adapter calls `AsyncOpenAI.responses.parse` with the system prompt,
 user prompt, and Pydantic response model. It verifies a completed response and
 returns only `output_parsed`; OpenAI SDK response types do not leave the adapter.
+Only expected OpenAI SDK request failures and response-processing failures are
+recoverable. Unexpected programming errors propagate without being converted to
+batch failures.
 
 The Prompt Builder assembles messages, the prompt template renders explicit
 Article ID/Source/Title/Published at/Content fields, and the Parser converts
@@ -49,8 +55,10 @@ model's extraction confidence, not the factual truth of the event.
 ## Failure policy
 
 - Invalid individual Events are omitted and recorded as recoverable errors.
-- API errors, refusal, incomplete/failed responses, absent parsed output, and
-  whole-response parsing failures omit only their batch.
+- API errors omit only their batch with the safe SDK error type.
+- Response failures are recorded as `response_failed`, `response_incomplete`,
+  `unknown_response_status:<status>`, `refusal`, or `missing_parsed_output`.
+- Whole-response parsing failures omit only their batch.
 - A completed batch with `events=[]` succeeds.
 - The workflow continues when one or more batches complete successfully and
   raises an execution error only when every attempted batch fails.

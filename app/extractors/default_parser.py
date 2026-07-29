@@ -84,6 +84,17 @@ class DefaultNewsEventParser(NewsEventParser):
         article: Article,
         response_item: ArticleInferenceResponseItem,
     ) -> tuple[LLMInferenceResult, Tuple[ExtractionError, ...]]:
+        try:
+            summary: str = DefaultNewsEventParser._normalize_required(
+                response_item.summary,
+                "Article summary",
+            )
+            reasoning: str = DefaultNewsEventParser._normalize_required(
+                response_item.reasoning,
+                "Article reasoning",
+            )
+        except ValueError as error:
+            raise InferenceResultValidationError(str(error)) from error
         events: List[NewsEvent] = []
         errors: List[ExtractionError] = []
         for event_index, event in enumerate(response_item.events):
@@ -101,8 +112,8 @@ class DefaultNewsEventParser(NewsEventParser):
         inference: LLMInferenceResult = LLMInferenceResult(
             article=article,
             events=tuple(events),
-            summary=response_item.summary,
-            reasoning=response_item.reasoning,
+            summary=summary,
+            reasoning=reasoning,
             confidence=response_item.confidence,
         )
         return inference, tuple(errors)
@@ -118,8 +129,14 @@ class DefaultNewsEventParser(NewsEventParser):
                 company_names.add(company_key)
                 companies.append(extracted)
         return NewsEvent(
-            title=DefaultNewsEventParser._normalize_required(response_item.title, "title"),
-            summary=DefaultNewsEventParser._normalize_required(response_item.summary, "summary"),
+            title=DefaultNewsEventParser._normalize_required(
+                response_item.title,
+                "Event title",
+            ),
+            summary=DefaultNewsEventParser._normalize_required(
+                response_item.summary,
+                "Event summary",
+            ),
             companies=companies,
             industries=DefaultNewsEventParser._normalize_unique(response_item.industries, True),
             keywords=DefaultNewsEventParser._normalize_unique(response_item.keywords, True),
@@ -131,7 +148,10 @@ class DefaultNewsEventParser(NewsEventParser):
         response_item: ExtractedCompanyResponseItem,
     ) -> ExtractedCompany:
         return ExtractedCompany(
-            name=DefaultNewsEventParser._normalize_required(response_item.name, "company name"),
+            name=DefaultNewsEventParser._normalize_required(
+                response_item.name,
+                "Company name",
+            ),
             relation=CompanyRelation(response_item.relation),
         )
 
@@ -139,7 +159,7 @@ class DefaultNewsEventParser(NewsEventParser):
     def _normalize_required(value: str, field_name: str) -> str:
         normalized: str = " ".join(value.split())
         if not normalized:
-            raise ValueError(f"Event {field_name} must not be empty")
+            raise ValueError(f"{field_name} must not be empty")
         return normalized
 
     @staticmethod

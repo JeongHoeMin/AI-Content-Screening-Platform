@@ -161,3 +161,23 @@ def test_parser_keeps_valid_events_when_a_sibling_event_is_invalid() -> None:
     assert event.keywords == ["Chips"]
     assert event.reasons == ["Stated in article"]
     assert len(result.errors) == 1
+
+
+def test_parser_normalizes_article_level_summary_and_reasoning() -> None:
+    article: Article = build_article(1)
+    response: NewsEventExtractionResponse = NewsEventExtractionResponse(
+        articles=[
+            ArticleInferenceResponseItem(
+                article_id=article.id,
+                summary="  Article\n summary  ",
+                reasoning="  Extracted\tfrom article  ",
+                confidence=0.8,
+                events=[],
+            )
+        ]
+    )
+
+    result = DefaultNewsEventParser().parse(response, (article,))
+
+    assert result.inferences[0].summary == "Article summary"
+    assert result.inferences[0].reasoning == "Extracted from article"

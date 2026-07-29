@@ -2,13 +2,21 @@ from __future__ import annotations
 
 from typing import Any, Optional, Protocol, Type, TypeVar
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, OpenAIError
 from pydantic import BaseModel
 
 from app.llms.models import ChatMessage, ChatRole
 from app.llms.structured import StructuredOutputLLM
 
 OutputT = TypeVar("OutputT", bound=BaseModel)
+
+
+class StructuredOutputCallError(RuntimeError):
+    """Raised when an OpenAI SDK request fails before a usable response exists."""
+
+    def __init__(self, error_type: str) -> None:
+        self.error_type: str = error_type
+        super().__init__(f"OpenAI structured output request failed: {error_type}")
 
 
 class StructuredOutputResponseError(ValueError):
@@ -48,15 +56,24 @@ class OpenAIResponsesStructuredOutputClient(StructuredOutputClient):
         user_prompt: str,
         response_model: Type[OutputT],
     ) -> OutputT:
-        response: Any = await self._client.responses.parse(
-            model=model,
-            instructions=system_prompt,
-            input=user_prompt,
-            text_format=response_model,
-        )
+        try:
+            response: Any = await self._client.responses.parse(
+                model=model,
+                instructions=system_prompt,
+                input=user_prompt,
+                text_format=response_model,
+            )
+        except OpenAIError as error:
+            raise StructuredOutputCallError(type(error).__name__) from error
         status: Optional[str] = getattr(response, "status", None)
+        if status == "failed":
+            raise StructuredOutputResponseError("response_failed")
+        if status == "incomplete":
+            raise StructuredOutputResponseError("response_incomplete")
         if status != "completed":
-            raise StructuredOutputResponseError(status or "unknown_status")
+            raise StructuredOutputResponseError(
+                f"unknown_response_status:{status or 'none'}"
+            )
         parsed: Optional[OutputT] = getattr(response, "output_parsed", None)
         if parsed is None:
             if self._contains_refusal(response):

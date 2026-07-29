@@ -7,7 +7,10 @@ from pydantic import ValidationError
 from app.extractors.base import NewsEventExtractor
 from app.extractors.errors import AllExtractionBatchesFailedError
 from app.extractors.errors import InferenceResultValidationError
-from app.llms.openai_structured import StructuredOutputResponseError
+from app.llms.openai_structured import (
+    StructuredOutputCallError,
+    StructuredOutputResponseError,
+)
 from app.extractors.parser import NewsEventParser
 from app.llms import StructuredOutputLLM
 from app.llms.models import ChatMessage
@@ -55,12 +58,25 @@ class LLMNewsEventExtractor(NewsEventExtractor):
         for batch in self._batches(articles):
             try:
                 parsed: NewsEventParseResult = await self._extract_batch(batch)
-            except Exception as error:
+            except StructuredOutputCallError as error:
                 errors.append(
-                    ExtractionError(
-                        kind=self._batch_error_kind(error),
-                        message=f"Batch extraction failed: {type(error).__name__}",
-                        article_ids=tuple(article.id for article in batch),
+                    self._build_batch_error(
+                        batch,
+                        ExtractionErrorKind.API_CALL,
+                        f"OpenAI request failed: {error.error_type}",
+                    )
+                )
+                continue
+            except (
+                StructuredOutputResponseError,
+                InferenceResultValidationError,
+                ValidationError,
+            ) as error:
+                errors.append(
+                    self._build_batch_error(
+                        batch,
+                        ExtractionErrorKind.RESPONSE_PROCESSING,
+                        self._response_error_message(error),
                     )
                 )
                 continue
@@ -95,14 +111,19 @@ class LLMNewsEventExtractor(NewsEventExtractor):
             yield articles[index : index + batch_size]
 
     @staticmethod
-    def _batch_error_kind(error: Exception) -> ExtractionErrorKind:
-        if isinstance(
-            error,
-            (
-                StructuredOutputResponseError,
-                InferenceResultValidationError,
-                ValidationError,
-            ),
-        ):
-            return ExtractionErrorKind.RESPONSE_PROCESSING
-        return ExtractionErrorKind.API_CALL
+    def _build_batch_error(
+        batch: Tuple[Article, ...],
+        kind: ExtractionErrorKind,
+        message: str,
+    ) -> ExtractionError:
+        return ExtractionError(
+            kind=kind,
+            message=message,
+            article_ids=tuple(article.id for article in batch),
+        )
+
+    @staticmethod
+    def _response_error_message(error: Exception) -> str:
+        if isinstance(error, StructuredOutputResponseError):
+            return f"Structured output response failed: {error.reason}"
+        return f"Structured output response processing failed: {type(error).__name__}"

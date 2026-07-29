@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
 
@@ -42,7 +43,7 @@ def _load_positive_float(name: str, default: float) -> float:
         value: float = float(raw_value)
     except ValueError as error:
         raise ConfigurationError(f"{name} must be a positive number.") from error
-    if value <= 0:
+    if not math.isfinite(value) or value <= 0:
         raise ConfigurationError(f"{name} must be a positive number.")
     return value
 

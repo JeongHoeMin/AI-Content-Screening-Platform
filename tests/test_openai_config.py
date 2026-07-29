@@ -20,7 +20,16 @@ def test_load_openai_config_uses_defaults(monkeypatch: pytest.MonkeyPatch) -> No
 
 @pytest.mark.parametrize(
     ("name", "value"),
-    (("OPENAI_TIMEOUT_SECONDS", "zero"), ("OPENAI_TIMEOUT_SECONDS", "0"), ("OPENAI_MAX_RETRIES", "-1")),
+    (
+        ("OPENAI_TIMEOUT_SECONDS", "zero"),
+        ("OPENAI_TIMEOUT_SECONDS", "0"),
+        ("OPENAI_TIMEOUT_SECONDS", "-1"),
+        ("OPENAI_TIMEOUT_SECONDS", "nan"),
+        ("OPENAI_TIMEOUT_SECONDS", "inf"),
+        ("OPENAI_MAX_RETRIES", "-1"),
+        ("OPENAI_MAX_RETRIES", "1.5"),
+        ("OPENAI_MAX_RETRIES", "invalid"),
+    ),
 )
 def test_load_openai_config_rejects_invalid_numeric_values(
     monkeypatch: pytest.MonkeyPatch,
@@ -38,4 +47,16 @@ def test_load_openai_config_requires_api_key(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     with pytest.raises(ConfigurationError, match="OPENAI_API_KEY is required"):
+        load_openai_config()
+
+
+@pytest.mark.parametrize("model", ("", "   "))
+def test_load_openai_config_rejects_empty_model(
+    monkeypatch: pytest.MonkeyPatch,
+    model: str,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_MODEL", model)
+
+    with pytest.raises(ConfigurationError, match="OPENAI_MODEL must not be empty"):
         load_openai_config()

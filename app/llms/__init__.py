@@ -8,6 +8,7 @@ from app.llms.openai_structured import (
     OpenAIResponsesStructuredOutputClient,
     OpenAIResponsesStructuredOutputLLM,
     StructuredOutputClient,
+    StructuredOutputCallError,
     StructuredOutputResponseError,
 )
 from app.llms.structured import PydanticStructuredOutputLLM, StructuredOutputLLM
@@ -26,5 +27,6 @@ __all__ = [
     "PydanticStructuredOutputLLM",
     "StructuredOutputLLM",
     "StructuredOutputClient",
+    "StructuredOutputCallError",
     "StructuredOutputResponseError",
 ]

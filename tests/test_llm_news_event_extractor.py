@@ -11,7 +11,13 @@ from app.extractors import (
     DefaultNewsEventParser,
     LLMNewsEventExtractor,
 )
-from app.llms import ChatMessage, ChatRole, StructuredOutputLLM
+from app.llms import (
+    ChatMessage,
+    ChatRole,
+    StructuredOutputCallError,
+    StructuredOutputLLM,
+    StructuredOutputResponseError,
+)
 from app.models import (
     Article,
     ArticleInferenceResponseItem,
@@ -178,7 +184,7 @@ async def test_extractor_records_actual_request_count_for_fifty_articles() -> No
 
 @pytest.mark.anyio
 async def test_extractor_raises_when_every_batch_fails() -> None:
-    expected_error: RuntimeError = RuntimeError("LLM failed")
+    expected_error: StructuredOutputCallError = StructuredOutputCallError("APIError")
     articles: Tuple[Article, ...] = (build_article(1),)
     extractor, builder, llm = build_extractor(
         responses=[],
@@ -220,7 +226,7 @@ async def test_extractor_continues_after_one_batch_fails_and_counts_empty_succes
         nonlocal calls
         calls += 1
         if calls == 1:
-            raise RuntimeError("API unavailable")
+            raise StructuredOutputCallError("APIConnectionError")
         return await original_generate(messages, response_model)
 
     llm.generate = generate_with_first_failure  # type: ignore[method-assign]
@@ -231,3 +237,63 @@ async def test_extractor_continues_after_one_batch_fails_and_counts_empty_succes
     assert result.inferences[0].article is articles[1]
     assert result.inferences[0].events == ()
     assert len(result.errors) == 1
+    assert result.errors[0].kind.value == "api_call"
+
+
+@pytest.mark.anyio
+async def test_extractor_propagates_unexpected_programming_error() -> None:
+    articles: Tuple[Article, ...] = (build_article(1),)
+    extractor, _, llm = build_extractor(responses=[])
+    unexpected_error: RuntimeError = RuntimeError("programming error")
+
+    async def generate_with_unexpected_error(
+        messages: List[ChatMessage],
+        response_model: Type[OutputT],
+    ) -> OutputT:
+        raise unexpected_error
+
+    llm.generate = generate_with_unexpected_error  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError) as error_info:
+        await extractor.extract(articles)
+
+    assert error_info.value is unexpected_error
+
+
+@pytest.mark.anyio
+async def test_extractor_records_safe_structured_response_reason() -> None:
+    articles: Tuple[Article, ...] = (build_article(1), build_article(2))
+    empty_response: NewsEventExtractionResponse = NewsEventExtractionResponse(
+        articles=[
+            ArticleInferenceResponseItem(
+                article_id=articles[1].id,
+                summary="No event",
+                reasoning="No meaningful event is stated.",
+                confidence=0.9,
+                events=[],
+            )
+        ]
+    )
+    extractor, _, llm = build_extractor(
+        [empty_response],
+        config=BatchExtractionConfig(max_articles_per_batch=1),
+    )
+    original_generate = llm.generate
+    calls: int = 0
+
+    async def generate_with_response_failure(
+        messages: List[ChatMessage],
+        response_model: Type[OutputT],
+    ) -> OutputT:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise StructuredOutputResponseError("response_incomplete")
+        return await original_generate(messages, response_model)
+
+    llm.generate = generate_with_response_failure  # type: ignore[method-assign]
+
+    result = await extractor.extract(articles)
+
+    assert result.errors[0].kind.value == "response_processing"
+    assert result.errors[0].message.endswith("response_incomplete")
