@@ -59,3 +59,7 @@ values so the parser can record event-level errors without discarding valid
 siblings. Batch-level failures are provider calls, structured-output response
 failures, or invalid response roots; field types, indexes, scores, flags, and
 reasons are event-level failures.
+
+Event-index type errors, including strings, booleans, and null, are recorded as
+`INVALID_EVENT_INDEX`. They cannot be mapped to an actual candidate, so their
+`candidate_id` remains `None`.
