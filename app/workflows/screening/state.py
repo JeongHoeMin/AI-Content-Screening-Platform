@@ -10,6 +10,7 @@ from app.models.news_event import NewsEvent
 from app.models.recommendation import RecommendationResult
 from app.models.resolved_news_event import ResolvedNewsEvent
 from app.models.scoring import ScoringResult
+from app.models.screening import ScreeningDecision
 from app.workflows.screening.result import WorkflowContext, WorkflowStatistics
 
 
@@ -22,6 +23,7 @@ class ScreeningState(TypedDict, total=False):
     inferences: Tuple[LLMInferenceResult, ...]
     successful_batches: int
     events: Tuple[NewsEvent, ...]
+    decisions: Tuple[ScreeningDecision, ...]
     resolved_events: Tuple[ResolvedNewsEvent, ...]
     analyses: Tuple[ImpactAnalysis, ...]
     evidence: EvidenceAggregation

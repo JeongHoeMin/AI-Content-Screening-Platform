@@ -55,6 +55,14 @@ from app.models.screen_posts import (
     ScreenPostsRequest,
 )
 from app.models.scoring import CompanyScore, ScoringResult
+from app.models.screening import (
+    BatchScreeningConfig,
+    ScreeningAssessment,
+    ScreeningAssessmentResponse,
+    ScreeningCandidate,
+    ScreeningDecision,
+    ScreeningDecisionType,
+)
 from app.models.workflow import ContentPipelineRequest, ContentPipelineResult
 
 __all__ = [
@@ -63,6 +71,7 @@ __all__ = [
     "ArticleRejectReason",
     "ArticleInferenceResponseItem",
     "BatchExtractionConfig",
+    "BatchScreeningConfig",
     "CollectPostsData",
     "CollectPostsMetadata",
     "CollectPostsRequest",
@@ -108,4 +117,9 @@ __all__ = [
     "ScreenPostsRequest",
     "ScriptGenerationResult",
     "ScoringResult",
+    "ScreeningAssessment",
+    "ScreeningAssessmentResponse",
+    "ScreeningCandidate",
+    "ScreeningDecision",
+    "ScreeningDecisionType",
 ]

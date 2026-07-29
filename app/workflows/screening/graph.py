@@ -17,9 +17,11 @@ from app.models.news_event import NewsEvent
 from app.models.recommendation import RecommendationResult
 from app.models.resolved_news_event import ResolvedNewsEvent
 from app.models.scoring import ScoringResult
+from app.models.screening import ScreeningDecision, ScreeningDecisionType
 from app.recommenders.recommendation_engine import RecommendationEngine
 from app.resolvers.base import TickerResolver
 from app.scorers.base import ScoringEngine
+from app.screeners.base import EventScreener
 from app.workflows.screening.result import WorkflowStatistics
 from app.workflows.screening.state import ScreeningState
 
@@ -31,6 +33,7 @@ class _ScreeningNodes:
         self,
         evaluator: ArticleEvaluator,
         extractor: NewsEventExtractor,
+        screener: EventScreener,
         resolver: TickerResolver,
         impact_analyzer: ImpactAnalyzer,
         evidence_aggregator: EvidenceAggregator,
@@ -39,6 +42,7 @@ class _ScreeningNodes:
     ) -> None:
         self._evaluator: ArticleEvaluator = evaluator
         self._extractor: NewsEventExtractor = extractor
+        self._screener: EventScreener = screener
         self._resolver: TickerResolver = resolver
         self._impact_analyzer: ImpactAnalyzer = impact_analyzer
         self._evidence_aggregator: EvidenceAggregator = evidence_aggregator
@@ -69,6 +73,12 @@ class _ScreeningNodes:
             "events": events,
             "successful_batches": extraction.successful_batches,
         }
+
+    async def screen(self, state: ScreeningState) -> Mapping[str, object]:
+        decisions: Tuple[ScreeningDecision, ...] = await self._screener.screen(
+            state["inferences"]
+        )
+        return {"decisions": decisions}
 
     def resolve(self, state: ScreeningState) -> Mapping[str, object]:
         resolved_events: Tuple[ResolvedNewsEvent, ...] = tuple(
@@ -107,6 +117,18 @@ class _ScreeningNodes:
             rejected_articles=len(evaluations) - accepted_articles,
             extracted_events=len(state.get("events", ())),
             successful_batches=state.get("successful_batches", 0),
+            accepted_events=sum(
+                decision.decision is ScreeningDecisionType.ACCEPT
+                for decision in state.get("decisions", ())
+            ),
+            review_events=sum(
+                decision.decision is ScreeningDecisionType.REVIEW
+                for decision in state.get("decisions", ())
+            ),
+            rejected_events=sum(
+                decision.decision is ScreeningDecisionType.REJECT
+                for decision in state.get("decisions", ())
+            ),
         )
         return {"recommendation": recommendation, "statistics": statistics}
 
@@ -120,6 +142,7 @@ class _ScreeningNodes:
 def _build_screening_graph(
     evaluator: ArticleEvaluator,
     extractor: NewsEventExtractor,
+    screener: EventScreener,
     resolver: TickerResolver,
     impact_analyzer: ImpactAnalyzer,
     evidence_aggregator: EvidenceAggregator,
@@ -130,6 +153,7 @@ def _build_screening_graph(
     nodes: _ScreeningNodes = _ScreeningNodes(
         evaluator=evaluator,
         extractor=extractor,
+        screener=screener,
         resolver=resolver,
         impact_analyzer=impact_analyzer,
         evidence_aggregator=evidence_aggregator,
@@ -139,6 +163,7 @@ def _build_screening_graph(
     builder: StateGraph = StateGraph(ScreeningState)
     builder.add_node("evaluate", nodes.evaluate)
     builder.add_node("extract", nodes.extract)
+    builder.add_node("screen", nodes.screen)
     builder.add_node("resolve", nodes.resolve)
     builder.add_node("analyze", nodes.analyze)
     builder.add_node("aggregate", nodes.aggregate)
@@ -150,7 +175,8 @@ def _build_screening_graph(
         nodes.has_accepted_articles,
         {"extract": "extract", "aggregate": "aggregate"},
     )
-    builder.add_edge("extract", "resolve")
+    builder.add_edge("extract", "screen")
+    builder.add_edge("screen", "resolve")
     builder.add_edge("resolve", "analyze")
     builder.add_edge("analyze", "aggregate")
     builder.add_edge("aggregate", "score")
