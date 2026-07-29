@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Tuple
+from typing import List, Optional, Tuple, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictFloat,
+    StrictInt,
+    StrictStr,
+    field_validator,
+)
 
 from app.models.article import Article
 from app.models.news_event import NewsEvent
@@ -52,11 +60,57 @@ class ScreeningAssessment(BaseModel):
 
 
 class ScreeningAssessmentResponse(BaseModel):
-    """Strict batch response returned by StructuredOutputLLM for screening."""
+    """Strict OpenAI DTO that is intentionally separate from Domain assessments."""
 
     model_config = ConfigDict(extra="forbid")
 
+    assessments: List["ScreeningAssessmentResponseItem"]
+
+
+ScoreValue = Union[StrictInt, StrictFloat]
+
+
+class ScreeningAssessmentResponseItem(BaseModel):
+    """One loose-score LLM response correlated by request-local event index."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    event_index: StrictInt = Field(ge=0)
+    relevance: ScoreValue
+    importance: ScoreValue
+    credibility: ScoreValue
+    requires_cross_validation: bool
+    reasons: List[StrictStr] = Field(default_factory=list)
+
+
+class ScreeningParseErrorKind(str, Enum):
+    """Safe, bounded categories for rejected LLM screening output."""
+
+    INVALID_EVENT_INDEX = "invalid_event_index"
+    DUPLICATE_EVENT_INDEX = "duplicate_event_index"
+    MISSING_EVENT_INDEX = "missing_event_index"
+    INVALID_SCORE = "invalid_score"
+    INVALID_REASONS = "invalid_reasons"
+    DOMAIN_CONVERSION = "domain_conversion"
+
+
+class ScreeningParseError(BaseModel):
+    """Non-sensitive observation of one invalid screening response item."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: ScreeningParseErrorKind
+    event_index: Optional[int] = Field(default=None, ge=0)
+    candidate_id: Optional[str] = Field(default=None, min_length=1)
+
+
+class ScreeningParseResult(BaseModel):
+    """Immutable parser outcome preserving valid assessments beside errors."""
+
+    model_config = ConfigDict(frozen=True)
+
     assessments: Tuple[ScreeningAssessment, ...]
+    errors: Tuple[ScreeningParseError, ...] = ()
 
 
 class ScreeningDecision(BaseModel):

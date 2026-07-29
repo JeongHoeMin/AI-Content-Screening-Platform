@@ -19,6 +19,7 @@ from app.mock_screening import (
     DeterministicMockExtractor,
     DeterministicMockScreener,
 )
+from app.screeners import LLMEventScreener
 from app.models import Article, CrossValidationStatus, ResolvedDecisionType
 from app.workflows import ScreeningResult
 
@@ -107,7 +108,7 @@ def test_mock_bootstrap_does_not_load_openai_config(
     assert workflow is not None
 
 
-def test_openai_bootstrap_assembles_only_the_extractor_as_llm(
+def test_openai_bootstrap_assembles_extractor_and_screener_as_llms(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     class CapturingWorkflow:
@@ -131,7 +132,7 @@ def test_openai_bootstrap_assembles_only_the_extractor_as_llm(
 
     assert ExecutionMode.OPENAI in bootstrap._WORKFLOW_FACTORIES
     assert isinstance(first.components["extractor"], LLMNewsEventExtractor)
-    assert isinstance(first.components["screener"], DeterministicMockScreener)
+    assert isinstance(first.components["screener"], LLMEventScreener)
     assert isinstance(first.components["cross_validator"], DeterministicMockCrossValidator)
     assert first is not second
 

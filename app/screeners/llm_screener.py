@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from typing import Iterator, List, Tuple
 
+import structlog
+from pydantic import ValidationError
+
 from app.llms import StructuredOutputLLM
+from app.llms.errors import StructuredOutputCallError, StructuredOutputResponseError
 from app.llms.models import ChatMessage
 from app.models.llm_inference import LLMInferenceResult
 from app.models.screening import (
@@ -11,12 +15,17 @@ from app.models.screening import (
     ScreeningAssessmentResponse,
     ScreeningCandidate,
     ScreeningDecision,
+    ScreeningParseError,
+    ScreeningParseResult,
 )
 from app.prompts.base import PromptBuilder
 from app.prompts.screening import BatchScreeningPromptInput
 from app.screeners.base import EventScreener
+from app.screeners.errors import NoValidScreeningDecisionsError
 from app.screeners.parser import ScreeningAssessmentParser
 from app.screeners.policy import ScreeningPolicy
+
+logger = structlog.get_logger(__name__)
 
 
 class LLMEventScreener(EventScreener):
@@ -42,20 +51,42 @@ class LLMEventScreener(EventScreener):
     ) -> Tuple[ScreeningDecision, ...]:
         candidates: Tuple[ScreeningCandidate, ...] = self._candidates(inferences)
         decisions: List[ScreeningDecision] = []
-        for batch in self._batches(candidates):
-            assessments: Tuple[ScreeningAssessment, ...] = await self._assess_batch(
-                batch
-            )
+        for batch_index, batch in enumerate(self._batches(candidates)):
+            try:
+                parsed: ScreeningParseResult = await self._assess_batch(batch)
+            except StructuredOutputCallError:
+                logger.warning(
+                    "screening_batch_failed",
+                    batch_index=batch_index,
+                    candidate_count=len(batch),
+                    error_kind="structured_output_call",
+                )
+                continue
+            except (StructuredOutputResponseError, ValidationError):
+                logger.warning(
+                    "screening_batch_failed",
+                    batch_index=batch_index,
+                    candidate_count=len(batch),
+                    error_kind="structured_output_response",
+                )
+                continue
+            for error in parsed.errors:
+                self._log_parse_error(batch_index, error)
             decisions.extend(
                 self._policy.decide(candidate.event, assessment)
-                for candidate, assessment in zip(batch, assessments)
+                for assessment in parsed.assessments
+                for candidate in (self._candidate_for_assessment(batch, assessment),)
+            )
+        if candidates and not decisions:
+            raise NoValidScreeningDecisionsError(
+                "No valid screening decisions were produced"
             )
         return tuple(decisions)
 
     async def _assess_batch(
         self,
         candidates: Tuple[ScreeningCandidate, ...],
-    ) -> Tuple[ScreeningAssessment, ...]:
+    ) -> ScreeningParseResult:
         prompt_input: BatchScreeningPromptInput = BatchScreeningPromptInput(
             candidates=candidates
         )
@@ -66,8 +97,29 @@ class LLMEventScreener(EventScreener):
         )
         return self._parser.parse(response, candidates)
 
+    @staticmethod
+    def _candidate_for_assessment(
+        candidates: Tuple[ScreeningCandidate, ...],
+        assessment: ScreeningAssessment,
+    ) -> ScreeningCandidate:
+        return next(
+            candidate
+            for candidate in candidates
+            if candidate.candidate_id == assessment.candidate_id
+        )
+
+    @staticmethod
+    def _log_parse_error(batch_index: int, error: ScreeningParseError) -> None:
+        logger.warning(
+            "screening_candidate_invalid",
+            batch_index=batch_index,
+            event_index=error.event_index,
+            candidate_id=error.candidate_id,
+            error_kind=error.kind.value,
+        )
+
+    @staticmethod
     def _candidates(
-        self,
         inferences: Tuple[LLMInferenceResult, ...],
     ) -> Tuple[ScreeningCandidate, ...]:
         """Create request-local correlation IDs while retaining Event identity."""

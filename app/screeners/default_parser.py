@@ -1,72 +1,159 @@
 from __future__ import annotations
 
-from typing import Dict, Set, Tuple
+import math
+from collections import Counter
+from typing import Dict, List, Sequence, Set, Tuple
+
+from pydantic import ValidationError
 
 from app.models.screening import (
     ScreeningAssessment,
     ScreeningAssessmentResponse,
+    ScreeningAssessmentResponseItem,
     ScreeningCandidate,
+    ScreeningParseError,
+    ScreeningParseErrorKind,
+    ScreeningParseResult,
 )
-from app.screeners.errors import ScreeningAssessmentValidationError
 from app.screeners.parser import ScreeningAssessmentParser
 
 
 class DefaultScreeningAssessmentParser(ScreeningAssessmentParser):
-    """Matches typed assessment IDs to candidates without changing their order."""
+    """Restores valid assessments by event index without discarding siblings."""
 
     def parse(
         self,
         response: ScreeningAssessmentResponse,
         candidates: Tuple[ScreeningCandidate, ...],
-    ) -> Tuple[ScreeningAssessment, ...]:
-        candidates_by_id: Dict[str, ScreeningCandidate] = self._index_candidates(
-            candidates
-        )
-        assessments_by_id: Dict[str, ScreeningAssessment] = self._index_assessments(
-            response.assessments
-        )
-        self._validate_matching_ids(candidates_by_id, assessments_by_id)
-        return tuple(
-            assessments_by_id[candidate.candidate_id] for candidate in candidates
+    ) -> ScreeningParseResult:
+        valid_indexes: Set[int] = set(range(len(candidates)))
+        counts: Counter[int] = Counter(item.event_index for item in response.assessments)
+        duplicate_indexes: Set[int] = {
+            event_index for event_index, count in counts.items() if count > 1
+        }
+        response_by_index: Dict[int, ScreeningAssessmentResponseItem] = {}
+        errors: List[ScreeningParseError] = []
+        invalid_indexes: Set[int] = set()
+
+        for item in response.assessments:
+            event_index: int = item.event_index
+            if event_index not in valid_indexes:
+                errors.append(
+                    ScreeningParseError(
+                        kind=ScreeningParseErrorKind.INVALID_EVENT_INDEX,
+                        event_index=event_index,
+                    )
+                )
+                continue
+            if event_index in duplicate_indexes:
+                invalid_indexes.add(event_index)
+                continue
+            response_by_index[event_index] = item
+
+        for event_index in sorted(duplicate_indexes & valid_indexes):
+            errors.append(
+                self._error(
+                    ScreeningParseErrorKind.DUPLICATE_EVENT_INDEX,
+                    event_index,
+                    candidates,
+                )
+            )
+
+        assessments_by_index: Dict[int, ScreeningAssessment] = {}
+        for event_index, item in response_by_index.items():
+            assessment, error = self._map_assessment(item, event_index, candidates)
+            if assessment is not None:
+                assessments_by_index[event_index] = assessment
+            elif error is not None:
+                errors.append(error)
+                invalid_indexes.add(event_index)
+
+        for event_index in range(len(candidates)):
+            if event_index not in assessments_by_index and event_index not in invalid_indexes:
+                errors.append(
+                    self._error(
+                        ScreeningParseErrorKind.MISSING_EVENT_INDEX,
+                        event_index,
+                        candidates,
+                    )
+                )
+
+        return ScreeningParseResult(
+            assessments=tuple(
+                assessments_by_index[event_index]
+                for event_index in range(len(candidates))
+                if event_index in assessments_by_index
+            ),
+            errors=tuple(errors),
         )
 
-    @staticmethod
-    def _index_candidates(
+    def _map_assessment(
+        self,
+        item: ScreeningAssessmentResponseItem,
+        event_index: int,
         candidates: Tuple[ScreeningCandidate, ...],
-    ) -> Dict[str, ScreeningCandidate]:
-        candidates_by_id: Dict[str, ScreeningCandidate] = {
-            candidate.candidate_id: candidate for candidate in candidates
-        }
-        if len(candidates_by_id) != len(candidates):
-            raise ScreeningAssessmentValidationError(
-                "Input screening candidates contain duplicate IDs"
+    ) -> tuple[ScreeningAssessment | None, ScreeningParseError | None]:
+        try:
+            assessment: ScreeningAssessment = ScreeningAssessment(
+                candidate_id=candidates[event_index].candidate_id,
+                relevance=self._parse_integer_score(item.relevance),
+                importance=self._parse_integer_score(item.importance),
+                credibility=self._parse_integer_score(item.credibility),
+                requires_cross_validation=item.requires_cross_validation,
+                reasons=self._normalize_reasons(item.reasons),
             )
-        return candidates_by_id
+        except ValidationError:
+            return None, self._error(
+                ScreeningParseErrorKind.DOMAIN_CONVERSION,
+                event_index,
+                candidates,
+            )
+        except ValueError as error:
+            kind: ScreeningParseErrorKind = (
+                ScreeningParseErrorKind.INVALID_SCORE
+                if "score" in str(error)
+                else ScreeningParseErrorKind.INVALID_REASONS
+            )
+            return None, self._error(kind, event_index, candidates)
+        return assessment, None
 
     @staticmethod
-    def _index_assessments(
-        assessments: Tuple[ScreeningAssessment, ...],
-    ) -> Dict[str, ScreeningAssessment]:
-        assessments_by_id: Dict[str, ScreeningAssessment] = {
-            assessment.candidate_id: assessment for assessment in assessments
-        }
-        if len(assessments_by_id) != len(assessments):
-            raise ScreeningAssessmentValidationError(
-                "LLM output contains duplicate screening candidate IDs"
-            )
-        return assessments_by_id
+    def _parse_integer_score(value: int | float) -> int:
+        if isinstance(value, bool):
+            raise ValueError("score must not be boolean")
+        if isinstance(value, float):
+            if not math.isfinite(value):
+                raise ValueError("score must be finite")
+            if not value.is_integer():
+                raise ValueError("score must be an integer")
+        score: int = int(value)
+        if not 0 <= score <= 100:
+            raise ValueError("score must be between 0 and 100")
+        return score
 
     @staticmethod
-    def _validate_matching_ids(
-        candidates_by_id: Dict[str, ScreeningCandidate],
-        assessments_by_id: Dict[str, ScreeningAssessment],
-    ) -> None:
-        candidate_ids: Set[str] = set(candidates_by_id)
-        assessment_ids: Set[str] = set(assessments_by_id)
-        missing_ids: Set[str] = candidate_ids - assessment_ids
-        unknown_ids: Set[str] = assessment_ids - candidate_ids
-        if missing_ids or unknown_ids:
-            raise ScreeningAssessmentValidationError(
-                "LLM assessment IDs do not match input screening candidate IDs: "
-                f"missing={sorted(missing_ids)}, unknown={sorted(unknown_ids)}"
-            )
+    def _normalize_reasons(values: Sequence[str]) -> Tuple[str, ...]:
+        seen: Set[str] = set()
+        normalized: List[str] = []
+        for value in values:
+            reason: str = " ".join(value.split())
+            if reason and reason not in seen:
+                seen.add(reason)
+                normalized.append(reason)
+        if not normalized:
+            raise ValueError("reasons must not be empty")
+        if len(normalized) > 3:
+            raise ValueError("reasons must contain at most three entries")
+        return tuple(normalized)
+
+    @staticmethod
+    def _error(
+        kind: ScreeningParseErrorKind,
+        event_index: int,
+        candidates: Tuple[ScreeningCandidate, ...],
+    ) -> ScreeningParseError:
+        return ScreeningParseError(
+            kind=kind,
+            event_index=event_index,
+            candidate_id=candidates[event_index].candidate_id,
+        )

@@ -17,7 +17,7 @@ from app.llms import (
     StructuredOutputLLM,
     create_async_openai_client,
 )
-from app.models import BatchExtractionConfig
+from app.models import BatchExtractionConfig, BatchScreeningConfig
 from app.evaluators import RuleArticleEvaluator, RuleArticleEvaluatorConfig
 from app.mock_screening import (
     DeterministicMockCrossValidator,
@@ -25,10 +25,14 @@ from app.mock_screening import (
     DeterministicMockScreener,
 )
 from app.recommenders import DefaultRecommendationEngine, RuleRecommendationPolicy
-from app.prompts import NewsEventPromptBuilder
+from app.prompts import NewsEventPromptBuilder, ScreeningPromptBuilder
 from app.resolvers import DefaultResolvePolicy, DefaultTickerResolver, StaticTickerLookup
 from app.scorers import DefaultScoringEngine, RuleScoringStrategy
-from app.screeners import DefaultScreeningPolicy
+from app.screeners import (
+    DefaultScreeningAssessmentParser,
+    DefaultScreeningPolicy,
+    LLMEventScreener,
+)
 from app.workflows import ScreeningWorkflow
 
 
@@ -96,7 +100,13 @@ def _create_openai_workflow() -> ScreeningWorkflow:
             prompt_builder=NewsEventPromptBuilder(),
             config=BatchExtractionConfig(),
         ),
-        screener=DeterministicMockScreener(screening_policy),
+        screener=LLMEventScreener(
+            structured_llm=structured_llm,
+            parser=DefaultScreeningAssessmentParser(),
+            prompt_builder=ScreeningPromptBuilder(),
+            policy=screening_policy,
+            config=BatchScreeningConfig(),
+        ),
         cross_validator=DeterministicMockCrossValidator(cross_validation_policy),
         resolver=DefaultTickerResolver(StaticTickerLookup({})),
         resolve_policy=DefaultResolvePolicy(),
