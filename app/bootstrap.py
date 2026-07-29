@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from enum import Enum
 
 from app.aggregators import DefaultAggregationStrategy, DefaultEvidenceAggregator
@@ -22,12 +23,17 @@ class ExecutionMode(str, Enum):
     MOCK = "mock"
 
 
+WorkflowFactory = Callable[[], ScreeningWorkflow]
+
+
 def create_screening_workflow(
     mode: ExecutionMode = ExecutionMode.MOCK,
 ) -> ScreeningWorkflow:
-    if mode is ExecutionMode.MOCK:
-        return _create_mock_workflow()
-    raise ValueError(f"Unsupported execution mode: {mode}")
+    factory: WorkflowFactory | None = _WORKFLOW_FACTORIES.get(mode)
+    if factory is None:
+        mode_name: str = mode.value if isinstance(mode, ExecutionMode) else repr(mode)
+        raise ValueError(f"Unsupported execution mode: {mode_name}")
+    return factory()
 
 
 def _create_mock_workflow() -> ScreeningWorkflow:
@@ -47,3 +53,8 @@ def _create_mock_workflow() -> ScreeningWorkflow:
         scoring_engine=DefaultScoringEngine(RuleScoringStrategy()),
         recommendation_engine=DefaultRecommendationEngine(RuleRecommendationPolicy()),
     )
+
+
+_WORKFLOW_FACTORIES: dict[ExecutionMode, WorkflowFactory] = {
+    ExecutionMode.MOCK: _create_mock_workflow,
+}

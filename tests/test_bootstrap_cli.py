@@ -8,6 +8,8 @@ from pathlib import Path
 import pytest
 
 from app.bootstrap import ExecutionMode, create_screening_workflow
+from app.mock_grouping import build_mock_grouping_key, normalize_mock_title
+from app.mock_screening import DeterministicMockExtractor
 from app.models import Article, CrossValidationStatus, ResolvedDecisionType
 from app.workflows import ScreeningResult
 
@@ -48,6 +50,39 @@ async def test_mock_bootstrap_runs_verified_and_insufficient_evidence_paths() ->
     assert any(
         item.decision is ResolvedDecisionType.REVIEW for item in result.resolved_events
     )
+
+
+def test_mock_grouping_normalizes_only_whitespace_and_case() -> None:
+    assert (
+        normalize_mock_title("  Samsung   Launches AI Chip  ")
+        == "samsung launches ai chip"
+    )
+    assert normalize_mock_title("SAMSUNG LAUNCHES AI CHIP") == "samsung launches ai chip"
+    assert (
+        normalize_mock_title("Samsung, launches AI chip")
+        != normalize_mock_title("Samsung launches AI chip")
+    )
+
+
+@pytest.mark.anyio
+async def test_mock_extractor_uses_article_content_and_empty_unavailable_metadata() -> None:
+    payload: object = json.loads(SAMPLE_INPUT.read_text(encoding="utf-8"))
+    article: Article = Article.model_validate(payload[0])
+
+    extraction = await DeterministicMockExtractor().extract((article,))
+    event = extraction.inferences[0].events[0]
+
+    assert event.summary == " ".join(article.content.split())[:500]
+    assert event.companies == []
+    assert event.industries == []
+    assert event.keywords == [build_mock_grouping_key(article)]
+
+
+def test_mock_bootstrap_creates_new_workflow_instances() -> None:
+    first = create_screening_workflow(ExecutionMode.MOCK)
+    second = create_screening_workflow(ExecutionMode.MOCK)
+
+    assert first is not second
 
 
 def test_module_and_script_entrypoints_emit_identical_json() -> None:

@@ -18,12 +18,9 @@ from app.models.screening import (
     ScreeningDecision,
     ScreeningCandidate,
 )
+from app.mock_grouping import build_mock_grouping_key
 from app.screeners.base import EventScreener
 from app.screeners.policy import ScreeningPolicy
-
-
-def _grouping_key(article: Article) -> str:
-    return " ".join(article.title.casefold().split())
 
 
 class DeterministicMockExtractor(NewsEventExtractor):
@@ -37,21 +34,29 @@ class DeterministicMockExtractor(NewsEventExtractor):
 
     @staticmethod
     def _inference(article: Article) -> LLMInferenceResult:
+        summary: str = DeterministicMockExtractor._build_summary(article)
         event: NewsEvent = NewsEvent(
             title=article.title,
-            summary=f"Deterministic mock event for {article.id}.",
+            summary=summary,
             companies=[],
             industries=[],
-            keywords=[_grouping_key(article)],
+            keywords=[build_mock_grouping_key(article)],
             reasons=("Deterministic mock extraction.",),
         )
         return LLMInferenceResult(
             article=article,
             events=(event,),
-            summary=f"Deterministic mock summary for {article.id}.",
+            summary=summary,
             reasoning="Deterministic mock extraction.",
             confidence=1.0,
         )
+
+    @staticmethod
+    def _build_summary(article: Article) -> str:
+        normalized_content: str = " ".join(article.content.split())
+        if normalized_content:
+            return normalized_content[:500]
+        return " ".join(article.title.split())
 
 
 class DeterministicMockScreener(EventScreener):
@@ -108,7 +113,8 @@ class DeterministicMockCrossValidator(CrossValidator):
         related: Tuple[Article, ...] = tuple(
             article
             for article in candidate.related_articles
-            if _grouping_key(article) == _grouping_key(candidate.source_article)
+            if build_mock_grouping_key(article)
+            == build_mock_grouping_key(candidate.source_article)
         )
         unique_sources: set[str] = {
             article.source.strip().casefold()
