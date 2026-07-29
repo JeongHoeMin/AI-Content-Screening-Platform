@@ -22,7 +22,8 @@ class CompanyRecommendation:
     """Immutable policy decision for one company.
 
     The score field preserves the identical CompanyScore instance produced by
-    ScoringEngine.
+    ScoringEngine. CompanyRecommendation never creates, copies, or replaces
+    CompanyScore.
     """
 
     score: CompanyScore
@@ -33,8 +34,9 @@ class CompanyRecommendation:
 class RecommendationResult:
     """Immutable recommendation decision snapshot.
 
-    The ordering of CompanyRecommendation matches the ordering of CompanyScore
-    from the input ScoringResult.
+    The result preserves the identical CompanyRecommendation instances returned
+    by RecommendationPolicy. Their ordering matches the CompanyScore ordering
+    from the input ScoringResult, and this snapshot does not modify them.
     """
 
     companies: Tuple[CompanyRecommendation, ...]

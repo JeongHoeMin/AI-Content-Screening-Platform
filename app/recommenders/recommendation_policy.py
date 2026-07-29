@@ -9,9 +9,11 @@ from app.models.scoring import ScoringResult
 class RecommendationPolicy(Protocol):
     """Creates decisions without creating or replacing CompanyScore objects.
 
-    Implementations are deterministic and side-effect free. They preserve every
-    input CompanyScore identity and order while neither mutating scores nor
-    ranking, filtering, or reordering companies.
+    Implementations treat CompanyScore as an immutable input snapshot. They are
+    deterministic and side-effect free, preserving every input CompanyScore
+    identity and order while neither mutating scores or evidence nor ranking,
+    filtering, performing portfolio analysis, querying market data, or calling
+    an LLM.
     """
 
     def recommend(

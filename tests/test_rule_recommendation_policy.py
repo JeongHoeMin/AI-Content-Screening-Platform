@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
 from typing import Tuple
 
 import pytest
@@ -15,7 +14,6 @@ from app.models import (
     ScoringResult,
 )
 from app.recommenders import RecommendationPolicy, RuleRecommendationPolicy
-from app.recommenders.rule_recommendation_policy import _RULES
 
 
 def build_company(index: int) -> ResolvedCompany:
@@ -113,14 +111,3 @@ def test_rule_policy_is_deterministic_and_does_not_mutate_scores() -> None:
     assert first_result == second_result
     assert scoring.companies is companies_snapshot
     assert scoring.companies[0] is company_score
-
-
-def test_rule_policy_and_rules_are_immutable() -> None:
-    policy: RuleRecommendationPolicy = RuleRecommendationPolicy()
-
-    with pytest.raises(FrozenInstanceError):
-        policy._rules = ()
-    with pytest.raises(FrozenInstanceError):
-        _RULES[0].recommendation = Recommendation.BUY
-    with pytest.raises(TypeError):
-        _RULES[0] = _RULES[1]

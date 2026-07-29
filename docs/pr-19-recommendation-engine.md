@@ -51,3 +51,32 @@
 - Recommendation은 회사 하나에 대한 정책 기반 의사결정이다.
 - 향후 Aggressive, Conservative, ETF, Long-term Policy는 Rule predicate를 교체하거나
   추가하여 확장한다. Ranking, Explanation, Portfolio, Risk는 별도 계층으로 추가한다.
+
+## Internal Rule Representation
+
+- `_RecommendationRule`과 `_RULES`는 RecommendationPolicy의 internal implementation
+  detail이며 public API의 일부가 아니다.
+- `_RecommendationRule.predicate`는 score가 Rule에 속하는지를 판정하고 threshold,
+  inclusive, exclusive, interval 같은 boundary semantics를 모두 캡슐화한다.
+- Recommendation 알고리즘은 Rule을 위에서 아래로 실행해 첫 일치 결과를 선택할 뿐,
+  predicate의 threshold 의미를 직접 해석하지 않는다.
+- `_RULES`는 `Final` Tuple로 선언된 현재 정책이다. `Final`은 정적 타입 계약이고,
+  runtime 불변성 검증 대상은 아니다.
+
+## Engine Responsibility
+
+- RecommendationPolicy owns every decision. RecommendationEngine owns only
+  orchestration.
+- Engine은 configured Policy를 한 번 호출하고 Policy가 반환한 동일 Tuple을 복사,
+  수정, 재정렬 없이 RecommendationResult에 보관한다. Recommendation Rule을 직접
+  평가하지 않는다.
+
+## Refinement #2 Record (2026-07-29)
+
+- 변경 이유: Rule 표현이 Policy 내부 구현임을 명확히 하고 공개 계약 중심의 테스트
+  전략을 유지한다.
+- 결정: Rule을 `_RecommendationRule`로 은닉하고 `_RULES`를 `Final`로 선언한다.
+  CompanyRecommendation, RecommendationResult, Policy, Engine의 identity와 책임
+  경계를 docstring으로 보강한다.
+- 범위 제한: Recommendation 결과, score 경계값, workflow/harness 연결, 새 Policy 추가는
+  변경하지 않는다. private symbol, `Final`, frozen 구현 세부사항을 테스트하지 않는다.

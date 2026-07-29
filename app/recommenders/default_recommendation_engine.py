@@ -9,7 +9,13 @@ from app.recommenders.recommendation_policy import RecommendationPolicy
 
 
 class DefaultRecommendationEngine(RecommendationEngine):
-    """Assembles recommendation snapshots using only an injected policy."""
+    """Assembles recommendation snapshots using only an injected policy.
+
+    Every recommendation decision belongs to the configured
+    RecommendationPolicy; the engine owns only orchestration and result
+    assembly. It never evaluates recommendation rules directly and preserves
+    the policy-returned tuple without copying or reordering it.
+    """
 
     def __init__(self, policy: RecommendationPolicy) -> None:
         self._policy: RecommendationPolicy = policy

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Tuple
+from typing import Callable, Final, Tuple
 
 from app.models.recommendation import CompanyRecommendation, Recommendation
 from app.models.scoring import CompanyScore, ScoringResult
@@ -9,8 +9,13 @@ from app.recommenders.recommendation_policy import RecommendationPolicy
 
 
 @dataclass(frozen=True)
-class RecommendationRule:
-    """Read-only policy rule that decides whether it includes a score."""
+class _RecommendationRule:
+    """Internal rule that decides whether the supplied score belongs to it.
+
+    The predicate encapsulates all threshold and boundary semantics. The
+    recommendation algorithm only invokes the predicate and never interprets
+    thresholds, inclusive or exclusive bounds, or intervals directly.
+    """
 
     recommendation: Recommendation
     predicate: Callable[[float], bool]
@@ -32,11 +37,11 @@ def _is_sell(score: float) -> bool:
     return score > -2.0
 
 
-_RULES: Tuple[RecommendationRule, ...] = (
-    RecommendationRule(Recommendation.STRONG_BUY, _is_strong_buy),
-    RecommendationRule(Recommendation.BUY, _is_buy),
-    RecommendationRule(Recommendation.HOLD, _is_hold),
-    RecommendationRule(Recommendation.SELL, _is_sell),
+_RULES: Final[Tuple[_RecommendationRule, ...]] = (
+    _RecommendationRule(Recommendation.STRONG_BUY, _is_strong_buy),
+    _RecommendationRule(Recommendation.BUY, _is_buy),
+    _RecommendationRule(Recommendation.HOLD, _is_hold),
+    _RecommendationRule(Recommendation.SELL, _is_sell),
 )
 
 
