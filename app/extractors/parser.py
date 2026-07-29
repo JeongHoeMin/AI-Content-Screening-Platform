@@ -1,19 +1,19 @@
 from __future__ import annotations
 
-from typing import List, Protocol
+from typing import Protocol, Tuple
 
-from app.llms.models import ChatResponse
-from app.models.article import ArticleEvaluationResult
-from app.models.news_event import NewsEvent
+from app.models.article import Article
+from app.models.llm_inference import LLMInferenceResult
+from app.models.news_event_response import NewsEventExtractionResponse
 
 
 class NewsEventParser(Protocol):
-    """Converts an LLM response into news event domain values."""
+    """Validates typed LLM output and maps it to inference snapshots."""
 
     def parse(
         self,
-        response: ChatResponse,
-        evaluation: ArticleEvaluationResult,
-    ) -> List[NewsEvent]:
-        """Decode, validate, and map one extraction response."""
+        response: NewsEventExtractionResponse,
+        articles: Tuple[Article, ...],
+    ) -> Tuple[LLMInferenceResult, ...]:
+        """Return one validated inference for every input article in order."""
         ...

@@ -1,60 +1,58 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import List, Tuple
 
 import pytest
-from pydantic import ValidationError
 
-from app.extractors import DefaultNewsEventParser, NewsEventParser
-from app.llms import ChatResponse
+from app.extractors import (
+    DefaultNewsEventParser,
+    InferenceResultValidationError,
+    NewsEventParser,
+)
 from app.models import (
     Article,
-    ArticleEvaluationResult,
+    ArticleInferenceResponseItem,
     CompanyRelation,
-    NewsEvent,
+    ExtractedCompanyResponseItem,
     NewsEventExtractionResponse,
+    NewsEventResponseItem,
 )
 
 
-def build_evaluation(is_relevant: bool = True) -> ArticleEvaluationResult:
-    return ArticleEvaluationResult(
-        article=Article(
-            id="article-1",
-            title="Samsung expands HBM production",
-            content="Samsung Electronics announced an expansion of HBM production.",
-            source="Example News",
-            published_at=datetime(2026, 7, 29, tzinfo=timezone.utc),
-            url="https://example.com/articles/1",
-        ),
-        score=90,
-        is_relevant=is_relevant,
-        reasons=["Material production expansion"],
+def build_article(index: int) -> Article:
+    return Article(
+        id=f"article-{index}",
+        title=f"Title {index}",
+        content="content " * 50,
+        source="Example News",
+        published_at=datetime(2026, 7, 29, tzinfo=timezone.utc),
+        url=f"https://example.com/articles/{index}",
     )
 
 
-def build_event(
-    title: str,
-    relation: str = "direct",
-) -> Dict[str, Any]:
-    return {
-        "title": title,
-        "summary": f"Summary for {title}",
-        "companies": [
-            {
-                "name": "Samsung Electronics",
-                "relation": relation,
-            }
+def build_item(article_id: str, title: str) -> ArticleInferenceResponseItem:
+    return ArticleInferenceResponseItem(
+        article_id=article_id,
+        summary=f"Summary for {title}",
+        reasoning="The event is directly stated in the source article.",
+        confidence=0.8,
+        events=[
+            NewsEventResponseItem(
+                title=title,
+                summary=f"Event summary for {title}",
+                companies=[
+                    ExtractedCompanyResponseItem(
+                        name="Samsung Electronics",
+                        relation=CompanyRelation.DIRECT,
+                    )
+                ],
+                industries=["Semiconductors"],
+                keywords=["HBM"],
+                reasons=["The event is explicitly stated"],
+            )
         ],
-        "industries": ["Semiconductors"],
-        "keywords": ["HBM"],
-        "reasons": ["The production expansion is stated in the article"],
-    }
-
-
-def build_response(events: List[Dict[str, Any]]) -> ChatResponse:
-    return ChatResponse(content=json.dumps({"events": events}))
+    )
 
 
 def test_parser_protocol_supports_default_implementation() -> None:
@@ -63,71 +61,55 @@ def test_parser_protocol_supports_default_implementation() -> None:
     assert isinstance(parser, DefaultNewsEventParser)
 
 
-def test_parser_returns_empty_events_for_valid_empty_response() -> None:
-    parser: DefaultNewsEventParser = DefaultNewsEventParser()
-
-    result: List[NewsEvent] = parser.parse(
-        build_response([]),
-        build_evaluation(is_relevant=False),
-    )
-
-    assert result == []
-
-
-def test_parser_maps_multiple_events_in_response_order() -> None:
-    parser: DefaultNewsEventParser = DefaultNewsEventParser()
-    response: ChatResponse = build_response(
-        [
-            build_event("First event", relation="direct"),
-            build_event("Second event", relation="indirect"),
+def test_parser_preserves_input_article_order_and_event_identity() -> None:
+    first_article: Article = build_article(1)
+    second_article: Article = build_article(2)
+    response: NewsEventExtractionResponse = NewsEventExtractionResponse(
+        articles=[
+            build_item(second_article.id, "Second event"),
+            build_item(first_article.id, "First event"),
         ]
     )
-
-    result: List[NewsEvent] = parser.parse(response, build_evaluation())
-
-    assert [event.title for event in result] == ["First event", "Second event"]
-    assert result[0].companies[0].relation is CompanyRelation.DIRECT
-    assert result[1].companies[0].relation is CompanyRelation.INDIRECT
-
-
-def test_parser_creates_domain_objects_separate_from_response_dtos() -> None:
-    payload: Dict[str, Any] = {"events": [build_event("Domain event")]}
-    response_dto: NewsEventExtractionResponse = (
-        NewsEventExtractionResponse.model_validate(payload)
-    )
     parser: DefaultNewsEventParser = DefaultNewsEventParser()
 
-    result: List[NewsEvent] = parser.parse(
-        ChatResponse(content=json.dumps(payload)),
-        build_evaluation(),
+    result = parser.parse(response, (first_article, second_article))
+
+    assert tuple(inference.article for inference in result) == (
+        first_article,
+        second_article,
     )
-
-    assert result[0] is not response_dto.events[0]
-    assert result[0].companies[0] is not response_dto.events[0].companies[0]
-
-
-def test_parser_propagates_invalid_json() -> None:
-    parser: DefaultNewsEventParser = DefaultNewsEventParser()
-
-    with pytest.raises(json.JSONDecodeError):
-        parser.parse(ChatResponse(content="not json"), build_evaluation())
+    assert result[0].article is first_article
+    assert result[0].events[0].title == "First event"
+    assert result[1].events[0].companies[0].relation is CompanyRelation.DIRECT
+    assert result[0].confidence == 0.8
 
 
 @pytest.mark.parametrize(
-    "payload",
+    "response_articles",
     [
-        {},
-        {"events": [{"title": "Incomplete"}]},
-        {"events": [{**build_event("Extra"), "sentiment": "positive"}]},
-        {"events": [build_event("Invalid relation", relation="competitor")]},
-        {"events": [], "recommendation": "buy"},
+        [],
+        [build_item("article-1", "One"), build_item("article-1", "Duplicate")],
+        [build_item("unknown", "Unknown")],
     ],
 )
-def test_parser_rejects_invalid_contract(payload: Dict[str, Any]) -> None:
+def test_parser_rejects_missing_unknown_or_duplicate_article_ids(
+    response_articles: List[ArticleInferenceResponseItem],
+) -> None:
+    parser: DefaultNewsEventParser = DefaultNewsEventParser()
+    response: NewsEventExtractionResponse = NewsEventExtractionResponse(
+        articles=response_articles
+    )
+
+    with pytest.raises(InferenceResultValidationError):
+        parser.parse(response, (build_article(1),))
+
+
+def test_parser_rejects_duplicate_input_article_ids() -> None:
+    article: Article = build_article(1)
+    response: NewsEventExtractionResponse = NewsEventExtractionResponse(
+        articles=[build_item(article.id, "One")]
+    )
     parser: DefaultNewsEventParser = DefaultNewsEventParser()
 
-    with pytest.raises(ValidationError):
-        parser.parse(
-            ChatResponse(content=json.dumps(payload)),
-            build_evaluation(),
-        )
+    with pytest.raises(InferenceResultValidationError):
+        parser.parse(response, (article, article))

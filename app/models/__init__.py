@@ -1,6 +1,6 @@
 """Domain models."""
 
-from app.models.article import Article, ArticleEvaluationResult
+from app.models.article import Article, ArticleEvaluationResult, ArticleRejectReason
 from app.models.collect_posts import (
     CollectPostsData,
     CollectPostsMetadata,
@@ -22,9 +22,11 @@ from app.models.impact_analysis import (
     ImpactAnalysis,
     ImpactDirection,
 )
+from app.models.llm_inference import BatchExtractionConfig, LLMInferenceResult
 from app.models.normalize import NormalizeResult
 from app.models.news_event import CompanyRelation, ExtractedCompany, NewsEvent
 from app.models.news_event_response import (
+    ArticleInferenceResponseItem,
     ExtractedCompanyResponseItem,
     NewsEventExtractionResponse,
     NewsEventResponseItem,
@@ -54,6 +56,9 @@ from app.models.workflow import ContentPipelineRequest, ContentPipelineResult
 __all__ = [
     "Article",
     "ArticleEvaluationResult",
+    "ArticleRejectReason",
+    "ArticleInferenceResponseItem",
+    "BatchExtractionConfig",
     "CollectPostsData",
     "CollectPostsMetadata",
     "CollectPostsRequest",
@@ -76,6 +81,7 @@ __all__ = [
     "GenerateScriptRequest",
     "ImpactAnalysis",
     "ImpactDirection",
+    "LLMInferenceResult",
     "NormalizeResult",
     "NewsEvent",
     "NewsEventExtractionResponse",

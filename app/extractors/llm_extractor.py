@@ -1,44 +1,57 @@
 from __future__ import annotations
 
-from typing import List
+from typing import Iterator, List, Tuple
 
 from app.extractors.base import NewsEventExtractor
 from app.extractors.parser import NewsEventParser
-from app.extractors.requester import NewsEventRequester
-from app.llms.models import ChatMessage, ChatResponse
-from app.models.article import ArticleEvaluationResult
-from app.models.news_event import NewsEvent
+from app.llms import StructuredOutputLLM
+from app.llms.models import ChatMessage
+from app.models.article import Article
+from app.models.llm_inference import BatchExtractionConfig, LLMInferenceResult
+from app.models.news_event_response import NewsEventExtractionResponse
 from app.prompts.base import PromptBuilder
-from app.prompts.news_event import NewsEventPromptInput
+from app.prompts.news_event import BatchNewsEventPromptInput
 
 
 class LLMNewsEventExtractor(NewsEventExtractor):
-    """Application-layer orchestrator for news event extraction.
-
-    This class coordinates PromptBuilder, NewsEventRequester, and
-    NewsEventParser. It does not create prompts, call an LLM directly, parse
-    responses, process JSON, validate DTOs, create domain values, or make
-    business and investment decisions. Retry, timeout, logging, metrics, and
-    guardrail policies also remain outside this orchestrator.
-    """
+    """Extracts batch inferences through injected prompt, LLM, and parser contracts."""
 
     def __init__(
         self,
-        requester: NewsEventRequester,
+        structured_llm: StructuredOutputLLM,
         parser: NewsEventParser,
-        prompt_builder: PromptBuilder[NewsEventPromptInput],
+        prompt_builder: PromptBuilder[BatchNewsEventPromptInput],
+        config: BatchExtractionConfig,
     ) -> None:
-        self._requester: NewsEventRequester = requester
+        self._structured_llm: StructuredOutputLLM = structured_llm
         self._parser: NewsEventParser = parser
-        self._prompt_builder: PromptBuilder[NewsEventPromptInput] = prompt_builder
+        self._prompt_builder: PromptBuilder[BatchNewsEventPromptInput] = prompt_builder
+        self._config: BatchExtractionConfig = config
 
     async def extract(
         self,
-        evaluation: ArticleEvaluationResult,
-    ) -> List[NewsEvent]:
-        prompt_input: NewsEventPromptInput = NewsEventPromptInput(
-            evaluation=evaluation
+        articles: Tuple[Article, ...],
+    ) -> Tuple[LLMInferenceResult, ...]:
+        inferences: List[LLMInferenceResult] = []
+        for batch in self._batches(articles):
+            inferences.extend(await self._extract_batch(batch))
+        return tuple(inferences)
+
+    async def _extract_batch(
+        self,
+        articles: Tuple[Article, ...],
+    ) -> Tuple[LLMInferenceResult, ...]:
+        prompt_input: BatchNewsEventPromptInput = BatchNewsEventPromptInput(
+            articles=articles
         )
         messages: List[ChatMessage] = self._prompt_builder.build(prompt_input)
-        response: ChatResponse = await self._requester.request(messages)
-        return self._parser.parse(response, evaluation)
+        response: NewsEventExtractionResponse = await self._structured_llm.generate(
+            messages=messages,
+            response_model=NewsEventExtractionResponse,
+        )
+        return self._parser.parse(response, articles)
+
+    def _batches(self, articles: Tuple[Article, ...]) -> Iterator[Tuple[Article, ...]]:
+        batch_size: int = self._config.max_articles_per_request
+        for index in range(0, len(articles), batch_size):
+            yield articles[index : index + batch_size]

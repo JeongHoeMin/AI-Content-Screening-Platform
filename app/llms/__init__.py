@@ -4,6 +4,7 @@ from app.llms.base import LLMClient
 from app.llms.mock import MockLLMClient
 from app.llms.models import ChatMessage, ChatResponse, ChatRole, GenerationConfig
 from app.llms.openai import OpenAIClient
+from app.llms.structured import PydanticStructuredOutputLLM, StructuredOutputLLM
 
 __all__ = [
     "ChatMessage",
@@ -13,4 +14,6 @@ __all__ = [
     "LLMClient",
     "MockLLMClient",
     "OpenAIClient",
+    "PydanticStructuredOutputLLM",
+    "StructuredOutputLLM",
 ]

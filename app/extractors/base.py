@@ -1,17 +1,17 @@
 from __future__ import annotations
 
-from typing import List, Protocol
+from typing import Protocol, Tuple
 
-from app.models.article import ArticleEvaluationResult
-from app.models.news_event import NewsEvent
+from app.models.article import Article
+from app.models.llm_inference import LLMInferenceResult
 
 
 class NewsEventExtractor(Protocol):
-    """Orchestrates news event extraction for one evaluated article."""
+    """Extracts immutable LLM inference snapshots for accepted article batches."""
 
     async def extract(
         self,
-        evaluation: ArticleEvaluationResult,
-    ) -> List[NewsEvent]:
-        """Return facts extracted as news events."""
+        articles: Tuple[Article, ...],
+    ) -> Tuple[LLMInferenceResult, ...]:
+        """Return one inference snapshot for each input article in order."""
         ...

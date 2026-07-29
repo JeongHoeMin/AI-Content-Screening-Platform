@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List
+from enum import Enum
+from typing import Optional
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 
 class Article(BaseModel):
@@ -17,10 +18,27 @@ class Article(BaseModel):
     url: HttpUrl
 
 
+class ArticleRejectReason(str, Enum):
+    """Reason an article is rejected before an LLM request."""
+
+    EMPTY_TITLE = "empty_title"
+    EMPTY_BODY = "empty_body"
+    BODY_TOO_SHORT = "body_too_short"
+
+
 class ArticleEvaluationResult(BaseModel):
-    """News-specific evaluation result for one article."""
+    """Immutable preflight validation result for one article."""
+
+    model_config = ConfigDict(frozen=True)
 
     article: Article
-    score: int = Field(ge=0, le=100)
-    is_relevant: bool
-    reasons: List[str]
+    accepted: bool
+    rejection_reason: Optional[ArticleRejectReason] = None
+
+    @model_validator(mode="after")
+    def _validate_rejection_contract(self) -> "ArticleEvaluationResult":
+        if self.accepted and self.rejection_reason is not None:
+            raise ValueError("Accepted articles cannot have a rejection reason")
+        if not self.accepted and self.rejection_reason is None:
+            raise ValueError("Rejected articles require a rejection reason")
+        return self

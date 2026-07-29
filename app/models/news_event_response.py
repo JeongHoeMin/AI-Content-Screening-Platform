@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import List
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.news_event import CompanyRelation
 
@@ -29,9 +29,21 @@ class NewsEventResponseItem(BaseModel):
     reasons: List[str]
 
 
-class NewsEventExtractionResponse(BaseModel):
-    """Strict LLM response contract for news event extraction."""
+class ArticleInferenceResponseItem(BaseModel):
+    """Structured LLM inference for one source article."""
 
     model_config = ConfigDict(extra="forbid")
 
+    article_id: str
+    summary: str = Field(min_length=1)
+    reasoning: str = Field(min_length=1)
+    confidence: float = Field(ge=0.0, le=1.0)
     events: List[NewsEventResponseItem]
+
+
+class NewsEventExtractionResponse(BaseModel):
+    """Strict batch LLM response contract for news event extraction."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    articles: List[ArticleInferenceResponseItem]

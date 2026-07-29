@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import json
-from typing import Any, List
+from typing import Dict, List, Set, Tuple
 
+from app.extractors.errors import InferenceResultValidationError
 from app.extractors.parser import NewsEventParser
-from app.llms.models import ChatResponse
-from app.models.article import ArticleEvaluationResult
+from app.models.article import Article
+from app.models.llm_inference import LLMInferenceResult
 from app.models.news_event import ExtractedCompany, NewsEvent
 from app.models.news_event_response import (
+    ArticleInferenceResponseItem,
     ExtractedCompanyResponseItem,
     NewsEventExtractionResponse,
     NewsEventResponseItem,
@@ -15,27 +16,69 @@ from app.models.news_event_response import (
 
 
 class DefaultNewsEventParser(NewsEventParser):
-    """Validates the LLM contract and maps it to news event values."""
+    """Validates batch inference identity and maps events without reordering."""
 
     def parse(
         self,
-        response: ChatResponse,
-        evaluation: ArticleEvaluationResult,
-    ) -> List[NewsEvent]:
-        """Map a response while preserving the source evaluation contract.
-
-        The evaluation is reserved for future source tracking, deduplication,
-        and event aggregation. It is intentionally not used for domain mapping
-        in this version.
-        """
-        payload: Any = json.loads(response.content)
-        extraction_response: NewsEventExtractionResponse = (
-            NewsEventExtractionResponse.model_validate(payload)
+        response: NewsEventExtractionResponse,
+        articles: Tuple[Article, ...],
+    ) -> Tuple[LLMInferenceResult, ...]:
+        articles_by_id: Dict[str, Article] = self._index_articles(articles)
+        responses_by_id: Dict[str, ArticleInferenceResponseItem] = (
+            self._index_responses(response.articles)
         )
-        return [
-            self._map_event(response_item)
-            for response_item in extraction_response.events
-        ]
+        self._validate_matching_ids(articles_by_id, responses_by_id)
+        return tuple(
+            self._map_inference(article, responses_by_id[article.id])
+            for article in articles
+        )
+
+    @staticmethod
+    def _index_articles(articles: Tuple[Article, ...]) -> Dict[str, Article]:
+        articles_by_id: Dict[str, Article] = {article.id: article for article in articles}
+        if len(articles_by_id) != len(articles):
+            raise InferenceResultValidationError("Input articles contain duplicate IDs")
+        return articles_by_id
+
+    @staticmethod
+    def _index_responses(
+        responses: List[ArticleInferenceResponseItem],
+    ) -> Dict[str, ArticleInferenceResponseItem]:
+        responses_by_id: Dict[str, ArticleInferenceResponseItem] = {
+            response.article_id: response for response in responses
+        }
+        if len(responses_by_id) != len(responses):
+            raise InferenceResultValidationError("LLM output contains duplicate article IDs")
+        return responses_by_id
+
+    @staticmethod
+    def _validate_matching_ids(
+        articles_by_id: Dict[str, Article],
+        responses_by_id: Dict[str, ArticleInferenceResponseItem],
+    ) -> None:
+        article_ids: Set[str] = set(articles_by_id)
+        response_ids: Set[str] = set(responses_by_id)
+        if article_ids != response_ids:
+            raise InferenceResultValidationError(
+                "LLM output article IDs do not match input article IDs"
+            )
+
+    @staticmethod
+    def _map_inference(
+        article: Article,
+        response_item: ArticleInferenceResponseItem,
+    ) -> LLMInferenceResult:
+        events: Tuple[NewsEvent, ...] = tuple(
+            DefaultNewsEventParser._map_event(event)
+            for event in response_item.events
+        )
+        return LLMInferenceResult(
+            article=article,
+            events=events,
+            summary=response_item.summary,
+            reasoning=response_item.reasoning,
+            confidence=response_item.confidence,
+        )
 
     @staticmethod
     def _map_event(response_item: NewsEventResponseItem) -> NewsEvent:
