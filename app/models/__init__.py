@@ -9,6 +9,7 @@ from app.models.collect_posts import (
 )
 from app.models.community import CommunityType
 from app.models.evaluation_response import EvaluationResponse, EvaluationResponseItem
+from app.models.evidence import CompanyEvidence, EvidenceAggregation
 from app.models.generate_script import (
     GeneratedScript,
     GenerateScriptData,
@@ -54,9 +55,11 @@ __all__ = [
     "ContentPipelineResult",
     "CommunityType",
     "CompanyImpact",
+    "CompanyEvidence",
     "CompanyRelation",
     "EvaluationResponse",
     "EvaluationResponseItem",
+    "EvidenceAggregation",
     "ExtractedCompany",
     "ExtractedCompanyResponseItem",
     "GeneratedScript",
