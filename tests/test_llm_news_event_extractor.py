@@ -14,6 +14,7 @@ from app.models import (
     BatchExtractionConfig,
     CompanyRelation,
     ExtractedCompanyResponseItem,
+    LLMExtractionResult,
     NewsEventExtractionResponse,
     NewsEventResponseItem,
 )
@@ -127,8 +128,8 @@ async def test_extractor_returns_ordered_inferences_for_one_batch() -> None:
 
     result = await extractor.extract(articles)
 
-    assert tuple(inference.article for inference in result) == articles
-    assert result[0].events[0].title == "Event article-1"
+    assert tuple(inference.article for inference in result.inferences) == articles
+    assert result.inferences[0].events[0].title == "Event article-1"
     assert builder.inputs[0].articles is articles
     assert llm.calls == 1
 
@@ -140,14 +141,35 @@ async def test_extractor_splits_batches_and_preserves_global_input_order() -> No
     second_batch: Tuple[Article, ...] = articles[20:]
     extractor, builder, llm = build_extractor(
         [build_response(first_batch), build_response(second_batch)],
-        config=BatchExtractionConfig(max_articles_per_request=20),
+        config=BatchExtractionConfig(max_articles_per_batch=20),
     )
 
     result = await extractor.extract(articles)
 
-    assert tuple(inference.article for inference in result) == articles
+    assert tuple(inference.article for inference in result.inferences) == articles
     assert [len(prompt_input.articles) for prompt_input in builder.inputs] == [20, 1]
     assert llm.calls == 2
+    assert result.llm_requests == 2
+
+
+@pytest.mark.anyio
+async def test_extractor_records_actual_request_count_for_fifty_articles() -> None:
+    articles: Tuple[Article, ...] = tuple(build_article(index) for index in range(50))
+    batches: List[Tuple[Article, ...]] = [
+        articles[:20],
+        articles[20:40],
+        articles[40:],
+    ]
+    extractor, _, llm = build_extractor(
+        [build_response(batch) for batch in batches],
+        config=BatchExtractionConfig(max_articles_per_batch=20),
+    )
+
+    result = await extractor.extract(articles)
+
+    assert len(result.inferences) == 50
+    assert result.llm_requests == 3
+    assert llm.calls == 3
 
 
 @pytest.mark.anyio

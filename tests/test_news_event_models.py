@@ -13,6 +13,7 @@ from app.models import (
     CompanyRelation,
     ExtractedCompany,
     LLMInferenceResult,
+    LLMExtractionResult,
     NewsEvent,
 )
 
@@ -29,8 +30,8 @@ def build_article() -> Article:
 
 
 class FakeNewsEventExtractor(NewsEventExtractor):
-    async def extract(self, articles: Tuple[Article, ...]) -> Tuple[LLMInferenceResult, ...]:
-        return ()
+    async def extract(self, articles: Tuple[Article, ...]) -> LLMExtractionResult:
+        return LLMExtractionResult(inferences=(), llm_requests=0)
 
 
 def test_article_reject_reason_uses_observable_values() -> None:

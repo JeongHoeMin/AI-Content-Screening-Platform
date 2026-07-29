@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import List, Mapping, Optional, Tuple
 
 import pytest
 
@@ -16,6 +16,7 @@ from app.models import (
     EvidenceAggregation,
     ExtractedCompany,
     ImpactAnalysis,
+    LLMExtractionResult,
     LLMInferenceResult,
     NewsEvent,
     RecommendationResult,
@@ -59,7 +60,7 @@ class FakeExtractor(NewsEventExtractor):
     async def extract(
         self,
         articles: Tuple[Article, ...],
-    ) -> Tuple[LLMInferenceResult, ...]:
+    ) -> LLMExtractionResult:
         self.calls.append(articles)
         if self.error is not None:
             raise self.error
@@ -88,7 +89,10 @@ class FakeExtractor(NewsEventExtractor):
                     confidence=0.9,
                 )
             )
-        return tuple(inferences)
+        return LLMExtractionResult(
+            inferences=tuple(inferences),
+            llm_requests=1 if articles else 0,
+        )
 
 
 class FakeResolver(TickerResolver):
@@ -135,6 +139,24 @@ class FakeRecommendationEngine(RecommendationEngine):
     def recommend(self, scoring: ScoringResult) -> RecommendationResult:
         self.calls.append(scoring)
         return self.result
+
+
+class CapturingGraph:
+    def __init__(
+        self,
+        recommendation: RecommendationResult,
+        statistics: object,
+    ) -> None:
+        self.recommendation: RecommendationResult = recommendation
+        self.statistics: object = statistics
+        self.states: List[Mapping[str, object]] = []
+
+    async def ainvoke(self, state: Mapping[str, object]) -> Mapping[str, object]:
+        self.states.append(state)
+        return {
+            "recommendation": self.recommendation,
+            "statistics": self.statistics,
+        }
 
 
 def build_article(index: int) -> Article:
@@ -214,6 +236,7 @@ async def test_workflow_runs_in_order_and_preserves_event_identity() -> None:
     assert result.statistics.accepted_articles == 2
     assert result.statistics.rejected_articles == 0
     assert result.statistics.extracted_events == 2
+    assert result.statistics.llm_requests == 1
 
 
 @pytest.mark.anyio
@@ -233,6 +256,7 @@ async def test_workflow_skips_llm_for_empty_or_all_rejected_input() -> None:
     assert result.recommendation.companies == ()
     assert result.statistics.rejected_articles == 1
     assert result.statistics.extracted_events == 0
+    assert result.statistics.llm_requests == 0
 
 
 @pytest.mark.anyio
@@ -245,6 +269,28 @@ async def test_workflow_handles_empty_input_as_a_normal_empty_result() -> None:
     assert aggregator.calls == [[]]
     assert result.recommendation.companies == ()
     assert result.statistics.total_articles == 0
+    assert result.statistics.llm_requests == 0
+
+
+@pytest.mark.anyio
+async def test_workflow_accepts_none_or_an_immutable_context() -> None:
+    workflow, _, _, _, _, _, _, recommender = build_workflow(())
+    context: WorkflowContext = WorkflowContext()
+    statistics = await workflow.run((), context=None)
+    graph: CapturingGraph = CapturingGraph(
+        recommendation=recommender.result,
+        statistics=statistics.statistics,
+    )
+    workflow._graph = graph  # type: ignore[assignment]
+
+    none_result = await workflow.run((), context=None)
+    supplied_result = await workflow.run((), context=context)
+
+    assert none_result.recommendation.companies == ()
+    assert supplied_result.recommendation.companies == ()
+    assert graph.states[0]["context"] is not None
+    assert graph.states[1]["context"] is context
+    assert context == WorkflowContext()
 
 
 @pytest.mark.anyio

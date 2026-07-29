@@ -13,8 +13,13 @@ OutputT = TypeVar("OutputT", bound=BaseModel)
 class StructuredOutputLLM(Protocol):
     """Generates validated typed structured output from prepared messages.
 
-    Implementations neither build prompts, split batches, retry requests, map
-    output to domain events, nor validate event-to-article relationships.
+    Implementations call an LLM, validate raw provider content with the supplied
+    response_model, and return only the validated typed object. They never
+    return raw JSON, raw chat completions, or provider SDK responses.
+
+    Implementations neither build prompts, manage prompt templates, split
+    batches, retry requests, map output to NewsEvent values, validate
+    event-to-article relationships, nor modify workflow state.
     """
 
     async def generate(
@@ -22,7 +27,7 @@ class StructuredOutputLLM(Protocol):
         messages: List[ChatMessage],
         response_model: Type[OutputT],
     ) -> OutputT:
-        """Return one response validated as the requested Pydantic model."""
+        """Return only one response validated as the requested Pydantic model."""
         ...
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Protocol, Tuple
 
 from app.models.article import Article
-from app.models.llm_inference import LLMInferenceResult
+from app.models.llm_inference import LLMExtractionResult
 
 
 class NewsEventExtractor(Protocol):
@@ -12,6 +12,6 @@ class NewsEventExtractor(Protocol):
     async def extract(
         self,
         articles: Tuple[Article, ...],
-    ) -> Tuple[LLMInferenceResult, ...]:
-        """Return one inference snapshot for each input article in order."""
+    ) -> LLMExtractionResult:
+        """Return ordered inference snapshots and actual LLM request count."""
         ...

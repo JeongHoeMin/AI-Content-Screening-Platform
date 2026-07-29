@@ -9,11 +9,11 @@ from app.models.news_event import NewsEvent
 
 
 class BatchExtractionConfig(BaseModel):
-    """Immutable policy controlling the maximum articles in one LLM request."""
+    """Immutable policy controlling the maximum articles in one LLM batch."""
 
     model_config = ConfigDict(frozen=True)
 
-    max_articles_per_request: int = Field(default=20, gt=0)
+    max_articles_per_batch: int = Field(default=20, gt=0)
 
 
 class LLMInferenceResult(BaseModel):
@@ -32,3 +32,12 @@ class LLMInferenceResult(BaseModel):
     summary: str = Field(min_length=1)
     reasoning: str = Field(min_length=1)
     confidence: float = Field(ge=0.0, le=1.0)
+
+
+class LLMExtractionResult(BaseModel):
+    """Immutable result of one extractor execution and its LLM observations."""
+
+    model_config = ConfigDict(frozen=True)
+
+    inferences: Tuple[LLMInferenceResult, ...]
+    llm_requests: int = Field(ge=0)

@@ -20,6 +20,7 @@ class ScreeningState(TypedDict, total=False):
     articles: Tuple[Article, ...]
     evaluations: Tuple[ArticleEvaluationResult, ...]
     inferences: Tuple[LLMInferenceResult, ...]
+    llm_requests: int
     events: Tuple[NewsEvent, ...]
     resolved_events: Tuple[ResolvedNewsEvent, ...]
     analyses: Tuple[ImpactAnalysis, ...]

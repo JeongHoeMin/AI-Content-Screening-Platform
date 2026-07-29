@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 import pytest
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.llms import (
     ChatMessage,
@@ -77,3 +77,14 @@ async def test_structured_adapter_propagates_client_error_without_wrapping() -> 
         await llm.generate([], OutputModel)
 
     assert error_info.value is expected_error
+
+
+@pytest.mark.anyio
+async def test_structured_adapter_rejects_invalid_typed_output() -> None:
+    client: FakeLLMClient = FakeLLMClient(ChatResponse(content='{"missing":"value"}'))
+    llm: PydanticStructuredOutputLLM = PydanticStructuredOutputLLM(client)
+
+    with pytest.raises(ValidationError) as error_info:
+        await llm.generate([], OutputModel)
+
+    assert error_info.value.errors()[0]["loc"] == ("value",)

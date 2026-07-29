@@ -12,7 +12,7 @@ from app.extractors.base import NewsEventExtractor
 from app.models.article import Article, ArticleEvaluationResult
 from app.models.evidence import EvidenceAggregation
 from app.models.impact_analysis import ImpactAnalysis
-from app.models.llm_inference import LLMInferenceResult
+from app.models.llm_inference import LLMExtractionResult, LLMInferenceResult
 from app.models.news_event import NewsEvent
 from app.models.recommendation import RecommendationResult
 from app.models.resolved_news_event import ResolvedNewsEvent
@@ -57,13 +57,18 @@ class _ScreeningNodes:
             for evaluation in state["evaluations"]
             if evaluation.accepted
         )
-        inferences: Tuple[LLMInferenceResult, ...] = await self._extractor.extract(
+        extraction: LLMExtractionResult = await self._extractor.extract(
             accepted_articles
         )
+        inferences: Tuple[LLMInferenceResult, ...] = extraction.inferences
         events: Tuple[NewsEvent, ...] = tuple(
             event for inference in inferences for event in inference.events
         )
-        return {"inferences": inferences, "events": events}
+        return {
+            "inferences": inferences,
+            "events": events,
+            "llm_requests": extraction.llm_requests,
+        }
 
     def resolve(self, state: ScreeningState) -> Mapping[str, object]:
         resolved_events: Tuple[ResolvedNewsEvent, ...] = tuple(
@@ -101,6 +106,7 @@ class _ScreeningNodes:
             accepted_articles=accepted_articles,
             rejected_articles=len(evaluations) - accepted_articles,
             extracted_events=len(state.get("events", ())),
+            llm_requests=state.get("llm_requests", 0),
         )
         return {"recommendation": recommendation, "statistics": statistics}
 

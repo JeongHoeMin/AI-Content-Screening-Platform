@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Mapping, Tuple, cast
+from typing import Mapping, Optional, Tuple, cast
 
 from langgraph.graph.state import CompiledStateGraph
 
@@ -48,9 +48,11 @@ class ScreeningWorkflow:
     async def run(
         self,
         articles: Tuple[Article, ...],
-        context: WorkflowContext = WorkflowContext(),
+        context: Optional[WorkflowContext] = None,
     ) -> ScreeningResult:
         """Run one screening execution without exposing graph internals."""
+        if context is None:
+            context = WorkflowContext()
         initial_state: ScreeningState = {"articles": articles, "context": context}
         final_state: Mapping[str, object] = await self._graph.ainvoke(initial_state)
         recommendation: RecommendationResult = cast(

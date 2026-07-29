@@ -57,7 +57,7 @@ RuleArticleEvaluator
 ## Execution Results
 
 - WorkflowStatistics는 Domain Model이 아닌 observability용 execution metadata다. total,
-  accepted, rejected articles와 extracted events를 기록한다.
+  accepted, rejected articles, extracted events, 실제 structured LLM 요청 수를 기록한다.
 - ScreeningResult는 RecommendationResult와 WorkflowStatistics를 분리해 반환한다.
   RecommendationEngine은 statistics를 알지 못하고 RecommendationResult만 생성한다.
 - WorkflowContext는 현재 비어 있는 immutable 확장 지점이며, 향후 model, run ID, trace,
@@ -68,3 +68,13 @@ RuleArticleEvaluator
 - token budget, concurrent batch execution, retry, reflection, human approval
 - prompt optimization and evaluation, confidence review, explanation, ranking, portfolio
 - persistence, API, scheduler, UI, multi-agent and multi-source screening
+
+## Refinement Record (2026-07-29)
+
+- 변경 이유: Workflow Public API의 mutable-default 위험을 제거하고, Prompt, typed LLM,
+  Extractor의 책임과 LLM 요청 관측 계약을 명확히 한다.
+- 결정: `run(..., context=None)`에서만 WorkflowContext를 생성한다. Batch policy는
+  `max_articles_per_batch`으로 명명하고, Extractor가 실제 `generate()` 호출 수를
+  LLMExtractionResult로 반환해 WorkflowStatistics가 보관한다.
+- 범위 제한: Graph 흐름과 Domain recommendation 결과는 변경하지 않는다. batch 실행
+  방식은 여전히 Extractor implementation detail이며 현재 순차 실행이다.
