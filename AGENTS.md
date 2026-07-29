@@ -2,6 +2,27 @@
 
 이 프로젝트는 Codex만 사용하여 개발한다. 모든 코드 변경은 아래 규칙을 우선 적용한다.
 
+## Project Constitution
+
+- 모든 Codex 작업은 repository root의 `PROJECT_GUIDE.md`를 프로젝트 헌법으로 먼저 참고한다.
+- 구현·리뷰·문서화·계획은 `PROJECT_GUIDE.md`의 목표, LLM/Parser/Policy 책임 분리, 부분 성공, 보안 로깅 원칙과 충돌해서는 안 된다.
+- `PROJECT_GUIDE.md`와 세부 구현 규칙이 충돌하면 사용자에게 확인한다.
+
+## Documentation Routing
+
+모든 작업은 `PROJECT_GUIDE.md`를 먼저 읽고, 작업 성격에 따라 아래 문서를 함께 참고한다.
+
+- 아키텍처 경계, 의존성 방향, 조립 변경: `ARCHITECTURE.md`
+- Workflow 노드, 입력·출력, 단계 간 계약 변경: `WORKFLOW.md`
+- Domain 모델, Parser, Policy, identity 계약 변경: `DOMAIN_MODEL.md`
+- OpenAI, Prompt, structured output, 안전한 LLM 사용 변경: `LLM_GUIDELINES.md`
+- 일반 구현 규칙과 코드 배치: `DEVELOPMENT_GUIDE.md`
+- 테스트 추가·변경과 검증 명령: `TESTING_GUIDE.md`
+- 다음 PR의 범위와 우선순위 확인: `ROADMAP.md`
+- 기존 설계 선택의 배경, 제약, 되돌릴 수 있는 결정 확인: `DECISION_LOG.md`
+
+새로운 장기 설계 결정, 책임 경계 변경, 또는 roadmap 우선순위 변경은 구현과 같은 변경 단위에서 관련 문서를 갱신한다. 세부 문서와 `PROJECT_GUIDE.md`가 충돌하면 구현을 진행하지 않고 사용자에게 확인한다.
+
 ## Core Rules
 
 - Python 코드는 모든 함수, 메서드, 변수, 반환값에 명확한 type hint를 작성한다.
