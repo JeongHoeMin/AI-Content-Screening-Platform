@@ -42,13 +42,13 @@ class LLMNewsEventExtractor(NewsEventExtractor):
         articles: Tuple[Article, ...],
     ) -> LLMExtractionResult:
         inferences: List[LLMInferenceResult] = []
-        llm_requests: int = 0
+        successful_batches: int = 0
         for batch in self._batches(articles):
             inferences.extend(await self._extract_batch(batch))
-            llm_requests += 1
+            successful_batches += 1
         return LLMExtractionResult(
             inferences=tuple(inferences),
-            llm_requests=llm_requests,
+            successful_batches=successful_batches,
         )
 
     async def _extract_batch(

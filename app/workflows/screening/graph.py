@@ -67,7 +67,7 @@ class _ScreeningNodes:
         return {
             "inferences": inferences,
             "events": events,
-            "llm_requests": extraction.llm_requests,
+            "successful_batches": extraction.successful_batches,
         }
 
     def resolve(self, state: ScreeningState) -> Mapping[str, object]:
@@ -106,7 +106,7 @@ class _ScreeningNodes:
             accepted_articles=accepted_articles,
             rejected_articles=len(evaluations) - accepted_articles,
             extracted_events=len(state.get("events", ())),
-            llm_requests=state.get("llm_requests", 0),
+            successful_batches=state.get("successful_batches", 0),
         )
         return {"recommendation": recommendation, "statistics": statistics}
 

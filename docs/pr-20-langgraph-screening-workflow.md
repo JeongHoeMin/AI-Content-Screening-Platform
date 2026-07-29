@@ -35,7 +35,7 @@ RuleArticleEvaluator
   output을 생성한다. Prompt 작성, batch 분할, retry, event validation, response mapping은
   담당하지 않는다.
 - LLMNewsEventExtractor는 batch 분할·병합과 PromptBuilder/StructuredOutputLLM/Parser
-  orchestration을 담당한다. max_articles_per_request=20은 batch 크기 정책이며 실행 방식
+  orchestration을 담당한다. max_articles_per_batch=20은 batch 크기 정책이며 실행 방식
   (현재 순차, 향후 병렬)은 implementation detail이다.
 - Parser는 ID, duplicate, cardinality를 검증하고 입력 Article 순서로 inference를
   재정렬한다.
@@ -57,7 +57,7 @@ RuleArticleEvaluator
 ## Execution Results
 
 - WorkflowStatistics는 Domain Model이 아닌 observability용 execution metadata다. total,
-  accepted, rejected articles, extracted events, 실제 structured LLM 요청 수를 기록한다.
+  accepted, rejected articles, extracted events, 성공적으로 처리된 LLM batch 수를 기록한다.
 - ScreeningResult는 RecommendationResult와 WorkflowStatistics를 분리해 반환한다.
   RecommendationEngine은 statistics를 알지 못하고 RecommendationResult만 생성한다.
 - WorkflowContext는 현재 비어 있는 immutable 확장 지점이며, 향후 model, run ID, trace,
@@ -74,7 +74,16 @@ RuleArticleEvaluator
 - 변경 이유: Workflow Public API의 mutable-default 위험을 제거하고, Prompt, typed LLM,
   Extractor의 책임과 LLM 요청 관측 계약을 명확히 한다.
 - 결정: `run(..., context=None)`에서만 WorkflowContext를 생성한다. Batch policy는
-  `max_articles_per_batch`으로 명명하고, Extractor가 실제 `generate()` 호출 수를
+  `max_articles_per_batch`으로 명명하고, Extractor가 성공적으로 처리된 batch 수를
   LLMExtractionResult로 반환해 WorkflowStatistics가 보관한다.
 - 범위 제한: Graph 흐름과 Domain recommendation 결과는 변경하지 않는다. batch 실행
   방식은 여전히 Extractor implementation detail이며 현재 순차 실행이다.
+
+## Statistics Naming Refinement (2026-07-29)
+
+- 변경 이유: batch count는 Provider 호출 시도 횟수가 아니라 Provider 호출, parsing,
+  validation까지 성공한 batch 수를 나타낸다.
+- 결정: `llm_requests`를 `successful_batches`로 변경한다. partial success와 retry가
+  없는 현재 계약에서는 failed batch 관측값을 최종 결과에 포함하지 않는다.
+- 후속 범위: retry policy, partial success policy, attempted request count, failed batch
+  count, recoverable extraction error model은 별도 execution metadata 계약으로 추가한다.

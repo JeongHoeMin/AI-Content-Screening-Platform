@@ -31,7 +31,7 @@ def build_article() -> Article:
 
 class FakeNewsEventExtractor(NewsEventExtractor):
     async def extract(self, articles: Tuple[Article, ...]) -> LLMExtractionResult:
-        return LLMExtractionResult(inferences=(), llm_requests=0)
+        return LLMExtractionResult(inferences=(), successful_batches=0)
 
 
 def test_article_reject_reason_uses_observable_values() -> None:

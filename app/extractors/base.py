@@ -13,5 +13,5 @@ class NewsEventExtractor(Protocol):
         self,
         articles: Tuple[Article, ...],
     ) -> LLMExtractionResult:
-        """Return ordered inference snapshots and actual LLM request count."""
+        """Return ordered inference snapshots and successful batch count."""
         ...

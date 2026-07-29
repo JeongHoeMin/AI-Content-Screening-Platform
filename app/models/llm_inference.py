@@ -35,9 +35,9 @@ class LLMInferenceResult(BaseModel):
 
 
 class LLMExtractionResult(BaseModel):
-    """Immutable result of one extractor execution and its LLM observations."""
+    """Immutable result of one extractor execution and successful batch count."""
 
     model_config = ConfigDict(frozen=True)
 
     inferences: Tuple[LLMInferenceResult, ...]
-    llm_requests: int = Field(ge=0)
+    successful_batches: int = Field(ge=0)

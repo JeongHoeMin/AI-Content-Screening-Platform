@@ -20,7 +20,7 @@ class WorkflowStatistics(BaseModel):
     accepted_articles: int = Field(ge=0)
     rejected_articles: int = Field(ge=0)
     extracted_events: int = Field(ge=0)
-    llm_requests: int = Field(ge=0)
+    successful_batches: int = Field(ge=0)
 
 
 class ScreeningResult(BaseModel):

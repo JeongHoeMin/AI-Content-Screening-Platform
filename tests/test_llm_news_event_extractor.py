@@ -149,7 +149,7 @@ async def test_extractor_splits_batches_and_preserves_global_input_order() -> No
     assert tuple(inference.article for inference in result.inferences) == articles
     assert [len(prompt_input.articles) for prompt_input in builder.inputs] == [20, 1]
     assert llm.calls == 2
-    assert result.llm_requests == 2
+    assert result.successful_batches == 2
 
 
 @pytest.mark.anyio
@@ -168,7 +168,7 @@ async def test_extractor_records_actual_request_count_for_fifty_articles() -> No
     result = await extractor.extract(articles)
 
     assert len(result.inferences) == 50
-    assert result.llm_requests == 3
+    assert result.successful_batches == 3
     assert llm.calls == 3
 
 
