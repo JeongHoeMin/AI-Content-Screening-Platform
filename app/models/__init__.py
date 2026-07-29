@@ -38,9 +38,12 @@ from app.models.news_event_response import (
 from app.models.post import Post
 from app.models.resolved_news_event import (
     ResolvedCompany,
+    ResolvedDecisionType,
     ResolvedNewsEvent,
     ResolvedTicker,
+    TickerResolvedEvent,
 )
+from app.models.resolve import ResolveDecision
 from app.models.raw_post import RawDcInsidePost, RawPost, RawRedditPost
 from app.models.recommendation import (
     CompanyRecommendation,
@@ -113,8 +116,11 @@ __all__ = [
     "RawPost",
     "RawRedditPost",
     "ResolvedCompany",
+    "ResolvedDecisionType",
     "ResolvedNewsEvent",
     "ResolvedTicker",
+    "TickerResolvedEvent",
+    "ResolveDecision",
     "Recommendation",
     "RecommendationResult",
     "ScreeningResult",

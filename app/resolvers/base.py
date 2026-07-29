@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import List, Protocol
 
 from app.models.news_event import NewsEvent
-from app.models.resolved_news_event import ResolvedNewsEvent
+from app.models.resolved_news_event import TickerResolvedEvent
 
 
 class TickerResolver(Protocol):
@@ -14,6 +14,6 @@ class TickerResolver(Protocol):
     models and performs no investment analysis.
     """
 
-    def resolve(self, events: List[NewsEvent]) -> List[ResolvedNewsEvent]:
+    def resolve(self, events: List[NewsEvent]) -> List[TickerResolvedEvent]:
         """Return immutable snapshots without mutating source events."""
         ...

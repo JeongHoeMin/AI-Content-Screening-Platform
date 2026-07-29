@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import List, Tuple
 
 from app.models.news_event import ExtractedCompany, NewsEvent
-from app.models.resolved_news_event import ResolvedCompany, ResolvedNewsEvent
+from app.models.resolved_news_event import ResolvedCompany, TickerResolvedEvent
 from app.resolvers.base import TickerResolver
 from app.resolvers.lookup import TickerLookup
 
@@ -18,9 +18,9 @@ class DefaultTickerResolver(TickerResolver):
     def __init__(self, lookup: TickerLookup) -> None:
         self._lookup: TickerLookup = lookup
 
-    def resolve(self, events: List[NewsEvent]) -> List[ResolvedNewsEvent]:
+    def resolve(self, events: List[NewsEvent]) -> List[TickerResolvedEvent]:
         return [
-            ResolvedNewsEvent(
+            TickerResolvedEvent(
                 event=event,
                 companies=self._resolve_companies(event.companies),
             )

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Mapping, Tuple
+from typing import Dict, Mapping, Tuple, cast
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -15,11 +15,12 @@ from app.models.impact_analysis import ImpactAnalysis
 from app.models.llm_inference import LLMExtractionResult, LLMInferenceResult
 from app.models.news_event import NewsEvent
 from app.models.recommendation import RecommendationResult
-from app.models.resolved_news_event import ResolvedNewsEvent
+from app.models.resolved_news_event import ResolvedNewsEvent, TickerResolvedEvent
 from app.models.scoring import ScoringResult
 from app.models.screening import ScreeningDecision, ScreeningDecisionType
 from app.recommenders.recommendation_engine import RecommendationEngine
 from app.resolvers.base import TickerResolver
+from app.resolvers.policy import ResolvePolicy
 from app.scorers.base import ScoringEngine
 from app.screeners.base import EventScreener
 from app.cross_validators.base import CrossValidator
@@ -38,6 +39,7 @@ class _ScreeningNodes:
         screener: EventScreener,
         cross_validator: CrossValidator,
         resolver: TickerResolver,
+        resolve_policy: ResolvePolicy,
         impact_analyzer: ImpactAnalyzer,
         evidence_aggregator: EvidenceAggregator,
         scoring_engine: ScoringEngine,
@@ -48,6 +50,7 @@ class _ScreeningNodes:
         self._screener: EventScreener = screener
         self._cross_validator: CrossValidator = cross_validator
         self._resolver: TickerResolver = resolver
+        self._resolve_policy: ResolvePolicy = resolve_policy
         self._impact_analyzer: ImpactAnalyzer = impact_analyzer
         self._evidence_aggregator: EvidenceAggregator = evidence_aggregator
         self._scoring_engine: ScoringEngine = scoring_engine
@@ -117,10 +120,49 @@ class _ScreeningNodes:
         return {"cross_validation_results": results}
 
     def resolve(self, state: ScreeningState) -> Mapping[str, object]:
+        decisions: Tuple[ScreeningDecision, ...] = state.get("decisions", ())
+        validations_by_event_id: Dict[int, CrossValidationResult] = cast(
+            Dict[int, CrossValidationResult], self._index_by_event_identity(
+            state.get("cross_validation_results", ()), "cross-validation result"
+            )
+        )
+        decision_ids: set[int] = {id(decision.event) for decision in decisions}
+        if not set(validations_by_event_id).issubset(decision_ids):
+            raise ValueError("Cross-validation result cannot be matched to a screening decision event identity")
+        ticker_results: Tuple[TickerResolvedEvent, ...] = tuple(
+            self._resolver.resolve([decision.event for decision in decisions])
+        )
+        tickers_by_event_id: Dict[int, TickerResolvedEvent] = cast(
+            Dict[int, TickerResolvedEvent],
+            self._index_by_event_identity(ticker_results, "ticker result"),
+        )
+        if set(tickers_by_event_id) != decision_ids:
+            raise ValueError("Ticker results must contain exactly one result for every screening decision event identity")
         resolved_events: Tuple[ResolvedNewsEvent, ...] = tuple(
-            self._resolver.resolve(list(state["events"]))
+            self._resolve_event(
+                decision,
+                validations_by_event_id.get(id(decision.event)),
+                tickers_by_event_id[id(decision.event)],
+            )
+            for decision in decisions
         )
         return {"resolved_events": resolved_events}
+
+    def _resolve_event(self, decision: ScreeningDecision, validation: CrossValidationResult | None, ticker_result: TickerResolvedEvent) -> ResolvedNewsEvent:
+        if ticker_result.event is not decision.event:
+            raise ValueError("Ticker result event identity does not match the screening decision event")
+        policy_decision = self._resolve_policy.resolve(decision, validation)
+        return ResolvedNewsEvent(event=decision.event, companies=ticker_result.companies, screening_decision=decision.decision, cross_validation_status=validation.status if validation is not None else None, decision=policy_decision.decision, reasons=policy_decision.reasons)
+
+    @staticmethod
+    def _index_by_event_identity(items: Tuple[object, ...], item_name: str) -> Dict[int, object]:
+        indexed: Dict[int, object] = {}
+        for item in items:
+            event_id: int = id(item.event)
+            if event_id in indexed:
+                raise ValueError(f"Multiple {item_name}s exist for the same event identity")
+            indexed[event_id] = item
+        return indexed
 
     def analyze(self, state: ScreeningState) -> Mapping[str, object]:
         analyses: Tuple[ImpactAnalysis, ...] = tuple(
@@ -169,6 +211,9 @@ class _ScreeningNodes:
             partially_verified_events=sum(result.status is CrossValidationStatus.PARTIALLY_VERIFIED for result in state.get("cross_validation_results", ())),
             conflicted_events=sum(result.status is CrossValidationStatus.CONFLICTED for result in state.get("cross_validation_results", ())),
             insufficient_evidence_events=sum(result.status is CrossValidationStatus.INSUFFICIENT_EVIDENCE for result in state.get("cross_validation_results", ())),
+            resolved_accept_count=sum(event.decision.value == "accept" for event in state.get("resolved_events", ())),
+            resolved_review_count=sum(event.decision.value == "review" for event in state.get("resolved_events", ())),
+            resolved_reject_count=sum(event.decision.value == "reject" for event in state.get("resolved_events", ())),
         )
         return {"recommendation": recommendation, "statistics": statistics}
 
@@ -185,6 +230,7 @@ def _build_screening_graph(
     screener: EventScreener,
     cross_validator: CrossValidator,
     resolver: TickerResolver,
+    resolve_policy: ResolvePolicy,
     impact_analyzer: ImpactAnalyzer,
     evidence_aggregator: EvidenceAggregator,
     scoring_engine: ScoringEngine,
@@ -197,6 +243,7 @@ def _build_screening_graph(
         screener=screener,
         cross_validator=cross_validator,
         resolver=resolver,
+        resolve_policy=resolve_policy,
         impact_analyzer=impact_analyzer,
         evidence_aggregator=evidence_aggregator,
         scoring_engine=scoring_engine,

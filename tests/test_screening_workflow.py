@@ -22,12 +22,13 @@ from app.models import (
     NewsEvent,
     RecommendationResult,
     ResolvedNewsEvent,
+    TickerResolvedEvent,
     ScreeningDecision,
     ScreeningDecisionType,
     ScoringResult,
 )
 from app.recommenders import RecommendationEngine
-from app.resolvers import TickerResolver
+from app.resolvers import DefaultResolvePolicy, TickerResolver
 from app.scorers import ScoringEngine
 from app.screeners import EventScreener
 from app.cross_validators import CrossValidator
@@ -109,10 +110,24 @@ class FakeExtractor(NewsEventExtractor):
 class FakeResolver(TickerResolver):
     def __init__(self) -> None:
         self.calls: List[List[NewsEvent]] = []
+        self.results: Optional[List[TickerResolvedEvent]] = None
+        self.mode: Optional[str] = None
 
-    def resolve(self, events: List[NewsEvent]) -> List[ResolvedNewsEvent]:
+    def resolve(self, events: List[NewsEvent]) -> List[TickerResolvedEvent]:
         self.calls.append(events)
-        return [ResolvedNewsEvent(event=event, companies=()) for event in events]
+        if self.mode == "missing":
+            return [TickerResolvedEvent(event=events[0], companies=())]
+        if self.mode == "duplicate":
+            return [
+                TickerResolvedEvent(event=events[0], companies=()),
+                TickerResolvedEvent(event=events[0], companies=()),
+            ]
+        if self.mode == "unknown":
+            unknown: NewsEvent = NewsEvent.model_validate(events[0].model_dump())
+            return [TickerResolvedEvent(event=unknown, companies=())]
+        if self.results is not None:
+            return self.results
+        return [TickerResolvedEvent(event=event, companies=()) for event in events]
 
 
 class FakeEventScreener(EventScreener):
@@ -159,6 +174,7 @@ class FakeAnalyzer(ImpactAnalyzer):
 class FakeCrossValidator(CrossValidator):
     def __init__(self) -> None:
         self.calls: List[Tuple[CrossValidationCandidate, ...]] = []
+        self.statuses: Tuple[CrossValidationStatus, ...] = ()
 
     async def validate(
         self, candidates: Tuple[CrossValidationCandidate, ...]
@@ -167,13 +183,15 @@ class FakeCrossValidator(CrossValidator):
         return tuple(
             CrossValidationResult(
                 event=candidate.decision.event,
-                status=CrossValidationStatus.INSUFFICIENT_EVIDENCE,
+                status=self.statuses[index]
+                if index < len(self.statuses)
+                else CrossValidationStatus.INSUFFICIENT_EVIDENCE,
                 confidence=0,
                 independent_source_count=0,
                 evidence=(),
                 reasons=("No related articles are available.",),
             )
-            for candidate in candidates
+            for index, candidate in enumerate(candidates)
         )
 
 
@@ -247,6 +265,7 @@ def build_workflow(
         screener=screener,
         cross_validator=cross_validator,
         resolver=resolver,
+        resolve_policy=DefaultResolvePolicy(),
         impact_analyzer=analyzer,
         evidence_aggregator=aggregator,
         scoring_engine=scorer,
@@ -413,6 +432,35 @@ async def test_workflow_cross_validates_only_review_events_with_article_context(
     assert result.statistics.insufficient_evidence_events == 1
     assert result.statistics.verified_events == 0
     assert resolver.calls[0] == extractor.events
+
+
+@pytest.mark.anyio
+async def test_workflow_applies_verified_cross_validation_to_final_resolve_decision() -> None:
+    articles: Tuple[Article, ...] = (build_article(1), build_article(2))
+    workflow, _, extractor, _, cross_validator, _, analyzer, _, _, _ = build_workflow(
+        ("article-1", "article-2"), decisions=(ScreeningDecisionType.REVIEW, ScreeningDecisionType.ACCEPT)
+    )
+    cross_validator.statuses = (CrossValidationStatus.VERIFIED,)
+
+    result: ScreeningResult = await workflow.run(articles)
+
+    assert result.resolved_events[0].event is extractor.events[0]
+    assert result.resolved_events[0].decision.value == "accept"
+    assert result.resolved_events[1].decision.value == "accept"
+    assert result.statistics.resolved_accept_count == 2
+    assert analyzer.calls[0] == list(result.resolved_events)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("mode", ("missing", "duplicate", "unknown"))
+async def test_workflow_rejects_invalid_ticker_result_identity_contract(mode: str) -> None:
+    articles: Tuple[Article, ...] = (build_article(1), build_article(2))
+    workflow, _, extractor, _, _, resolver, _, _, _, _ = build_workflow(
+        ("article-1", "article-2")
+    )
+    resolver.mode = mode
+    with pytest.raises(ValueError):
+        await workflow.run(articles)
 
 
 @pytest.mark.anyio

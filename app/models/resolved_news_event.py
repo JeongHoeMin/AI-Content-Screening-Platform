@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
 from typing import Optional, Tuple
+
+from app.models.cross_validation import CrossValidationStatus
+from app.models.screening import ScreeningDecisionType
 
 from app.models.news_event import CompanyRelation, NewsEvent
 
@@ -30,7 +34,7 @@ class ResolvedCompany:
 
 
 @dataclass(frozen=True)
-class ResolvedNewsEvent:
+class TickerResolvedEvent:
     """Immutable snapshot produced by the ticker resolution stage.
 
     The original event remains the source of truth for all event metadata.
@@ -40,3 +44,21 @@ class ResolvedNewsEvent:
 
     event: NewsEvent
     companies: Tuple[ResolvedCompany, ...]
+
+
+class ResolvedDecisionType(str, Enum):
+    ACCEPT = "accept"
+    REVIEW = "review"
+    REJECT = "reject"
+
+
+@dataclass(frozen=True)
+class ResolvedNewsEvent:
+    """Final immutable event containing resolution decision and ticker data."""
+
+    event: NewsEvent
+    companies: Tuple[ResolvedCompany, ...]
+    screening_decision: ScreeningDecisionType = ScreeningDecisionType.REVIEW
+    cross_validation_status: Optional[CrossValidationStatus] = None
+    decision: ResolvedDecisionType = ResolvedDecisionType.REVIEW
+    reasons: Tuple[str, ...] = ()

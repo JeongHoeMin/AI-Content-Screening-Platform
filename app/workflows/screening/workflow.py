@@ -13,6 +13,7 @@ from app.models.recommendation import RecommendationResult
 from app.models.screening import ScreeningDecision
 from app.recommenders.recommendation_engine import RecommendationEngine
 from app.resolvers.base import TickerResolver
+from app.resolvers.policy import ResolvePolicy
 from app.scorers.base import ScoringEngine
 from app.screeners.base import EventScreener
 from app.cross_validators.base import CrossValidator
@@ -35,6 +36,7 @@ class ScreeningWorkflow:
         screener: EventScreener,
         cross_validator: CrossValidator,
         resolver: TickerResolver,
+        resolve_policy: ResolvePolicy,
         impact_analyzer: ImpactAnalyzer,
         evidence_aggregator: EvidenceAggregator,
         scoring_engine: ScoringEngine,
@@ -46,6 +48,7 @@ class ScreeningWorkflow:
             screener=screener,
             cross_validator=cross_validator,
             resolver=resolver,
+            resolve_policy=resolve_policy,
             impact_analyzer=impact_analyzer,
             evidence_aggregator=evidence_aggregator,
             scoring_engine=scoring_engine,
@@ -77,9 +80,11 @@ class ScreeningWorkflow:
         cross_validation_results = cast(
             tuple, final_state.get("cross_validation_results", ())
         )
+        resolved_events = cast(tuple, final_state.get("resolved_events", ()))
         return ScreeningResult(
             recommendation=recommendation,
             decisions=decisions,
             cross_validation_results=cross_validation_results,
+            resolved_events=resolved_events,
             statistics=statistics,
         )
