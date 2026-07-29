@@ -9,7 +9,11 @@ from app.resolvers.lookup import TickerLookup
 
 
 class DefaultTickerResolver(TickerResolver):
-    """Builds immutable resolution snapshots using only a ticker lookup."""
+    """Assembles immutable resolution snapshots using only a ticker lookup.
+
+    This resolver does not normalize names, implement lookup policies, or
+    perform investment analysis.
+    """
 
     def __init__(self, lookup: TickerLookup) -> None:
         self._lookup: TickerLookup = lookup

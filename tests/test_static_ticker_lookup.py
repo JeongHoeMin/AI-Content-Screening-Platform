@@ -67,10 +67,14 @@ def test_lookup_is_immutable_after_construction() -> None:
 
 
 def test_normalized_mapping_key_collision_fails_during_construction() -> None:
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError) as error_info:
         StaticTickerLookup(
             {
                 "Samsung Electronics": build_ticker(),
                 "  samsung   electronics  ": build_ticker("005931"),
             }
         )
+
+    assert "samsung electronics" in str(error_info.value)
+    assert "Samsung Electronics" in str(error_info.value)
+    assert "  samsung   electronics  " in str(error_info.value)

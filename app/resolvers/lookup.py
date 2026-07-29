@@ -11,6 +11,8 @@ class TickerLookup(Protocol):
     Implementations do not mutate the supplied company name, produce
     deterministic results for identical input, and propagate exceptions
     without wrapping. Name normalization is an internal implementation detail.
+    Future implementations may resolve additional market identifiers while
+    preserving this contract.
     """
 
     def resolve(self, company_name: str) -> Optional[ResolvedTicker]:

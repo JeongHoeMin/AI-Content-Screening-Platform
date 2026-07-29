@@ -53,3 +53,14 @@
 ## Commit Message
 
 feat: add ticker resolver
+
+## Change Log
+
+### 2026-07-29
+
+- 정규화 key 충돌 ValueError에 정규화 결과와 충돌한 기존·신규 원본 key를 포함해
+  정적 Mapping 설정 오류를 빠르게 진단할 수 있게 했다.
+- 현재 정규화 정책, Resolver의 조립 책임, immutable lookup의 평균 O(1) 특성과
+  향후 market identifier 확장 의도를 구현 Docstring에 명시했다.
+- 반복 resolve 뒤 내부 table의 identity와 내용이 유지되는 계약은 기존 테스트로
+  이미 검증됨을 확인했다. 동작은 변경하지 않았다.

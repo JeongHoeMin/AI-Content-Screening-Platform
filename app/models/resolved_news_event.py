@@ -12,6 +12,8 @@ class ResolvedTicker:
 
     This value does not imply that the ticker is valid, listed, or tradable.
     It contains no market data, investment analysis, or recommendation.
+    Future lookup implementations may resolve additional market identifiers
+    while preserving this domain responsibility.
     """
 
     ticker: str
