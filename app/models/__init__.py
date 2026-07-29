@@ -43,6 +43,7 @@ from app.models.screen_posts import (
     ScreenPostsMetadata,
     ScreenPostsRequest,
 )
+from app.models.scoring import CompanyScore, ScoringResult
 from app.models.workflow import ContentPipelineRequest, ContentPipelineResult
 
 __all__ = [
@@ -57,6 +58,7 @@ __all__ = [
     "CompanyImpact",
     "CompanyEvidence",
     "CompanyRelation",
+    "CompanyScore",
     "EvaluationResponse",
     "EvaluationResponseItem",
     "EvidenceAggregation",
@@ -86,4 +88,5 @@ __all__ = [
     "ScreenPostsMetadata",
     "ScreenPostsRequest",
     "ScriptGenerationResult",
+    "ScoringResult",
 ]
