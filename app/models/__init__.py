@@ -24,6 +24,11 @@ from app.models.news_event_response import (
     NewsEventResponseItem,
 )
 from app.models.post import Post
+from app.models.resolved_news_event import (
+    ResolvedCompany,
+    ResolvedNewsEvent,
+    ResolvedTicker,
+)
 from app.models.raw_post import RawDcInsidePost, RawPost, RawRedditPost
 from app.models.screen_posts import (
     PostEvaluationResult,
@@ -62,6 +67,9 @@ __all__ = [
     "RawDcInsidePost",
     "RawPost",
     "RawRedditPost",
+    "ResolvedCompany",
+    "ResolvedNewsEvent",
+    "ResolvedTicker",
     "ScreeningResult",
     "ScreenPostsData",
     "ScreenPostsMetadata",
