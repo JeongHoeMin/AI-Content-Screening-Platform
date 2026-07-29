@@ -36,6 +36,11 @@ from app.models.resolved_news_event import (
     ResolvedTicker,
 )
 from app.models.raw_post import RawDcInsidePost, RawPost, RawRedditPost
+from app.models.recommendation import (
+    CompanyRecommendation,
+    Recommendation,
+    RecommendationResult,
+)
 from app.models.screen_posts import (
     PostEvaluationResult,
     ScreeningResult,
@@ -57,6 +62,7 @@ __all__ = [
     "CommunityType",
     "CompanyImpact",
     "CompanyEvidence",
+    "CompanyRecommendation",
     "CompanyRelation",
     "CompanyScore",
     "EvaluationResponse",
@@ -83,6 +89,8 @@ __all__ = [
     "ResolvedCompany",
     "ResolvedNewsEvent",
     "ResolvedTicker",
+    "Recommendation",
+    "RecommendationResult",
     "ScreeningResult",
     "ScreenPostsData",
     "ScreenPostsMetadata",
