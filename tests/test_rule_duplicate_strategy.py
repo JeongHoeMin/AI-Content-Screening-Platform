@@ -72,6 +72,20 @@ def test_title_normalization_and_company_relation_are_ignored() -> None:
 
 
 @pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        (" Samsung  AI ", "samsung ai"),
+        ("Samsung     AI", "samsung ai"),
+    ],
+)
+def test_normalize_title_applies_default_policy(
+    title: str,
+    expected: str,
+) -> None:
+    assert RuleDuplicateStrategy._normalize_title(title) == expected
+
+
+@pytest.mark.parametrize(
     "right",
     [
         build_event(company_names=["SK hynix"]),

@@ -71,3 +71,12 @@
 ## Commit Message
 
 feat: add article deduplicator
+
+## Change Log
+
+### 2026-07-29
+
+- threshold 유효 범위 검증은 이미 생성 시점에 -0.1과 1.5에 대해 ValueError를
+  확인하는 테스트로 보장됨을 재확인했다.
+- title 정규화 정책의 trim, lower, 연속 공백 축소를 직접 검증하는 단위 테스트를
+  추가했다. 동작과 Rule 정책은 변경하지 않았다.
