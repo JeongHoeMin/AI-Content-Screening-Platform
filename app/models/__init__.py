@@ -63,6 +63,11 @@ from app.models.screening import (
     ScreeningDecision,
     ScreeningDecisionType,
 )
+from app.models.cross_validation import (
+    BatchCrossValidationConfig, CrossValidationAssessment, CrossValidationAssessmentResponse,
+    CrossValidationCandidate, CrossValidationResult, CrossValidationStatus, EvidenceRelation,
+    ValidationEvidence,
+)
 from app.models.workflow import ContentPipelineRequest, ContentPipelineResult
 
 __all__ = [
@@ -72,6 +77,7 @@ __all__ = [
     "ArticleInferenceResponseItem",
     "BatchExtractionConfig",
     "BatchScreeningConfig",
+    "BatchCrossValidationConfig",
     "CollectPostsData",
     "CollectPostsMetadata",
     "CollectPostsRequest",
@@ -122,4 +128,11 @@ __all__ = [
     "ScreeningCandidate",
     "ScreeningDecision",
     "ScreeningDecisionType",
+    "CrossValidationAssessment",
+    "CrossValidationAssessmentResponse",
+    "CrossValidationCandidate",
+    "CrossValidationResult",
+    "CrossValidationStatus",
+    "EvidenceRelation",
+    "ValidationEvidence",
 ]

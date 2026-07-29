@@ -15,6 +15,7 @@ from app.recommenders.recommendation_engine import RecommendationEngine
 from app.resolvers.base import TickerResolver
 from app.scorers.base import ScoringEngine
 from app.screeners.base import EventScreener
+from app.cross_validators.base import CrossValidator
 from app.workflows.screening.graph import _build_screening_graph
 from app.workflows.screening.result import (
     ScreeningResult,
@@ -32,6 +33,7 @@ class ScreeningWorkflow:
         evaluator: ArticleEvaluator,
         extractor: NewsEventExtractor,
         screener: EventScreener,
+        cross_validator: CrossValidator,
         resolver: TickerResolver,
         impact_analyzer: ImpactAnalyzer,
         evidence_aggregator: EvidenceAggregator,
@@ -42,6 +44,7 @@ class ScreeningWorkflow:
             evaluator=evaluator,
             extractor=extractor,
             screener=screener,
+            cross_validator=cross_validator,
             resolver=resolver,
             impact_analyzer=impact_analyzer,
             evidence_aggregator=evidence_aggregator,
@@ -71,8 +74,12 @@ class ScreeningWorkflow:
             Tuple[ScreeningDecision, ...],
             final_state.get("decisions", ()),
         )
+        cross_validation_results = cast(
+            tuple, final_state.get("cross_validation_results", ())
+        )
         return ScreeningResult(
             recommendation=recommendation,
             decisions=decisions,
+            cross_validation_results=cross_validation_results,
             statistics=statistics,
         )

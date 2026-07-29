@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.recommendation import RecommendationResult
 from app.models.screening import ScreeningDecision
+from app.models.cross_validation import CrossValidationResult
 
 
 class WorkflowContext(BaseModel):
@@ -27,6 +28,10 @@ class WorkflowStatistics(BaseModel):
     accepted_events: int = Field(ge=0)
     review_events: int = Field(ge=0)
     rejected_events: int = Field(ge=0)
+    verified_events: int = Field(ge=0)
+    partially_verified_events: int = Field(ge=0)
+    conflicted_events: int = Field(ge=0)
+    insufficient_evidence_events: int = Field(ge=0)
 
 
 class ScreeningResult(BaseModel):
@@ -36,6 +41,7 @@ class ScreeningResult(BaseModel):
 
     recommendation: RecommendationResult
     decisions: Tuple[ScreeningDecision, ...]
+    cross_validation_results: Tuple[CrossValidationResult, ...]
     statistics: WorkflowStatistics
 
     @model_validator(mode="after")
@@ -47,4 +53,12 @@ class ScreeningResult(BaseModel):
         )
         if decision_total != len(self.decisions):
             raise ValueError("Decision statistics must equal the decision count")
+        validation_total: int = (
+            self.statistics.verified_events
+            + self.statistics.partially_verified_events
+            + self.statistics.conflicted_events
+            + self.statistics.insufficient_evidence_events
+        )
+        if validation_total != len(self.cross_validation_results):
+            raise ValueError("Cross validation statistics must equal the result count")
         return self

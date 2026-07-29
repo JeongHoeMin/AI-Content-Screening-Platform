@@ -30,6 +30,8 @@ from app.recommenders import RecommendationEngine
 from app.resolvers import TickerResolver
 from app.scorers import ScoringEngine
 from app.screeners import EventScreener
+from app.cross_validators import CrossValidator
+from app.models import CrossValidationCandidate, CrossValidationResult, CrossValidationStatus
 from app.workflows import (
     ScreeningResult,
     ScreeningWorkflow,
@@ -154,6 +156,27 @@ class FakeAnalyzer(ImpactAnalyzer):
         return []
 
 
+class FakeCrossValidator(CrossValidator):
+    def __init__(self) -> None:
+        self.calls: List[Tuple[CrossValidationCandidate, ...]] = []
+
+    async def validate(
+        self, candidates: Tuple[CrossValidationCandidate, ...]
+    ) -> Tuple[CrossValidationResult, ...]:
+        self.calls.append(candidates)
+        return tuple(
+            CrossValidationResult(
+                event=candidate.decision.event,
+                status=CrossValidationStatus.INSUFFICIENT_EVIDENCE,
+                confidence=0,
+                independent_source_count=0,
+                evidence=(),
+                reasons=("No related articles are available.",),
+            )
+            for candidate in candidates
+        )
+
+
 class FakeAggregator(EvidenceAggregator):
     def __init__(self) -> None:
         self.calls: List[List[ImpactAnalysis]] = []
@@ -202,6 +225,7 @@ def build_workflow(
     FakeArticleEvaluator,
     FakeExtractor,
     FakeEventScreener,
+    FakeCrossValidator,
     FakeResolver,
     FakeAnalyzer,
     FakeAggregator,
@@ -211,6 +235,7 @@ def build_workflow(
     evaluator: FakeArticleEvaluator = FakeArticleEvaluator(accepted_ids)
     extractor: FakeExtractor = FakeExtractor(extractor_error)
     screener: FakeEventScreener = FakeEventScreener(decisions)
+    cross_validator: FakeCrossValidator = FakeCrossValidator()
     resolver: FakeResolver = FakeResolver()
     analyzer: FakeAnalyzer = FakeAnalyzer()
     aggregator: FakeAggregator = FakeAggregator()
@@ -220,6 +245,7 @@ def build_workflow(
         evaluator=evaluator,
         extractor=extractor,
         screener=screener,
+        cross_validator=cross_validator,
         resolver=resolver,
         impact_analyzer=analyzer,
         evidence_aggregator=aggregator,
@@ -231,6 +257,7 @@ def build_workflow(
         evaluator,
         extractor,
         screener,
+        cross_validator,
         resolver,
         analyzer,
         aggregator,
@@ -247,7 +274,7 @@ def anyio_backend() -> str:
 @pytest.mark.anyio
 async def test_workflow_runs_in_order_and_preserves_event_identity() -> None:
     articles: Tuple[Article, ...] = (build_article(1), build_article(2))
-    workflow, evaluator, extractor, screener, resolver, analyzer, aggregator, scorer, recommender = (
+    workflow, evaluator, extractor, screener, cross_validator, resolver, analyzer, aggregator, scorer, recommender = (
         build_workflow(("article-1", "article-2"))
     )
 
@@ -256,6 +283,7 @@ async def test_workflow_runs_in_order_and_preserves_event_identity() -> None:
     assert evaluator.calls == [articles]
     assert extractor.calls == [articles]
     assert screener.calls[0][0].events[0] is extractor.events[0]
+    assert cross_validator.calls == []
     assert resolver.calls[0] == extractor.events
     assert resolver.calls[0][0] is extractor.events[0]
     assert analyzer.calls[0][0].event is extractor.events[0]
@@ -275,7 +303,7 @@ async def test_workflow_runs_in_order_and_preserves_event_identity() -> None:
 @pytest.mark.anyio
 async def test_workflow_skips_llm_for_empty_or_all_rejected_input() -> None:
     article: Article = build_article(1)
-    workflow, _, extractor, screener, resolver, analyzer, aggregator, scorer, recommender = (
+    workflow, _, extractor, screener, _, resolver, analyzer, aggregator, scorer, recommender = (
         build_workflow(())
     )
 
@@ -295,7 +323,7 @@ async def test_workflow_skips_llm_for_empty_or_all_rejected_input() -> None:
 
 @pytest.mark.anyio
 async def test_workflow_handles_empty_input_as_a_normal_empty_result() -> None:
-    workflow, _, extractor, screener, _, _, aggregator, _, _ = build_workflow(())
+    workflow, _, extractor, screener, _, _, _, aggregator, _, _ = build_workflow(())
 
     result = await workflow.run(())
 
@@ -309,7 +337,7 @@ async def test_workflow_handles_empty_input_as_a_normal_empty_result() -> None:
 
 @pytest.mark.anyio
 async def test_workflow_accepts_none_or_an_immutable_context() -> None:
-    workflow, _, _, _, _, _, _, _, _ = build_workflow(())
+    workflow, _, _, _, _, _, _, _, _, _ = build_workflow(())
     context: WorkflowContext = WorkflowContext()
 
     none_result = await workflow.run((), context=None)
@@ -323,7 +351,7 @@ async def test_workflow_accepts_none_or_an_immutable_context() -> None:
 @pytest.mark.anyio
 async def test_workflow_propagates_extractor_error_without_wrapping() -> None:
     expected_error: RuntimeError = RuntimeError("LLM failed")
-    workflow, _, extractor, _, _, _, _, _, _ = build_workflow(
+    workflow, _, extractor, _, _, _, _, _, _, _ = build_workflow(
         ("article-1",),
         extractor_error=expected_error,
     )
@@ -338,7 +366,7 @@ async def test_workflow_propagates_extractor_error_without_wrapping() -> None:
 @pytest.mark.anyio
 async def test_workflow_records_rejection_without_removing_downstream_event() -> None:
     article: Article = build_article(1)
-    workflow, _, extractor, _, resolver, _, _, _, _ = build_workflow(
+    workflow, _, extractor, _, _, resolver, _, _, _, _ = build_workflow(
         ("article-1",),
         decisions=(ScreeningDecisionType.REJECT,),
     )
@@ -359,13 +387,42 @@ async def test_workflow_records_rejection_without_removing_downstream_event() ->
 
 
 @pytest.mark.anyio
+async def test_workflow_cross_validates_only_review_events_with_article_context() -> None:
+    articles: Tuple[Article, ...] = (build_article(1), build_article(2), build_article(3))
+    workflow, _, extractor, _, cross_validator, resolver, _, _, _, _ = build_workflow(
+        ("article-1", "article-2", "article-3"),
+        decisions=(
+            ScreeningDecisionType.ACCEPT,
+            ScreeningDecisionType.REVIEW,
+            ScreeningDecisionType.REJECT,
+        ),
+    )
+
+    result: ScreeningResult = await workflow.run(articles)
+
+    assert len(cross_validator.calls) == 1
+    candidates: Tuple[CrossValidationCandidate, ...] = cross_validator.calls[0]
+    assert len(candidates) == 1
+    assert candidates[0].decision.event is extractor.events[1]
+    assert candidates[0].source_article is articles[1]
+    assert tuple(article.id for article in candidates[0].related_articles) == (
+        "article-1",
+        "article-3",
+    )
+    assert result.cross_validation_results[0].event is extractor.events[1]
+    assert result.statistics.insufficient_evidence_events == 1
+    assert result.statistics.verified_events == 0
+    assert resolver.calls[0] == extractor.events
+
+
+@pytest.mark.anyio
 async def test_workflow_calculates_statistics_from_mixed_final_decisions() -> None:
     articles: Tuple[Article, ...] = (
         build_article(1),
         build_article(2),
         build_article(3),
     )
-    workflow, _, _, _, _, _, _, _, _ = build_workflow(
+    workflow, _, _, _, _, _, _, _, _, _ = build_workflow(
         ("article-1", "article-2", "article-3"),
         decisions=(
             ScreeningDecisionType.ACCEPT,
@@ -385,7 +442,7 @@ async def test_workflow_calculates_statistics_from_mixed_final_decisions() -> No
 @pytest.mark.anyio
 async def test_screening_result_rejects_statistics_that_do_not_match_decisions() -> None:
     article: Article = build_article(1)
-    workflow, _, _, _, _, _, _, _, _ = build_workflow(("article-1",))
+    workflow, _, _, _, _, _, _, _, _, _ = build_workflow(("article-1",))
     result = await workflow.run((article,))
 
     with pytest.raises(ValidationError):

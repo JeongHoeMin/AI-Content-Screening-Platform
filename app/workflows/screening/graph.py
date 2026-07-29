@@ -22,6 +22,8 @@ from app.recommenders.recommendation_engine import RecommendationEngine
 from app.resolvers.base import TickerResolver
 from app.scorers.base import ScoringEngine
 from app.screeners.base import EventScreener
+from app.cross_validators.base import CrossValidator
+from app.models.cross_validation import CrossValidationCandidate, CrossValidationResult, CrossValidationStatus
 from app.workflows.screening.result import WorkflowStatistics
 from app.workflows.screening.state import ScreeningState
 
@@ -34,6 +36,7 @@ class _ScreeningNodes:
         evaluator: ArticleEvaluator,
         extractor: NewsEventExtractor,
         screener: EventScreener,
+        cross_validator: CrossValidator,
         resolver: TickerResolver,
         impact_analyzer: ImpactAnalyzer,
         evidence_aggregator: EvidenceAggregator,
@@ -43,6 +46,7 @@ class _ScreeningNodes:
         self._evaluator: ArticleEvaluator = evaluator
         self._extractor: NewsEventExtractor = extractor
         self._screener: EventScreener = screener
+        self._cross_validator: CrossValidator = cross_validator
         self._resolver: TickerResolver = resolver
         self._impact_analyzer: ImpactAnalyzer = impact_analyzer
         self._evidence_aggregator: EvidenceAggregator = evidence_aggregator
@@ -79,6 +83,38 @@ class _ScreeningNodes:
             state["inferences"]
         )
         return {"decisions": decisions}
+
+    async def cross_validate(self, state: ScreeningState) -> Mapping[str, object]:
+        source_by_event_id: dict[int, Article] = {
+            id(event): inference.article
+            for inference in state.get("inferences", ())
+            for event in inference.events
+        }
+        candidates_list: list[CrossValidationCandidate] = []
+        for index, decision in enumerate(state.get("decisions", ())):
+            if decision.decision is not ScreeningDecisionType.REVIEW:
+                continue
+            source_article: Article | None = source_by_event_id.get(id(decision.event))
+            if source_article is None:
+                raise ValueError(
+                    "Screening decision event cannot be traced to an extraction inference"
+                )
+            candidates_list.append(
+                CrossValidationCandidate(
+                    candidate_id=f"{source_article.id}:{index}",
+                    decision=decision,
+                    source_article=source_article,
+                    related_articles=tuple(
+                        article for article in state["articles"]
+                        if article.id != source_article.id
+                    ),
+                )
+            )
+        candidates: Tuple[CrossValidationCandidate, ...] = tuple(candidates_list)
+        if not candidates:
+            return {"cross_validation_results": ()}
+        results: Tuple[CrossValidationResult, ...] = await self._cross_validator.validate(candidates)
+        return {"cross_validation_results": results}
 
     def resolve(self, state: ScreeningState) -> Mapping[str, object]:
         resolved_events: Tuple[ResolvedNewsEvent, ...] = tuple(
@@ -129,6 +165,10 @@ class _ScreeningNodes:
                 decision.decision is ScreeningDecisionType.REJECT
                 for decision in state.get("decisions", ())
             ),
+            verified_events=sum(result.status is CrossValidationStatus.VERIFIED for result in state.get("cross_validation_results", ())),
+            partially_verified_events=sum(result.status is CrossValidationStatus.PARTIALLY_VERIFIED for result in state.get("cross_validation_results", ())),
+            conflicted_events=sum(result.status is CrossValidationStatus.CONFLICTED for result in state.get("cross_validation_results", ())),
+            insufficient_evidence_events=sum(result.status is CrossValidationStatus.INSUFFICIENT_EVIDENCE for result in state.get("cross_validation_results", ())),
         )
         return {"recommendation": recommendation, "statistics": statistics}
 
@@ -143,6 +183,7 @@ def _build_screening_graph(
     evaluator: ArticleEvaluator,
     extractor: NewsEventExtractor,
     screener: EventScreener,
+    cross_validator: CrossValidator,
     resolver: TickerResolver,
     impact_analyzer: ImpactAnalyzer,
     evidence_aggregator: EvidenceAggregator,
@@ -154,6 +195,7 @@ def _build_screening_graph(
         evaluator=evaluator,
         extractor=extractor,
         screener=screener,
+        cross_validator=cross_validator,
         resolver=resolver,
         impact_analyzer=impact_analyzer,
         evidence_aggregator=evidence_aggregator,
@@ -164,6 +206,7 @@ def _build_screening_graph(
     builder.add_node("evaluate", nodes.evaluate)
     builder.add_node("extract", nodes.extract)
     builder.add_node("screen", nodes.screen)
+    builder.add_node("cross_validate", nodes.cross_validate)
     builder.add_node("resolve", nodes.resolve)
     builder.add_node("analyze", nodes.analyze)
     builder.add_node("aggregate", nodes.aggregate)
@@ -176,7 +219,8 @@ def _build_screening_graph(
         {"extract": "extract", "aggregate": "aggregate"},
     )
     builder.add_edge("extract", "screen")
-    builder.add_edge("screen", "resolve")
+    builder.add_edge("screen", "cross_validate")
+    builder.add_edge("cross_validate", "resolve")
     builder.add_edge("resolve", "analyze")
     builder.add_edge("analyze", "aggregate")
     builder.add_edge("aggregate", "score")
