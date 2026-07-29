@@ -16,6 +16,11 @@ from app.models.generate_script import (
     GenerateScriptRequest,
     ScriptGenerationResult,
 )
+from app.models.impact_analysis import (
+    CompanyImpact,
+    ImpactAnalysis,
+    ImpactDirection,
+)
 from app.models.normalize import NormalizeResult
 from app.models.news_event import CompanyRelation, ExtractedCompany, NewsEvent
 from app.models.news_event_response import (
@@ -48,6 +53,7 @@ __all__ = [
     "ContentPipelineRequest",
     "ContentPipelineResult",
     "CommunityType",
+    "CompanyImpact",
     "CompanyRelation",
     "EvaluationResponse",
     "EvaluationResponseItem",
@@ -57,6 +63,8 @@ __all__ = [
     "GenerateScriptData",
     "GenerateScriptMetadata",
     "GenerateScriptRequest",
+    "ImpactAnalysis",
+    "ImpactDirection",
     "NormalizeResult",
     "NewsEvent",
     "NewsEventExtractionResponse",
