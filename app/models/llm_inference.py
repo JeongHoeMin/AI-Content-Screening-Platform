@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Tuple
+from enum import Enum
+from typing import Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,10 +20,11 @@ class BatchExtractionConfig(BaseModel):
 class LLMInferenceResult(BaseModel):
     """Immutable article-level snapshot of validated LLM structured output.
 
-    Confidence is the LLM's self-reported confidence, not a Domain correctness
-    probability. Reasoning is a user-readable rationale, never internal chain
-    of thought. The contained NewsEvent instances remain identical throughout
-    the workflow and are consumed unchanged by downstream Domain services.
+    Confidence is the LLM's self-reported extraction confidence: whether the
+    Event is explicitly supported by the article, not a fact-truth probability.
+    Reasoning is a user-readable rationale, never internal chain of thought.
+    The contained NewsEvent instances remain identical throughout the workflow
+    and are consumed unchanged by downstream Domain services.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -34,6 +36,34 @@ class LLMInferenceResult(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
 
 
+class ExtractionErrorKind(str, Enum):
+    """Recoverable extraction failure categories safe for execution observation."""
+
+    EVENT_VALIDATION = "event_validation"
+    API_CALL = "api_call"
+    RESPONSE_PROCESSING = "response_processing"
+
+
+class ExtractionError(BaseModel):
+    """Safe, non-sensitive observation of a recoverable extraction failure."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: ExtractionErrorKind
+    message: str = Field(min_length=1)
+    article_ids: Tuple[str, ...] = ()
+    event_index: Optional[int] = Field(default=None, ge=0)
+
+
+class NewsEventParseResult(BaseModel):
+    """Parser output preserving valid inferences beside rejected event observations."""
+
+    model_config = ConfigDict(frozen=True)
+
+    inferences: Tuple[LLMInferenceResult, ...]
+    errors: Tuple[ExtractionError, ...] = ()
+
+
 class LLMExtractionResult(BaseModel):
     """Immutable result of one extractor execution and successful batch count."""
 
@@ -41,3 +71,4 @@ class LLMExtractionResult(BaseModel):
 
     inferences: Tuple[LLMInferenceResult, ...]
     successful_batches: int = Field(ge=0)
+    errors: Tuple[ExtractionError, ...] = ()

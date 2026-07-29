@@ -1,0 +1,18 @@
+[
+  {
+    "id": "openai-article-001",
+    "title": "Example chip capacity announcement",
+    "content": "Example Semiconductor announced a planned expansion of its advanced-chip packaging capacity. The company said the additional capacity is intended to serve data-center customers and will be reviewed during the next fiscal year. This short synthetic fixture is provided only for manual OpenAI extractor verification.",
+    "source": "synthetic-news-a",
+    "url": "https://example.com/openai-article-001",
+    "published_at": "2026-07-29T09:00:00+09:00"
+  },
+  {
+    "id": "openai-article-002",
+    "title": "Example renewable project update",
+    "content": "Example Energy reported that construction started on a solar generation project after receiving the required local approval. The announcement identifies the project location and expected completion window but makes no claim about market performance. This is a synthetic fixture for local OpenAI mode verification.",
+    "source": "synthetic-news-b",
+    "url": "https://example.com/openai-article-002",
+    "published_at": "2026-07-29T10:00:00+09:00"
+  }
+]

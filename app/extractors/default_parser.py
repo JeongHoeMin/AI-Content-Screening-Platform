@@ -2,11 +2,18 @@ from __future__ import annotations
 
 from typing import Dict, List, Set, Tuple
 
+from pydantic import ValidationError
+
 from app.extractors.errors import InferenceResultValidationError
 from app.extractors.parser import NewsEventParser
 from app.models.article import Article
-from app.models.llm_inference import LLMInferenceResult
-from app.models.news_event import ExtractedCompany, NewsEvent
+from app.models.llm_inference import (
+    ExtractionError,
+    ExtractionErrorKind,
+    LLMInferenceResult,
+    NewsEventParseResult,
+)
+from app.models.news_event import CompanyRelation, ExtractedCompany, NewsEvent
 from app.models.news_event_response import (
     ArticleInferenceResponseItem,
     ExtractedCompanyResponseItem,
@@ -22,15 +29,24 @@ class DefaultNewsEventParser(NewsEventParser):
         self,
         response: NewsEventExtractionResponse,
         articles: Tuple[Article, ...],
-    ) -> Tuple[LLMInferenceResult, ...]:
+    ) -> NewsEventParseResult:
         articles_by_id: Dict[str, Article] = self._index_articles(articles)
         responses_by_id: Dict[str, ArticleInferenceResponseItem] = (
             self._index_responses(response.articles)
         )
         self._validate_matching_ids(articles_by_id, responses_by_id)
-        return tuple(
-            self._map_inference(article, responses_by_id[article.id])
-            for article in articles
+        inferences: List[LLMInferenceResult] = []
+        errors: List[ExtractionError] = []
+        for article in articles:
+            inference, inference_errors = self._map_inference(
+                article,
+                responses_by_id[article.id],
+            )
+            inferences.append(inference)
+            errors.extend(inference_errors)
+        return NewsEventParseResult(
+            inferences=tuple(inferences),
+            errors=tuple(errors),
         )
 
     @staticmethod
@@ -67,32 +83,47 @@ class DefaultNewsEventParser(NewsEventParser):
     def _map_inference(
         article: Article,
         response_item: ArticleInferenceResponseItem,
-    ) -> LLMInferenceResult:
-        events: Tuple[NewsEvent, ...] = tuple(
-            DefaultNewsEventParser._map_event(event)
-            for event in response_item.events
-        )
-        return LLMInferenceResult(
+    ) -> tuple[LLMInferenceResult, Tuple[ExtractionError, ...]]:
+        events: List[NewsEvent] = []
+        errors: List[ExtractionError] = []
+        for event_index, event in enumerate(response_item.events):
+            try:
+                events.append(DefaultNewsEventParser._map_event(event))
+            except (ValueError, ValidationError) as error:
+                errors.append(
+                    ExtractionError(
+                        kind=ExtractionErrorKind.EVENT_VALIDATION,
+                        message=str(error),
+                        article_ids=(article.id,),
+                        event_index=event_index,
+                    )
+                )
+        inference: LLMInferenceResult = LLMInferenceResult(
             article=article,
-            events=events,
+            events=tuple(events),
             summary=response_item.summary,
             reasoning=response_item.reasoning,
             confidence=response_item.confidence,
         )
+        return inference, tuple(errors)
 
     @staticmethod
     def _map_event(response_item: NewsEventResponseItem) -> NewsEvent:
-        companies: List[ExtractedCompany] = [
-            DefaultNewsEventParser._map_company(company)
-            for company in response_item.companies
-        ]
+        companies: List[ExtractedCompany] = []
+        company_names: Set[str] = set()
+        for company in response_item.companies:
+            extracted: ExtractedCompany = DefaultNewsEventParser._map_company(company)
+            company_key: str = extracted.name.casefold()
+            if company_key not in company_names:
+                company_names.add(company_key)
+                companies.append(extracted)
         return NewsEvent(
-            title=response_item.title,
-            summary=response_item.summary,
+            title=DefaultNewsEventParser._normalize_required(response_item.title, "title"),
+            summary=DefaultNewsEventParser._normalize_required(response_item.summary, "summary"),
             companies=companies,
-            industries=list(response_item.industries),
-            keywords=list(response_item.keywords),
-            reasons=list(response_item.reasons),
+            industries=DefaultNewsEventParser._normalize_unique(response_item.industries, True),
+            keywords=DefaultNewsEventParser._normalize_unique(response_item.keywords, True),
+            reasons=DefaultNewsEventParser._normalize_unique(response_item.reasons, False),
         )
 
     @staticmethod
@@ -100,6 +131,27 @@ class DefaultNewsEventParser(NewsEventParser):
         response_item: ExtractedCompanyResponseItem,
     ) -> ExtractedCompany:
         return ExtractedCompany(
-            name=response_item.name,
-            relation=response_item.relation,
+            name=DefaultNewsEventParser._normalize_required(response_item.name, "company name"),
+            relation=CompanyRelation(response_item.relation),
         )
+
+    @staticmethod
+    def _normalize_required(value: str, field_name: str) -> str:
+        normalized: str = " ".join(value.split())
+        if not normalized:
+            raise ValueError(f"Event {field_name} must not be empty")
+        return normalized
+
+    @staticmethod
+    def _normalize_unique(values: List[str], case_insensitive: bool) -> List[str]:
+        normalized_values: List[str] = []
+        seen: Set[str] = set()
+        for value in values:
+            normalized: str = " ".join(value.split())
+            if not normalized:
+                continue
+            key: str = normalized.casefold() if case_insensitive else normalized
+            if key not in seen:
+                seen.add(key)
+                normalized_values.append(normalized)
+        return normalized_values

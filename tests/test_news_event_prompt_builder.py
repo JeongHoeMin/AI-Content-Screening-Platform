@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import json
 from dataclasses import FrozenInstanceError
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Tuple
+from typing import List, Tuple
 
 import pytest
 
 from app.llms import ChatMessage, ChatRole
-from app.models import Article, NewsEventExtractionResponse
+from app.models import Article
 from app.prompt_templates import (
     build_news_event_system_prompt,
     build_news_event_user_prompt,
@@ -51,22 +50,18 @@ def test_prompt_builder_returns_batch_messages() -> None:
     assert messages[1].content == build_news_event_user_prompt(articles)
 
 
-def test_system_prompt_embeds_batch_schema_and_rationale_contract() -> None:
+def test_system_prompt_defines_extraction_boundary_and_rationale_contract() -> None:
     prompt: str = build_news_event_system_prompt()
-    schema_json: str = prompt.split(
-        "Return only valid JSON matching this schema:\n", maxsplit=1
-    )[1].split("\nDo not add properties", maxsplit=1)[0]
-    prompt_schema: Dict[str, Any] = json.loads(schema_json)
 
-    assert prompt_schema == NewsEventExtractionResponse.model_json_schema()
-    assert "one or two sentence" in prompt
+    assert "untrusted data" in prompt
     assert "chain-of-thought" in prompt
-    assert '"article_id"' in prompt
+    assert "ticker" in prompt
 
 
-def test_user_prompt_serializes_articles_as_a_json_array() -> None:
+def test_user_prompt_separates_article_fields_as_data() -> None:
     prompt: str = build_news_event_user_prompt(build_articles())
-    payload: object = json.loads(prompt.split("\n", maxsplit=1)[1])
 
-    assert isinstance(payload, list)
-    assert payload[0]["id"] == "article-1"
+    assert "<article-data>" in prompt
+    assert 'Article ID: "article-1"' in prompt
+    assert 'Source: "Example News"' in prompt
+    assert 'Title: "Samsung expands HBM production"' in prompt

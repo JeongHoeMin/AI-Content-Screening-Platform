@@ -6,7 +6,11 @@ from typing import List, Optional, Tuple, Type, TypeVar
 import pytest
 from pydantic import BaseModel
 
-from app.extractors import DefaultNewsEventParser, LLMNewsEventExtractor
+from app.extractors import (
+    AllExtractionBatchesFailedError,
+    DefaultNewsEventParser,
+    LLMNewsEventExtractor,
+)
 from app.llms import ChatMessage, ChatRole, StructuredOutputLLM
 from app.models import (
     Article,
@@ -173,7 +177,7 @@ async def test_extractor_records_actual_request_count_for_fifty_articles() -> No
 
 
 @pytest.mark.anyio
-async def test_extractor_propagates_structured_llm_error_without_wrapping() -> None:
+async def test_extractor_raises_when_every_batch_fails() -> None:
     expected_error: RuntimeError = RuntimeError("LLM failed")
     articles: Tuple[Article, ...] = (build_article(1),)
     extractor, builder, llm = build_extractor(
@@ -181,9 +185,49 @@ async def test_extractor_propagates_structured_llm_error_without_wrapping() -> N
         llm_error=expected_error,
     )
 
-    with pytest.raises(RuntimeError) as error_info:
+    with pytest.raises(AllExtractionBatchesFailedError):
         await extractor.extract(articles)
 
-    assert error_info.value is expected_error
     assert builder.calls == 1
     assert llm.calls == 1
+
+
+@pytest.mark.anyio
+async def test_extractor_continues_after_one_batch_fails_and_counts_empty_success() -> None:
+    articles: Tuple[Article, ...] = (build_article(1), build_article(2))
+    empty_response: NewsEventExtractionResponse = NewsEventExtractionResponse(
+        articles=[
+            ArticleInferenceResponseItem(
+                article_id=articles[1].id,
+                summary="No event",
+                reasoning="No meaningful event is stated.",
+                confidence=0.9,
+                events=[],
+            )
+        ]
+    )
+    extractor, _, llm = build_extractor(
+        [empty_response],
+        config=BatchExtractionConfig(max_articles_per_batch=1),
+    )
+    original_generate = llm.generate
+    calls: int = 0
+
+    async def generate_with_first_failure(
+        messages: List[ChatMessage],
+        response_model: Type[OutputT],
+    ) -> OutputT:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise RuntimeError("API unavailable")
+        return await original_generate(messages, response_model)
+
+    llm.generate = generate_with_first_failure  # type: ignore[method-assign]
+
+    result = await extractor.extract(articles)
+
+    assert result.successful_batches == 1
+    assert result.inferences[0].article is articles[1]
+    assert result.inferences[0].events == ()
+    assert len(result.errors) == 1

@@ -3,9 +3,21 @@ from __future__ import annotations
 from collections.abc import Callable
 from enum import Enum
 
+from openai import AsyncOpenAI
+
 from app.aggregators import DefaultAggregationStrategy, DefaultEvidenceAggregator
 from app.analyzers import DefaultImpactAnalyzer, RuleImpactStrategy
 from app.cross_validators import DefaultCrossValidationPolicy
+from app.config import OpenAIConfig, load_openai_config
+from app.extractors import DefaultNewsEventParser, LLMNewsEventExtractor
+from app.llms import (
+    OpenAIResponsesStructuredOutputClient,
+    OpenAIResponsesStructuredOutputLLM,
+    StructuredOutputClient,
+    StructuredOutputLLM,
+    create_async_openai_client,
+)
+from app.models import BatchExtractionConfig
 from app.evaluators import RuleArticleEvaluator, RuleArticleEvaluatorConfig
 from app.mock_screening import (
     DeterministicMockCrossValidator,
@@ -13,6 +25,7 @@ from app.mock_screening import (
     DeterministicMockScreener,
 )
 from app.recommenders import DefaultRecommendationEngine, RuleRecommendationPolicy
+from app.prompts import NewsEventPromptBuilder
 from app.resolvers import DefaultResolvePolicy, DefaultTickerResolver, StaticTickerLookup
 from app.scorers import DefaultScoringEngine, RuleScoringStrategy
 from app.screeners import DefaultScreeningPolicy
@@ -21,6 +34,7 @@ from app.workflows import ScreeningWorkflow
 
 class ExecutionMode(str, Enum):
     MOCK = "mock"
+    OPENAI = "openai"
 
 
 WorkflowFactory = Callable[[], ScreeningWorkflow]
@@ -55,6 +69,45 @@ def _create_mock_workflow() -> ScreeningWorkflow:
     )
 
 
+def _create_openai_workflow() -> ScreeningWorkflow:
+    """Assemble the OpenAI extractor with deterministic downstream stages."""
+    config: OpenAIConfig = load_openai_config()
+    sdk_client: AsyncOpenAI = create_async_openai_client(
+        api_key=config.api_key,
+        timeout_seconds=config.timeout_seconds,
+        max_retries=config.max_retries,
+    )
+    structured_client: StructuredOutputClient = OpenAIResponsesStructuredOutputClient(
+        sdk_client
+    )
+    structured_llm: StructuredOutputLLM = OpenAIResponsesStructuredOutputLLM(
+        client=structured_client,
+        model=config.model,
+    )
+    screening_policy: DefaultScreeningPolicy = DefaultScreeningPolicy()
+    cross_validation_policy: DefaultCrossValidationPolicy = (
+        DefaultCrossValidationPolicy()
+    )
+    return ScreeningWorkflow(
+        evaluator=RuleArticleEvaluator(RuleArticleEvaluatorConfig()),
+        extractor=LLMNewsEventExtractor(
+            structured_llm=structured_llm,
+            parser=DefaultNewsEventParser(),
+            prompt_builder=NewsEventPromptBuilder(),
+            config=BatchExtractionConfig(),
+        ),
+        screener=DeterministicMockScreener(screening_policy),
+        cross_validator=DeterministicMockCrossValidator(cross_validation_policy),
+        resolver=DefaultTickerResolver(StaticTickerLookup({})),
+        resolve_policy=DefaultResolvePolicy(),
+        impact_analyzer=DefaultImpactAnalyzer(RuleImpactStrategy()),
+        evidence_aggregator=DefaultEvidenceAggregator(DefaultAggregationStrategy()),
+        scoring_engine=DefaultScoringEngine(RuleScoringStrategy()),
+        recommendation_engine=DefaultRecommendationEngine(RuleRecommendationPolicy()),
+    )
+
+
 _WORKFLOW_FACTORIES: dict[ExecutionMode, WorkflowFactory] = {
     ExecutionMode.MOCK: _create_mock_workflow,
+    ExecutionMode.OPENAI: _create_openai_workflow,
 }

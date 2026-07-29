@@ -13,7 +13,7 @@ class ExtractedCompanyResponseItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str
-    relation: CompanyRelation
+    relation: str
 
 
 class NewsEventResponseItem(BaseModel):
@@ -23,10 +23,10 @@ class NewsEventResponseItem(BaseModel):
 
     title: str
     summary: str
-    companies: List[ExtractedCompanyResponseItem]
-    industries: List[str]
-    keywords: List[str]
-    reasons: List[str]
+    companies: List[ExtractedCompanyResponseItem] = Field(default_factory=list)
+    industries: List[str] = Field(default_factory=list)
+    keywords: List[str] = Field(default_factory=list)
+    reasons: List[str] = Field(default_factory=list)
 
 
 class ArticleInferenceResponseItem(BaseModel):

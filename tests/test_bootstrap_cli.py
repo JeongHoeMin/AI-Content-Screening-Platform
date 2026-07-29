@@ -85,6 +85,16 @@ def test_mock_bootstrap_creates_new_workflow_instances() -> None:
     assert first is not second
 
 
+def test_openai_bootstrap_creates_workflow_with_configured_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    workflow = create_screening_workflow(ExecutionMode.OPENAI)
+
+    assert isinstance(workflow, type(create_screening_workflow(ExecutionMode.MOCK)))
+
+
 def test_module_and_script_entrypoints_emit_identical_json() -> None:
     module_result = _command("-m", "app", "--input", str(SAMPLE_INPUT))
     script_path: Path = Path(sys.executable).with_name("screening")

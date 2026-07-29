@@ -24,8 +24,11 @@ from app.models.impact_analysis import (
 )
 from app.models.llm_inference import (
     BatchExtractionConfig,
+    ExtractionError,
+    ExtractionErrorKind,
     LLMExtractionResult,
     LLMInferenceResult,
+    NewsEventParseResult,
 )
 from app.models.normalize import NormalizeResult
 from app.models.news_event import CompanyRelation, ExtractedCompany, NewsEvent
@@ -105,6 +108,9 @@ __all__ = [
     "ImpactDirection",
     "LLMInferenceResult",
     "LLMExtractionResult",
+    "ExtractionError",
+    "ExtractionErrorKind",
+    "NewsEventParseResult",
     "NormalizeResult",
     "NewsEvent",
     "NewsEventExtractionResponse",

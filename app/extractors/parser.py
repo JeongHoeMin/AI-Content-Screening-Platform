@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Protocol, Tuple
 
 from app.models.article import Article
-from app.models.llm_inference import LLMInferenceResult
+from app.models.llm_inference import NewsEventParseResult
 from app.models.news_event_response import NewsEventExtractionResponse
 
 
@@ -14,6 +14,6 @@ class NewsEventParser(Protocol):
         self,
         response: NewsEventExtractionResponse,
         articles: Tuple[Article, ...],
-    ) -> Tuple[LLMInferenceResult, ...]:
-        """Return one validated inference for every input article in order."""
+    ) -> NewsEventParseResult:
+        """Return ordered valid inferences and recoverable event validation errors."""
         ...

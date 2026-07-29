@@ -74,14 +74,14 @@ def test_parser_preserves_input_article_order_and_event_identity() -> None:
 
     result = parser.parse(response, (first_article, second_article))
 
-    assert tuple(inference.article for inference in result) == (
+    assert tuple(inference.article for inference in result.inferences) == (
         first_article,
         second_article,
     )
-    assert result[0].article is first_article
-    assert result[0].events[0].title == "First event"
-    assert result[1].events[0].companies[0].relation is CompanyRelation.DIRECT
-    assert result[0].confidence == 0.8
+    assert result.inferences[0].article is first_article
+    assert result.inferences[0].events[0].title == "First event"
+    assert result.inferences[1].events[0].companies[0].relation is CompanyRelation.DIRECT
+    assert result.inferences[0].confidence == 0.8
 
 
 @pytest.mark.parametrize(
@@ -113,3 +113,51 @@ def test_parser_rejects_duplicate_input_article_ids() -> None:
 
     with pytest.raises(InferenceResultValidationError):
         parser.parse(response, (article, article))
+
+
+def test_parser_keeps_valid_events_when_a_sibling_event_is_invalid() -> None:
+    article: Article = build_article(1)
+    response: NewsEventExtractionResponse = NewsEventExtractionResponse(
+        articles=[
+            ArticleInferenceResponseItem(
+                article_id=article.id,
+                summary="Article summary",
+                reasoning="Article reasoning",
+                confidence=0.8,
+                events=[
+                    NewsEventResponseItem(
+                        title="  Valid event  ",
+                        summary="  Valid summary  ",
+                        companies=[
+                            ExtractedCompanyResponseItem(
+                                name=" Example Corp ",
+                                relation="direct",
+                            ),
+                            ExtractedCompanyResponseItem(
+                                name="example corp",
+                                relation="direct",
+                            ),
+                        ],
+                        industries=[" AI ", "ai", ""],
+                        keywords=[" Chips ", "chips"],
+                        reasons=[" Stated in article ", "Stated in article"],
+                    ),
+                    NewsEventResponseItem(
+                        title=" ",
+                        summary="Invalid event",
+                    ),
+                ],
+            )
+        ]
+    )
+
+    result = DefaultNewsEventParser().parse(response, (article,))
+
+    event = result.inferences[0].events[0]
+    assert len(result.inferences[0].events) == 1
+    assert event.title == "Valid event"
+    assert [company.name for company in event.companies] == ["Example Corp"]
+    assert event.industries == ["AI"]
+    assert event.keywords == ["Chips"]
+    assert event.reasons == ["Stated in article"]
+    assert len(result.errors) == 1

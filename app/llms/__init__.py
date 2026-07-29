@@ -3,7 +3,13 @@
 from app.llms.base import LLMClient
 from app.llms.mock import MockLLMClient
 from app.llms.models import ChatMessage, ChatResponse, ChatRole, GenerationConfig
-from app.llms.openai import OpenAIClient
+from app.llms.openai import OpenAIClient, create_async_openai_client
+from app.llms.openai_structured import (
+    OpenAIResponsesStructuredOutputClient,
+    OpenAIResponsesStructuredOutputLLM,
+    StructuredOutputClient,
+    StructuredOutputResponseError,
+)
 from app.llms.structured import PydanticStructuredOutputLLM, StructuredOutputLLM
 
 __all__ = [
@@ -14,6 +20,11 @@ __all__ = [
     "LLMClient",
     "MockLLMClient",
     "OpenAIClient",
+    "create_async_openai_client",
+    "OpenAIResponsesStructuredOutputClient",
+    "OpenAIResponsesStructuredOutputLLM",
     "PydanticStructuredOutputLLM",
     "StructuredOutputLLM",
+    "StructuredOutputClient",
+    "StructuredOutputResponseError",
 ]

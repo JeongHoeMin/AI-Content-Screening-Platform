@@ -12,6 +12,7 @@ import structlog
 from pydantic import ValidationError
 
 from app.bootstrap import ExecutionMode, create_screening_workflow
+from app.config import ConfigurationError
 from app.models.article import Article
 
 logger = structlog.get_logger(__name__)
@@ -75,7 +76,12 @@ async def run(arguments: Sequence[str] | None = None) -> int:
         logger.error("cli_input_failed", error_type=type(error).__name__, error=str(error))
         return int(ExitCode.INPUT_ERROR)
     try:
-        result = await create_screening_workflow(mode).run(articles)
+        workflow = create_screening_workflow(mode)
+    except ConfigurationError as error:
+        logger.error("cli_input_failed", error_type=type(error).__name__, error=str(error))
+        return int(ExitCode.INPUT_ERROR)
+    try:
+        result = await workflow.run(articles)
     except Exception as error:
         logger.error(
             "cli_execution_failed",

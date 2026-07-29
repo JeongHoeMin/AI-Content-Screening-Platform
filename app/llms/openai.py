@@ -8,6 +8,19 @@ from app.llms.base import LLMClient
 from app.llms.models import ChatMessage, ChatResponse, GenerationConfig
 
 
+def create_async_openai_client(
+    api_key: str,
+    timeout_seconds: float,
+    max_retries: int,
+) -> AsyncOpenAI:
+    """Create the SDK client from already-validated runtime configuration."""
+    return AsyncOpenAI(
+        api_key=api_key,
+        timeout=timeout_seconds,
+        max_retries=max_retries,
+    )
+
+
 class OpenAIClient(LLMClient):
     """OpenAI SDK adapter for the project LLM client contract."""
 
