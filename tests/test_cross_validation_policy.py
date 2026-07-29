@@ -53,7 +53,21 @@ def test_policy_normalizes_non_identifying_sources_to_none(source: str | None) -
     assert DefaultCrossValidationPolicy._normalize_source(source) is None
 
 
-@pytest.mark.parametrize("source", ["Reuters", "ABC News", "Yonhap News", "The New York Times"])
+@pytest.mark.parametrize(
+    "source",
+    [
+        "Reuters",
+        "ABC News",
+        "Yonhap News",
+        "Associated Press",
+        "Financial Publisher",
+        "Open Source Initiative",
+        "Publisher",
+        "Media",
+        "Press",
+        "Source",
+    ],
+)
 def test_policy_preserves_identifying_sources(source: str) -> None:
     assert DefaultCrossValidationPolicy._normalize_source(source) == " ".join(source.split()).casefold()
 

@@ -27,6 +27,10 @@ prompt, 원시 응답, API key는 기록하지 않는다.
 정확한 일치만 사용하므로 `ABC News` 같은 정상 출처를 부분 문자열로 제외하지 않는다. 유효한
 domain도 없는 경우 해당 evidence는 독립 출처 수에 포함하지 않는다.
 
+비식별 source 목록에는 실제 운영 데이터에서 placeholder로 사용되는 것이 확인된 문자열만 넣는다.
+일반적인 영어 단어라는 이유만으로 기본 목록에 추가하지 않으며, 특정 언론사·서비스를 뜻하지 않고
+제거해도 식별 정확도를 낮추지 않는다는 데이터 근거가 있을 때만 후속 변경으로 확장한다.
+
 OpenAI Extractor, Screener, `LLMEventCrossValidator`는 같은 stateless structured-output gateway를
 공유한다. Mock mode는 `DeterministicMockCrossValidator`를 유지한다.
 

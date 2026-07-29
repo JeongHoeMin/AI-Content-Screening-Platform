@@ -24,10 +24,6 @@ NON_IDENTIFYING_SOURCE_VALUES: frozenset[str] = frozenset(
         "null",
         "news",
         "newsroom",
-        "media",
-        "press",
-        "publisher",
-        "source",
     }
 )
 
