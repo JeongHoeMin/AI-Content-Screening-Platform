@@ -7,6 +7,7 @@ from app.models.collect_posts import (
     ProviderResultMetadata,
 )
 from app.models.community import CommunityType
+from app.models.evaluation_response import EvaluationResponse, EvaluationResponseItem
 from app.models.generate_script import (
     GeneratedScript,
     GenerateScriptData,
@@ -33,6 +34,8 @@ __all__ = [
     "ContentPipelineRequest",
     "ContentPipelineResult",
     "CommunityType",
+    "EvaluationResponse",
+    "EvaluationResponseItem",
     "GeneratedScript",
     "GenerateScriptData",
     "GenerateScriptMetadata",

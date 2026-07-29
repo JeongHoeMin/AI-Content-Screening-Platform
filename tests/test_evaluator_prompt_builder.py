@@ -74,6 +74,17 @@ def test_evaluator_user_template_serializes_post_data() -> None:
     assert '"like_count": 3' in prompt
 
 
+def test_evaluator_system_template_defines_id_based_response_contract() -> None:
+    prompt: str = build_evaluator_system_prompt()
+
+    assert "post_id" in prompt
+    assert "is_candidate" in prompt
+    assert "reasons" in prompt
+    assert "Use each input post id unchanged" in prompt
+    assert "Do not add properties" in prompt
+    assert "markdown fences" in prompt
+
+
 def test_evaluator_user_template_represents_empty_posts_as_json_array() -> None:
     prompt: str = build_evaluator_user_prompt([])
 

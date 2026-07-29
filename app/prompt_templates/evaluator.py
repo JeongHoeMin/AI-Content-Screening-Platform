@@ -5,7 +5,13 @@ from typing import Any, Dict, List, Sequence
 
 from app.models.post import Post
 
-_SYSTEM_PROMPT: str = "You are a content evaluator."
+_SYSTEM_PROMPT: str = """You are a content evaluator.
+Evaluate every input post and return only valid JSON matching this schema:
+{"posts":[{"post_id":"input post id","score":0,"is_candidate":false,"reasons":["reason"]}]}
+Return exactly one item for every input post in the same order.
+Use each input post id unchanged as post_id.
+Return only the fields in the schema. Do not add properties, markdown fences, or explanatory text.
+"""
 _USER_PROMPT: str = "Evaluate the following posts:\n{posts_json}"
 
 
