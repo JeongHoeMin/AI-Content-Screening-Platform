@@ -22,6 +22,11 @@ prompt, 원시 응답, API key는 기록하지 않는다.
 그 일치 관계의 연결 요소를 하나의 출처 그룹으로 계산한다. URL domain은 소문자화, port 제거,
 선행 `www.` 제거까지만 수행하며 Public Suffix List 기반 등록 가능 도메인 추출은 후속 범위다.
 
+`Article.source`는 공백과 대소문자를 정규화한 뒤 identity로 사용한다. 다만 `unknown`, `n/a`,
+`news`처럼 식별력이 없는 일반 값은 source가 없는 것처럼 처리한다. 이 판단은 정규화 문자열의
+정확한 일치만 사용하므로 `ABC News` 같은 정상 출처를 부분 문자열로 제외하지 않는다. 유효한
+domain도 없는 경우 해당 evidence는 독립 출처 수에 포함하지 않는다.
+
 OpenAI Extractor, Screener, `LLMEventCrossValidator`는 같은 stateless structured-output gateway를
 공유한다. Mock mode는 `DeterministicMockCrossValidator`를 유지한다.
 

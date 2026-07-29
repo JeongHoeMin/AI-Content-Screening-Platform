@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Tuple
 
+import pytest
+
 from app.cross_validators import DefaultCrossValidationPolicy
 from app.models import Article, CompanyRelation, CrossValidationAssessment, CrossValidationAssessmentEvidence, CrossValidationCandidate, CrossValidationStatus, EvidenceRelation, ExtractedCompany, NewsEvent, ScreeningDecision, ScreeningDecisionType
 
@@ -44,3 +46,26 @@ def test_policy_conflict_precedes_verified_and_preserves_event_identity() -> Non
     result = DefaultCrossValidationPolicy().decide(item, assessment(support("a"), CrossValidationAssessmentEvidence(article_id="b", relation=EvidenceRelation.CONTRADICTS, conflicting_claims=("Conflict",)), confidence=100))
     assert result.status is CrossValidationStatus.CONFLICTED
     assert result.event is item.decision.event
+
+
+@pytest.mark.parametrize("source", [None, "", "   ", "Unknown", "UNKNOWN", " unknown source ", "N/A", "News", "Newsroom"])
+def test_policy_normalizes_non_identifying_sources_to_none(source: str | None) -> None:
+    assert DefaultCrossValidationPolicy._normalize_source(source) is None
+
+
+@pytest.mark.parametrize("source", ["Reuters", "ABC News", "Yonhap News", "The New York Times"])
+def test_policy_preserves_identifying_sources(source: str) -> None:
+    assert DefaultCrossValidationPolicy._normalize_source(source) == " ".join(source.split()).casefold()
+
+
+def test_policy_does_not_merge_different_domains_with_generic_source() -> None:
+    item = candidate((article("a", "News", "a.example"), article("b", "News", "b.example")))
+    result = DefaultCrossValidationPolicy().decide(item, assessment(support("a"), support("b"), confidence=100))
+    assert result.independent_source_count == 2
+    assert result.status is CrossValidationStatus.VERIFIED
+
+
+def test_policy_merges_matching_domain_despite_generic_sources() -> None:
+    item = candidate((article("a", "News", "example.com"), article("b", "Unknown", "example.com")))
+    result = DefaultCrossValidationPolicy().decide(item, assessment(support("a"), support("b"), confidence=100))
+    assert result.independent_source_count == 1

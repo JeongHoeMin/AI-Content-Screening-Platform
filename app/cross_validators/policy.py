@@ -14,6 +14,23 @@ from app.models.cross_validation import (
     ValidationEvidence,
 )
 
+NON_IDENTIFYING_SOURCE_VALUES: frozenset[str] = frozenset(
+    {
+        "unknown",
+        "unknown source",
+        "n/a",
+        "na",
+        "none",
+        "null",
+        "news",
+        "newsroom",
+        "media",
+        "press",
+        "publisher",
+        "source",
+    }
+)
+
 
 class CrossValidationPolicyConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -80,20 +97,24 @@ class DefaultCrossValidationPolicy(CrossValidationPolicy):
         return normalized or None
 
     @staticmethod
-    def _normalize_source(article: Article) -> Optional[str]:
-        normalized: str = article.source.strip().casefold()
-        return normalized or None
+    def _normalize_source(source: Optional[str]) -> Optional[str]:
+        if source is None:
+            return None
+        normalized: str = " ".join(source.split()).casefold()
+        if not normalized or normalized in NON_IDENTIFYING_SOURCE_VALUES:
+            return None
+        return normalized
 
     def _has_identity(self, article: Article) -> bool:
-        return self._normalize_domain(article) is not None or self._normalize_source(article) is not None
+        return self._normalize_domain(article) is not None or self._normalize_source(article.source) is not None
 
     def _same_source(self, left: Article, right: Article) -> bool:
         left_domain: Optional[str] = self._normalize_domain(left)
         right_domain: Optional[str] = self._normalize_domain(right)
         if self._config.use_url_domain_identity and left_domain is not None and left_domain == right_domain:
             return True
-        left_source: Optional[str] = self._normalize_source(left)
-        right_source: Optional[str] = self._normalize_source(right)
+        left_source: Optional[str] = self._normalize_source(left.source)
+        right_source: Optional[str] = self._normalize_source(right.source)
         return left_source is not None and left_source == right_source
 
     @staticmethod
