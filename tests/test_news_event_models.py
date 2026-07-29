@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import List
+from typing import Any, Dict, List
+
+import pytest
+from pydantic import ValidationError
 
 from app.extractors import NewsEventExtractor
 from app.models import (
     Article,
     ArticleEvaluationResult,
     CompanyRelation,
+    ExtractedCompany,
     NewsEvent,
     PostEvaluationResult,
 )
@@ -56,3 +60,24 @@ def test_news_event_extractor_protocol_supports_implementation() -> None:
     extractor: NewsEventExtractor = FakeNewsEventExtractor()
 
     assert isinstance(extractor, FakeNewsEventExtractor)
+
+
+@pytest.mark.parametrize("field_name", ["industries", "keywords", "reasons"])
+def test_news_event_rejects_empty_collection_items(field_name: str) -> None:
+    values: Dict[str, Any] = {
+        "title": "HBM production expansion",
+        "summary": "Samsung Electronics expands HBM production.",
+        "companies": [
+            ExtractedCompany(
+                name="Samsung Electronics",
+                relation=CompanyRelation.DIRECT,
+            )
+        ],
+        "industries": ["Semiconductors"],
+        "keywords": ["HBM"],
+        "reasons": ["The expansion is stated in the article"],
+    }
+    values[field_name] = [""]
+
+    with pytest.raises(ValidationError):
+        NewsEvent.model_validate(values)

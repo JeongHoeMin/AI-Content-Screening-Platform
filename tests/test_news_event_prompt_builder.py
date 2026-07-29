@@ -3,12 +3,16 @@ from __future__ import annotations
 import json
 from dataclasses import FrozenInstanceError
 from datetime import datetime, timezone
-from typing import List
+from typing import Any, Dict, List
 
 import pytest
 
 from app.llms import ChatMessage, ChatRole
-from app.models import Article, ArticleEvaluationResult
+from app.models import (
+    Article,
+    ArticleEvaluationResult,
+    NewsEventExtractionResponse,
+)
 from app.prompt_templates import (
     build_news_event_system_prompt,
     build_news_event_user_prompt,
@@ -68,6 +72,20 @@ def test_system_prompt_uses_strict_shared_response_contract() -> None:
     assert "Do not recommend stocks" in prompt
     assert "Do not produce ticker, sentiment, confidence, impact" in prompt
     assert "beneficiaries, victims, or competitors" in prompt
+
+
+def test_system_prompt_embeds_exact_response_dto_schema() -> None:
+    prompt: str = build_news_event_system_prompt()
+    schema_json: str = prompt.split(
+        "Return only valid JSON matching this schema:\n",
+        maxsplit=1,
+    )[1].split(
+        "\nDo not add properties",
+        maxsplit=1,
+    )[0]
+    prompt_schema: Dict[str, Any] = json.loads(schema_json)
+
+    assert prompt_schema == NewsEventExtractionResponse.model_json_schema()
 
 
 def test_user_prompt_serializes_complete_evaluation_as_json() -> None:

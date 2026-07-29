@@ -22,6 +22,12 @@ class DefaultNewsEventParser(NewsEventParser):
         response: ChatResponse,
         evaluation: ArticleEvaluationResult,
     ) -> List[NewsEvent]:
+        """Map a response while preserving the source evaluation contract.
+
+        The evaluation is reserved for future source tracking, deduplication,
+        and event aggregation. It is intentionally not used for domain mapping
+        in this version.
+        """
         payload: Any = json.loads(response.content)
         extraction_response: NewsEventExtractionResponse = (
             NewsEventExtractionResponse.model_validate(payload)

@@ -63,3 +63,16 @@
 ```text
 feat: add news event extraction contracts
 ```
+
+## Change Log
+
+### 2026-07-29
+
+- 미사용으로 오해되지 않도록 Parser가 `ArticleEvaluationResult`를 향후 출처
+  추적, 중복 제거와 이벤트 집계를 위해 보존한다는 의도를 docstring에 기록했다.
+- Domain 불변성을 강화하기 위해 industries, keywords, reasons 내부의 빈 문자열을
+  거부하도록 변경했다. 컬렉션 자체의 최소 길이는 이번 PR 범위에 추가하지 않았다.
+- Prompt에 포함된 JSON Schema와 `NewsEventExtractionResponse.model_json_schema()`가
+  정확히 일치하는지 검증하는 계약 테스트를 추가했다.
+- 기존 Evaluator Prompt와 News Event Prompt의 공개 export가 모두 유지되는지
+  최종 패키지 구성을 확인했다.

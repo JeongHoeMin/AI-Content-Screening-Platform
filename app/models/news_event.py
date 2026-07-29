@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import List
+from typing import Annotated, List
 
 from pydantic import BaseModel, Field
 
@@ -26,6 +26,6 @@ class NewsEvent(BaseModel):
     title: str = Field(min_length=1)
     summary: str = Field(min_length=1)
     companies: List[ExtractedCompany]
-    industries: List[str]
-    keywords: List[str]
-    reasons: List[str]
+    industries: List[Annotated[str, Field(min_length=1)]]
+    keywords: List[Annotated[str, Field(min_length=1)]]
+    reasons: List[Annotated[str, Field(min_length=1)]]
