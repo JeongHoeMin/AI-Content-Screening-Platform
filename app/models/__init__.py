@@ -1,5 +1,6 @@
 """Domain models."""
 
+from app.models.article import Article, ArticleEvaluationResult
 from app.models.collect_posts import (
     CollectPostsData,
     CollectPostsMetadata,
@@ -16,6 +17,12 @@ from app.models.generate_script import (
     ScriptGenerationResult,
 )
 from app.models.normalize import NormalizeResult
+from app.models.news_event import CompanyRelation, ExtractedCompany, NewsEvent
+from app.models.news_event_response import (
+    ExtractedCompanyResponseItem,
+    NewsEventExtractionResponse,
+    NewsEventResponseItem,
+)
 from app.models.post import Post
 from app.models.raw_post import RawDcInsidePost, RawPost, RawRedditPost
 from app.models.screen_posts import (
@@ -28,19 +35,27 @@ from app.models.screen_posts import (
 from app.models.workflow import ContentPipelineRequest, ContentPipelineResult
 
 __all__ = [
+    "Article",
+    "ArticleEvaluationResult",
     "CollectPostsData",
     "CollectPostsMetadata",
     "CollectPostsRequest",
     "ContentPipelineRequest",
     "ContentPipelineResult",
     "CommunityType",
+    "CompanyRelation",
     "EvaluationResponse",
     "EvaluationResponseItem",
+    "ExtractedCompany",
+    "ExtractedCompanyResponseItem",
     "GeneratedScript",
     "GenerateScriptData",
     "GenerateScriptMetadata",
     "GenerateScriptRequest",
     "NormalizeResult",
+    "NewsEvent",
+    "NewsEventExtractionResponse",
+    "NewsEventResponseItem",
     "Post",
     "PostEvaluationResult",
     "ProviderResultMetadata",
