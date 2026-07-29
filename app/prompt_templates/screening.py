@@ -10,7 +10,8 @@ Return exactly one assessment for every input candidate using its unchanged cand
 Assess relevance, importance, and credibility as integers from 0 to 100.
 Set requires_cross_validation when the event needs independent verification, such as
 when its source evidence is weak, unofficial, unusually consequential, or disputed.
-Return concise user-readable reasons grounded in the provided article and event.
+Return between 1 and 3 concise user-readable reasons for each candidate,
+grounded in the provided article and event.
 Do not make ACCEPT, REVIEW, or REJECT decisions; a deterministic policy owns them.
 Do not reveal private chain-of-thought or internal reasoning.
 Return only valid JSON matching this schema:

@@ -88,6 +88,42 @@ def build_inferences() -> Tuple[LLMInferenceResult, ...]:
     )
 
 
+def build_two_article_inferences() -> Tuple[LLMInferenceResult, ...]:
+    first_inference: LLMInferenceResult = build_inferences()[0]
+    second_article: Article = Article(
+        id="article-2",
+        title="Second title",
+        content="content " * 50,
+        source="Example News",
+        published_at=datetime(2026, 7, 29, tzinfo=timezone.utc),
+        url="https://example.com/articles/2",
+    )
+    second_events: Tuple[NewsEvent, ...] = tuple(
+        NewsEvent(
+            title=f"Second event {index}",
+            summary="Event summary",
+            companies=[
+                ExtractedCompany(
+                    name="Samsung Electronics",
+                    relation=CompanyRelation.DIRECT,
+                )
+            ],
+            industries=["Semiconductors"],
+            keywords=["HBM"],
+            reasons=["Explicit source fact"],
+        )
+        for index in range(2)
+    )
+    second_inference: LLMInferenceResult = LLMInferenceResult(
+        article=second_article,
+        events=second_events,
+        summary="Article summary",
+        reasoning="The event is explicitly stated.",
+        confidence=0.9,
+    )
+    return first_inference, second_inference
+
+
 def build_screener(
     responses: List[ScreeningAssessmentResponse],
 ) -> tuple[LLMEventScreener, FakePromptBuilder, FakeStructuredOutputLLM]:
@@ -181,8 +217,13 @@ async def test_screener_rejects_missing_or_unknown_assessment_ids() -> None:
     )
     screener, _, _ = build_screener([response])
 
-    with pytest.raises(ScreeningAssessmentValidationError):
+    with pytest.raises(ScreeningAssessmentValidationError) as error_info:
         await screener.screen(inferences)
+
+    assert "missing" in str(error_info.value)
+    assert "article-1:1" in str(error_info.value)
+    assert "unknown" in str(error_info.value)
+    assert "unknown:0" in str(error_info.value)
 
 
 @pytest.mark.anyio
@@ -212,3 +253,75 @@ async def test_screener_rejects_duplicate_assessment_ids() -> None:
 
     with pytest.raises(ScreeningAssessmentValidationError):
         await screener.screen(inferences)
+
+
+@pytest.mark.anyio
+async def test_screener_reports_unknown_assessment_ids_without_missing_ids() -> None:
+    inferences: Tuple[LLMInferenceResult, ...] = build_inferences()
+    response: ScreeningAssessmentResponse = ScreeningAssessmentResponse(
+        assessments=(
+            ScreeningAssessment(
+                candidate_id="article-1:0",
+                relevance=80,
+                importance=80,
+                credibility=80,
+                requires_cross_validation=False,
+                reasons=("First event",),
+            ),
+            ScreeningAssessment(
+                candidate_id="article-1:1",
+                relevance=80,
+                importance=80,
+                credibility=80,
+                requires_cross_validation=False,
+                reasons=("Second event",),
+            ),
+            ScreeningAssessment(
+                candidate_id="unknown:0",
+                relevance=80,
+                importance=80,
+                credibility=80,
+                requires_cross_validation=False,
+                reasons=("Unknown event",),
+            ),
+        )
+    )
+    screener, _, _ = build_screener([response])
+
+    with pytest.raises(ScreeningAssessmentValidationError) as error_info:
+        await screener.screen(inferences)
+
+    assert "unknown" in str(error_info.value)
+    assert "unknown:0" in str(error_info.value)
+
+
+@pytest.mark.anyio
+async def test_screener_uses_distinct_request_local_candidate_ids_per_article() -> None:
+    inferences: Tuple[LLMInferenceResult, ...] = build_two_article_inferences()
+    candidate_ids: Tuple[str, ...] = (
+        "article-1:0",
+        "article-1:1",
+        "article-2:0",
+        "article-2:1",
+    )
+    response: ScreeningAssessmentResponse = ScreeningAssessmentResponse(
+        assessments=tuple(
+            ScreeningAssessment(
+                candidate_id=candidate_id,
+                relevance=80,
+                importance=80,
+                credibility=80,
+                requires_cross_validation=False,
+                reasons=("Material event",),
+            )
+            for candidate_id in candidate_ids
+        )
+    )
+    screener, prompt_builder, _ = build_screener([response])
+
+    decisions = await screener.screen(inferences)
+
+    assert tuple(
+        candidate.candidate_id for candidate in prompt_builder.inputs[0].candidates
+    ) == candidate_ids
+    assert len(decisions) == 4

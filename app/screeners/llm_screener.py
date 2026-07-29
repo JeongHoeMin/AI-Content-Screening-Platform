@@ -70,6 +70,7 @@ class LLMEventScreener(EventScreener):
         self,
         inferences: Tuple[LLMInferenceResult, ...],
     ) -> Tuple[ScreeningCandidate, ...]:
+        """Create request-local correlation IDs while retaining Event identity."""
         return tuple(
             ScreeningCandidate(
                 candidate_id=f"{inference.article.id}:{event_index}",

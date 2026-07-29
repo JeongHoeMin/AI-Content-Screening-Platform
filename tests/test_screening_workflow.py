@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 
 import pytest
+from pydantic import ValidationError
 
 from app.aggregators import EvidenceAggregator
 from app.analyzers import ImpactAnalyzer
@@ -29,7 +30,12 @@ from app.recommenders import RecommendationEngine
 from app.resolvers import TickerResolver
 from app.scorers import ScoringEngine
 from app.screeners import EventScreener
-from app.workflows import ScreeningWorkflow, WorkflowContext
+from app.workflows import (
+    ScreeningResult,
+    ScreeningWorkflow,
+    WorkflowContext,
+    WorkflowStatistics,
+)
 
 
 class FakeArticleEvaluator(ArticleEvaluator):
@@ -350,3 +356,50 @@ async def test_workflow_records_rejection_without_removing_downstream_event() ->
         + result.statistics.rejected_events
         == len(result.decisions)
     )
+
+
+@pytest.mark.anyio
+async def test_workflow_calculates_statistics_from_mixed_final_decisions() -> None:
+    articles: Tuple[Article, ...] = (
+        build_article(1),
+        build_article(2),
+        build_article(3),
+    )
+    workflow, _, _, _, _, _, _, _, _ = build_workflow(
+        ("article-1", "article-2", "article-3"),
+        decisions=(
+            ScreeningDecisionType.ACCEPT,
+            ScreeningDecisionType.REVIEW,
+            ScreeningDecisionType.REJECT,
+        ),
+    )
+
+    result = await workflow.run(articles)
+
+    assert result.statistics.accepted_events == 1
+    assert result.statistics.review_events == 1
+    assert result.statistics.rejected_events == 1
+    assert len(result.decisions) == 3
+
+
+@pytest.mark.anyio
+async def test_screening_result_rejects_statistics_that_do_not_match_decisions() -> None:
+    article: Article = build_article(1)
+    workflow, _, _, _, _, _, _, _, _ = build_workflow(("article-1",))
+    result = await workflow.run((article,))
+
+    with pytest.raises(ValidationError):
+        ScreeningResult(
+            recommendation=result.recommendation,
+            decisions=result.decisions,
+            statistics=WorkflowStatistics(
+                total_articles=1,
+                accepted_articles=1,
+                rejected_articles=0,
+                extracted_events=1,
+                successful_batches=1,
+                accepted_events=0,
+                review_events=0,
+                rejected_events=0,
+            ),
+        )

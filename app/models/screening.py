@@ -18,7 +18,11 @@ class ScreeningDecisionType(str, Enum):
 
 
 class ScreeningCandidate(BaseModel):
-    """Immutable event input that preserves its article context and identity."""
+    """Immutable event input that preserves Article context and Event identity.
+
+    candidate_id is a request-local correlation key for matching a structured
+    LLM assessment to its input event. It is not a persistent NewsEvent ID.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -37,7 +41,7 @@ class ScreeningAssessment(BaseModel):
     importance: int = Field(ge=0, le=100)
     credibility: int = Field(ge=0, le=100)
     requires_cross_validation: bool
-    reasons: Tuple[str, ...] = Field(min_length=1)
+    reasons: Tuple[str, ...] = Field(min_length=1, max_length=3)
 
     @field_validator("reasons")
     @classmethod
@@ -66,7 +70,7 @@ class ScreeningDecision(BaseModel):
     importance: int = Field(ge=0, le=100)
     credibility: int = Field(ge=0, le=100)
     requires_cross_validation: bool
-    reasons: Tuple[str, ...] = Field(min_length=1)
+    reasons: Tuple[str, ...] = Field(min_length=1, max_length=3)
 
     @field_validator("reasons")
     @classmethod

@@ -63,7 +63,10 @@ class DefaultScreeningAssessmentParser(ScreeningAssessmentParser):
     ) -> None:
         candidate_ids: Set[str] = set(candidates_by_id)
         assessment_ids: Set[str] = set(assessments_by_id)
-        if candidate_ids != assessment_ids:
+        missing_ids: Set[str] = candidate_ids - assessment_ids
+        unknown_ids: Set[str] = assessment_ids - candidate_ids
+        if missing_ids or unknown_ids:
             raise ScreeningAssessmentValidationError(
-                "LLM assessment IDs do not match input screening candidate IDs"
+                "LLM assessment IDs do not match input screening candidate IDs: "
+                f"missing={sorted(missing_ids)}, unknown={sorted(unknown_ids)}"
             )

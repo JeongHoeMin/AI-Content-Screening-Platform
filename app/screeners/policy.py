@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Optional, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -17,18 +17,22 @@ class ScreeningPolicyConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    reject_relevance_threshold: int = Field(default=40, ge=0, le=100)
-    reject_importance_threshold: int = Field(default=40, ge=0, le=100)
-    accept_relevance_threshold: int = Field(default=70, ge=0, le=100)
-    accept_importance_threshold: int = Field(default=70, ge=0, le=100)
-    accept_credibility_threshold: int = Field(default=70, ge=0, le=100)
+    reject_relevance_below: int = Field(default=40, ge=0, le=100)
+    reject_importance_below: int = Field(default=40, ge=0, le=100)
+    accept_relevance_at_least: int = Field(default=70, ge=0, le=100)
+    accept_importance_at_least: int = Field(default=70, ge=0, le=100)
+    accept_credibility_at_least: int = Field(default=70, ge=0, le=100)
 
     @model_validator(mode="after")
     def _validate_threshold_order(self) -> "ScreeningPolicyConfig":
-        if self.reject_relevance_threshold > self.accept_relevance_threshold:
-            raise ValueError("Reject relevance threshold must not exceed accept threshold")
-        if self.reject_importance_threshold > self.accept_importance_threshold:
-            raise ValueError("Reject importance threshold must not exceed accept threshold")
+        if self.reject_relevance_below > self.accept_relevance_at_least:
+            raise ValueError(
+                "Reject relevance boundary must not exceed accept relevance boundary"
+            )
+        if self.reject_importance_below > self.accept_importance_at_least:
+            raise ValueError(
+                "Reject importance boundary must not exceed accept importance boundary"
+            )
         return self
 
 
@@ -47,8 +51,10 @@ class ScreeningPolicy(Protocol):
 class DefaultScreeningPolicy(ScreeningPolicy):
     """Applies the v1 reject, review, accept, then default review order."""
 
-    def __init__(self, config: ScreeningPolicyConfig = ScreeningPolicyConfig()) -> None:
-        self._config: ScreeningPolicyConfig = config
+    def __init__(self, config: Optional[ScreeningPolicyConfig] = None) -> None:
+        self._config: ScreeningPolicyConfig = (
+            config if config is not None else ScreeningPolicyConfig()
+        )
 
     def decide(
         self,
@@ -70,16 +76,16 @@ class DefaultScreeningPolicy(ScreeningPolicy):
         assessment: ScreeningAssessment,
     ) -> ScreeningDecisionType:
         if (
-            assessment.relevance < self._config.reject_relevance_threshold
-            or assessment.importance < self._config.reject_importance_threshold
+            assessment.relevance < self._config.reject_relevance_below
+            or assessment.importance < self._config.reject_importance_below
         ):
             return ScreeningDecisionType.REJECT
         if assessment.requires_cross_validation:
             return ScreeningDecisionType.REVIEW
         if (
-            assessment.relevance >= self._config.accept_relevance_threshold
-            and assessment.importance >= self._config.accept_importance_threshold
-            and assessment.credibility >= self._config.accept_credibility_threshold
+            assessment.relevance >= self._config.accept_relevance_at_least
+            and assessment.importance >= self._config.accept_importance_at_least
+            and assessment.credibility >= self._config.accept_credibility_at_least
         ):
             return ScreeningDecisionType.ACCEPT
         return ScreeningDecisionType.REVIEW

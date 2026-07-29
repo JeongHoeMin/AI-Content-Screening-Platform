@@ -23,12 +23,23 @@ Its default, configurable policy is evaluated in this fixed order:
 
 Thresholds belong to immutable `ScreeningPolicyConfig`, so a policy can be
 adjusted through dependency configuration without modifying the algorithm.
+`reject_relevance_below=40` rejects values from 0 through 39, while
+`accept_relevance_at_least=70` makes values from 70 through 100 satisfy that
+acceptance condition. The same boundary semantics apply to importance and
+credibility where applicable.
+
+Cross-validation review is evaluated after rejection rules and before
+acceptance rules. It cannot rescue a rejected event, but prevents an otherwise
+acceptable event from being accepted without review.
 
 ## Workflow Boundary
 
 The private workflow graph runs `Extract -> Screen Events -> Resolve`. Nodes
 return only newly produced state fields and never mutate input state. Screening
 decisions preserve the identical `NewsEvent` instances created by extraction.
+`ScreeningDecision` intentionally retains the full original `NewsEvent` in v1.
+A future persistent event identity model may replace that reference with an
+`event_id`; this PR does not add an artificial event ID system.
 
 Decisions are observational in this PR. A `REJECT` decision does not remove an
 event or alter downstream deterministic domain processing. `ScreeningResult`
@@ -47,9 +58,18 @@ from `StructuredOutputLLM`.
 The parser validates missing, unknown, duplicate, and mismatched candidate IDs
 and restores the original event order before policy evaluation. It does not
 create replacement `NewsEvent` objects. Empty event input skips the LLM call.
+`candidate_id` is a request-local correlation key, not a persistent `NewsEvent`
+ID; it only reconnects one structured LLM assessment to its input candidate.
 
 Prompts request concise user-readable rationales, never private chain of
-thought or internal reasoning.
+thought or internal reasoning. Each assessment contains between one and three
+reasons to bound response size and keep rationale output consistent.
+
+## Follow-up Refinements
+
+The policy configuration names encode their comparison semantics directly:
+`*_below` is used with strict rejection comparisons, and `*_at_least` is used
+with inclusive acceptance comparisons. This keeps boundary behavior explicit.
 
 ## Scope Limits and Follow-up
 
