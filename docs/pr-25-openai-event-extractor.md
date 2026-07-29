@@ -38,6 +38,8 @@ OPENAI_API_KEY="..." uv run screening \
 The OpenAI adapter calls `AsyncOpenAI.responses.parse` with the system prompt,
 user prompt, and Pydantic response model. It verifies a completed response and
 returns only `output_parsed`; OpenAI SDK response types do not leave the adapter.
+Shared structured-output exceptions live in `app/llms/errors.py`, so generic
+extraction orchestration does not depend on the OpenAI adapter module.
 Only expected OpenAI SDK request failures and response-processing failures are
 recoverable. Unexpected programming errors propagate without being converted to
 batch failures.

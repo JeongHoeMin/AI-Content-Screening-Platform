@@ -182,6 +182,7 @@ def test_cli_returns_execution_error_when_workflow_fails(
 
         def error(self, event: str, **kwargs: object) -> None:
             self.events.append(event)
+            sys.stderr.write(f"{event}\n")
 
     logger = CapturingLogger()
     monkeypatch.setattr(cli, "create_screening_workflow", lambda mode: FailingWorkflow())
@@ -194,4 +195,5 @@ def test_cli_returns_execution_error_when_workflow_fails(
 
     assert exit_code == 1
     assert captured.out == ""
+    assert "cli_execution_failed" in captured.err
     assert logger.events == ["cli_execution_failed"]

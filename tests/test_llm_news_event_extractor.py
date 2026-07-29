@@ -184,7 +184,10 @@ async def test_extractor_records_actual_request_count_for_fifty_articles() -> No
 
 @pytest.mark.anyio
 async def test_extractor_raises_when_every_batch_fails() -> None:
-    expected_error: StructuredOutputCallError = StructuredOutputCallError("APIError")
+    expected_error: StructuredOutputCallError = StructuredOutputCallError(
+        provider="test",
+        error_type="APIError",
+    )
     articles: Tuple[Article, ...] = (build_article(1),)
     extractor, builder, llm = build_extractor(
         responses=[],
@@ -226,7 +229,10 @@ async def test_extractor_continues_after_one_batch_fails_and_counts_empty_succes
         nonlocal calls
         calls += 1
         if calls == 1:
-            raise StructuredOutputCallError("APIConnectionError")
+            raise StructuredOutputCallError(
+                provider="test",
+                error_type="APIConnectionError",
+            )
         return await original_generate(messages, response_model)
 
     llm.generate = generate_with_first_failure  # type: ignore[method-assign]
@@ -238,6 +244,7 @@ async def test_extractor_continues_after_one_batch_fails_and_counts_empty_succes
     assert result.inferences[0].events == ()
     assert len(result.errors) == 1
     assert result.errors[0].kind.value == "api_call"
+    assert result.errors[0].message == "test request failed: APIConnectionError"
 
 
 @pytest.mark.anyio

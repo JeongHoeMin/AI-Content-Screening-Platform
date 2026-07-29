@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from app.extractors.base import NewsEventExtractor
 from app.extractors.errors import AllExtractionBatchesFailedError
 from app.extractors.errors import InferenceResultValidationError
-from app.llms.openai_structured import (
+from app.llms.errors import (
     StructuredOutputCallError,
     StructuredOutputResponseError,
 )
@@ -63,7 +63,7 @@ class LLMNewsEventExtractor(NewsEventExtractor):
                     self._build_batch_error(
                         batch,
                         ExtractionErrorKind.API_CALL,
-                        f"OpenAI request failed: {error.error_type}",
+                        f"{error.provider} request failed: {error.error_type}",
                     )
                 )
                 continue

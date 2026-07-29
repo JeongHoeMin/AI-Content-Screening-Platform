@@ -116,13 +116,16 @@ async def test_structured_client_converts_sdk_error_to_safe_call_error() -> None
     )
     client = OpenAIResponsesStructuredOutputClient(FakeAsyncOpenAI(responses))  # type: ignore[arg-type]
 
-    with pytest.raises(StructuredOutputCallError, match="APIConnectionError"):
+    with pytest.raises(StructuredOutputCallError, match="APIConnectionError") as error_info:
         await client.parse(
             model="test-model",
             system_prompt="system",
             user_prompt="user",
             response_model=Output,
         )
+
+    assert error_info.value.provider == "openai"
+    assert error_info.value.error_type == "APIConnectionError"
 
 
 @pytest.mark.anyio

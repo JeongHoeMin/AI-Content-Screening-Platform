@@ -5,26 +5,11 @@ from typing import Any, Optional, Protocol, Type, TypeVar
 from openai import AsyncOpenAI, OpenAIError
 from pydantic import BaseModel
 
+from app.llms.errors import StructuredOutputCallError, StructuredOutputResponseError
 from app.llms.models import ChatMessage, ChatRole
 from app.llms.structured import StructuredOutputLLM
 
 OutputT = TypeVar("OutputT", bound=BaseModel)
-
-
-class StructuredOutputCallError(RuntimeError):
-    """Raised when an OpenAI SDK request fails before a usable response exists."""
-
-    def __init__(self, error_type: str) -> None:
-        self.error_type: str = error_type
-        super().__init__(f"OpenAI structured output request failed: {error_type}")
-
-
-class StructuredOutputResponseError(ValueError):
-    """Raised when an OpenAI response cannot provide a complete parsed result."""
-
-    def __init__(self, reason: str) -> None:
-        self.reason: str = reason
-        super().__init__(f"OpenAI structured output failed: {reason}")
 
 
 class StructuredOutputClient(Protocol):
@@ -64,7 +49,10 @@ class OpenAIResponsesStructuredOutputClient(StructuredOutputClient):
                 text_format=response_model,
             )
         except OpenAIError as error:
-            raise StructuredOutputCallError(type(error).__name__) from error
+            raise StructuredOutputCallError(
+                provider="openai",
+                error_type=type(error).__name__,
+            ) from error
         status: Optional[str] = getattr(response, "status", None)
         if status == "failed":
             raise StructuredOutputResponseError("response_failed")
