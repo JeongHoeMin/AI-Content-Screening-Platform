@@ -1,96 +1,39 @@
 # PR #6 ContentPipelineWorkflow
 
-## Summary
+## 요약
 
-- `ContentPipelineWorkflow` is introduced to run multiple Skills as one sequential pipeline.
-- Workflow uses Harness for Skill execution.
-- Workflow manages only Skill order and data passing.
-- Final output is `ContentPipelineResult`, not raw SkillResult objects.
+- 여러 Skill을 순차 파이프라인으로 실행하는 `ContentPipelineWorkflow`를 도입한다.
+- Workflow는 Harness로 Skill을 실행하고 순서와 데이터 전달만 관리한다.
+- 최종 출력은 원시 `SkillResult`가 아닌 `ContentPipelineResult`다.
 
-## Architecture
+## 구조와 주요 변경
 
 ```text
-ContentPipelineWorkflow
-        |
-        v
-      Harness
-        |
-        v
-CollectPostsSkill -> ScreenPostsSkill -> GenerateScriptSkill
-        |
-        v
-ContentPipelineResult
+ContentPipelineWorkflow -> Harness -> CollectPostsSkill -> ScreenPostsSkill -> GenerateScriptSkill
+                                                   -> ContentPipelineResult
 ```
 
-## Key Changes
+- `app/models/workflow.py`에 `ContentPipelineRequest`, `ContentPipelineResult`를 추가한다.
+- `app/workflows`에 `Workflow`, `ContentPipelineWorkflow`를 추가한다.
+- 요청은 `sources: List[CommunityType]`, `limit`, `period: timedelta`,
+  `category: Optional[str]`를 포함하며 별도 `Source` 모델은 만들지 않는다.
+- 결과는 `posts`, `candidates`, `scripts`를 포함한다.
 
-- `app/models/workflow.py` adds:
-  - `ContentPipelineRequest`
-  - `ContentPipelineResult`
-- `app/workflows` package adds:
-  - `Workflow`
-  - `ContentPipelineWorkflow`
+## 실행 흐름
 
-## Request And Result
+1. `ContentPipelineRequest`로 `CollectPostsRequest`를 만든다.
+2. Harness로 `CollectPostsSkill`을 실행한다.
+3. 수집 게시글로 `ScreenPostsRequest`를 만들고 Skill을 실행한다.
+4. 후보로 `GenerateScriptRequest`를 만들고 Skill을 실행한다.
+5. 조합한 `ContentPipelineResult`를 반환한다.
 
-- `ContentPipelineRequest` contains:
-  - `sources: List[CommunityType]`
-  - `limit: int`
-  - `period: timedelta`
-  - `category: Optional[str]`
-- No separate `Source` model is introduced.
-- `ContentPipelineResult` contains:
-  - `posts`
-  - `candidates`
-  - `scripts`
+## 설계 규칙과 테스트
 
-## Execution Flow
+- Workflow는 Harness와 모든 Skill을 생성자 주입받고 직접 생성하지 않는다.
+- 모든 Skill 실행은 `harness.run()`을 거치며 Workflow는 순차·무상태이고 SkillResult를 반환하지 않는다.
+- 실행 순서, 단계 간 데이터 전달, 결과 조합, collect/screen/generate 실패 전파를 검증한다.
 
-1. Build `CollectPostsRequest` from `ContentPipelineRequest`.
-2. Run `CollectPostsSkill` through Harness.
-3. Pass collected posts into `ScreenPostsRequest`.
-4. Run `ScreenPostsSkill` through Harness.
-5. Pass candidates into `GenerateScriptRequest`.
-6. Run `GenerateScriptSkill` through Harness.
-7. Return composed `ContentPipelineResult`.
+## 범위 제외
 
-## Design Rules
-
-- Workflow receives Harness and all Skills through constructor injection.
-- Workflow does not create Harness.
-- Workflow does not create Skills.
-- All Skill execution goes through `harness.run()`.
-- Workflow is sequential.
-- Workflow does not store state.
-- Workflow does not return SkillResult.
-- Workflow propagates failures without partial success handling.
-
-## Test Plan
-
-- Use Harness test double.
-- Use Skill test doubles.
-- Verify execution order: collect, screen, generate.
-- Verify collect data is passed to screen request.
-- Verify screen candidates are passed to generate request.
-- Verify `ContentPipelineResult` composition.
-- Verify collect failure stops screen and generate.
-- Verify screen failure stops generate.
-- Verify generate failure is propagated.
-
-## Out of Scope
-
-- OpenAI API.
-- Claude API.
-- Gemini API.
-- Prompt engineering.
-- Retry.
-- Guardrail.
-- Reflection.
-- Model routing.
-- LangGraph.
-- Parallel execution.
-- Partial success.
-- Workflow state storage.
-- Core Contract changes.
-- Harness changes.
-- Existing Skill changes.
+- OpenAI/Claude/Gemini, 프롬프트, retry, guardrail, reflection, model routing,
+  LangGraph, 병렬·부분 성공, 상태 저장, 핵심 계약·Harness·기존 Skill 변경.

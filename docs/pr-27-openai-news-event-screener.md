@@ -1,65 +1,51 @@
-# PR-27 OpenAI News Event Screener
+# PR-27 OpenAI 뉴스 이벤트 심사기
 
-## Summary
+## 요약
 
-OpenAI mode evaluates extracted news events with structured LLM output before
-the existing deterministic screening policy makes an accept, review, or reject
-decision. Mock mode and the public CLI JSON schema remain unchanged.
+OpenAI 모드는 기존 결정적 심사 정책이 수락·검토·거절을 결정하기 전에 structured LLM output으로
+추출된 뉴스 이벤트를 평가한다. Mock 모드와 공개 CLI JSON schema는 변경하지 않는다.
 
-## Contract
+## 계약
 
-The LLM returns a batch-local `event_index`, relevance, importance,
-credibility, cross-validation requirement, and concise reasons. Scores are JSON
-numbers only: integer values and integral float values are converted to the
-existing 0--100 integer domain scores. The parser restores event identity and
-input order; the policy alone makes final decisions.
+LLM은 batch 지역 `event_index`, 관련성, 중요도, 신뢰도, 교차 검증 필요 여부, 간결한 이유를 반환한다.
+점수는 JSON 숫자만 사용한다. 정수와 정수값 실수는 기존 0--100 도메인 정수 점수로 변환한다.
+Parser는 이벤트 identity와 입력 순서를 복원하고 최종 결정은 Policy만 내린다.
 
-`credibility` evaluates the supplied article evidence and source quality. It is
-not the extractor's `confidence`, which reports support for extraction.
+`credibility`는 제공된 기사 근거와 출처 품질을 평가하며, 추출 지원 여부를 나타내는 extractor의
+`confidence`와 다르다.
 
-## Failure and observability policy
+## 실패 및 관측 정책
 
-Invalid individual assessments are excluded without fabricating fallback
-scores. The parser returns structured, non-sensitive error observations and the
-screener logs only batch index, event index, internal candidate ID, and error
-kind. It never logs article content, prompts, raw provider responses, or API
-keys. Batch provider/response failures do not stop later batches. If input
-events exist but no valid decision is produced, the screener raises
-`NoValidScreeningDecisionsError`.
+잘못된 개별 평가는 가짜 fallback 점수 없이 제외한다. Parser는 구조화된 비민감 오류 관측값을 반환하고
+Screener는 batch index, event index, 내부 candidate ID, 오류 종류만 로그에 남긴다.
+기사 본문, prompt, 원시 provider 응답, API key는 로그에 남기지 않는다.
+Provider·응답 batch 실패가 뒤 batch를 중단시키지 않으며, 입력 이벤트가 있는데 유효 결정이 하나도 없으면
+`NoValidScreeningDecisionsError`를 발생시킨다.
 
-## OpenAI assembly and smoke test
+## OpenAI 조립과 smoke test
 
-Extractor and screener share the OpenAI structured-output client. The current
-structured LLM gateway receives its response model per request and is also safe
-to share; a future stateful gateway must be instantiated per task while keeping
-the client shared.
+Extractor와 Screener는 OpenAI structured-output client를 공유한다. 현재 structured LLM gateway는
+요청별로 response model을 받으므로 공유해도 안전하다. 이후 stateful gateway가 생기면 client는 공유하되
+task별 gateway 인스턴스를 생성한다.
 
-Run the automated checks with `uv run pytest`, `uv run python -m compileall app
-tests`, and `git diff --check`. With valid OpenAI configuration, run
-`uv run screening --mode openai --input examples/openai-screening-articles.json`.
-Verify integer scores, evidence-grounded reasons, appropriate cross-validation
-explanations, no investment advice, and resistance to prompt-injection text.
+자동 검증은 `uv run pytest`, `uv run python -m compileall app tests`, `git diff --check`를 사용한다.
+유효한 OpenAI 설정이 있으면 다음을 실행한다.
 
-## Implementation record
+```bash
+uv run screening --mode openai --input examples/openai-screening-articles.json
+```
 
-2026-07-29: The response boundary uses strict JSON numeric values while the
-parser owns 0--100 and integral-value validation. This preserves valid sibling
-events when one score is invalid. The final result omits recoverable screening
-errors by design; limited structured logs preserve operational observability
-without exposing article or provider payloads.
+정수 점수, 근거 기반 이유, 적절한 교차 검증 설명, 투자 조언 부재, prompt injection 텍스트에 대한 저항성을 확인한다.
 
-2026-07-29: Response DTO indexes are strict integers but deliberately have no
-non-negative constraint. The parser records negative and out-of-range indexes
-as event-level observations, retaining valid siblings. Cross-validation flags
-are strict JSON booleans, and candidate IDs are indexed once per screening run
-to preserve the internal identity invariant.
+## 구현 기록
 
-2026-07-29: Transport DTO fields deliberately preserve malformed primitive
-values so the parser can record event-level errors without discarding valid
-siblings. Batch-level failures are provider calls, structured-output response
-failures, or invalid response roots; field types, indexes, scores, flags, and
-reasons are event-level failures.
+### 2026-07-29
 
-Event-index type errors, including strings, booleans, and null, are recorded as
-`INVALID_EVENT_INDEX`. They cannot be mapped to an actual candidate, so their
-`candidate_id` remains `None`.
+- response boundary는 정수값·0--100 검증을 Parser가 소유하도록 해 하나의 잘못된 점수가 정상 sibling을 버리지 않게 한다.
+- Response DTO index는 strict integer이지만 음수가 아닌 값으로 제한하지 않는다. Parser는 음수·범위 밖 index를
+  이벤트 단위 관측값으로 기록하고 정상 sibling을 보존한다.
+- transport DTO는 malformed primitive를 보존해 Parser가 field 단위 오류를 기록하게 한다.
+  Provider 호출, structured-output 응답 실패, 잘못된 응답 root는 batch-level 실패이고,
+  field type·index·score·flag·reason은 event-level 실패다.
+- 문자열·boolean·null event index는 `INVALID_EVENT_INDEX`로 기록한다. 실제 candidate에 매핑할 수 없으므로
+  `candidate_id`는 `None`으로 남긴다.
