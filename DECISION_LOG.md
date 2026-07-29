@@ -4,6 +4,15 @@
 
 이 문서는 프로젝트의 장기 설계 계약을 ADR(Architecture Decision Record) 형식으로 기록한다. 새 결정은 구현 전에 추가하고, 승인된 결론은 `Accepted`로 표시한다. 대체된 결정은 삭제하지 않고 `Superseded`와 대체 ADR을 연결한다. PR별 구현 이력과 검토 수정은 `docs/pr-*.md`에 기록한다.
 
+## ADR 작성 규칙
+
+- ADR 번호는 생성한 뒤 변경하거나 재사용하지 않는다.
+- 승인된 ADR은 삭제하지 않는다.
+- 설계가 변경되면 새 ADR을 추가하고 기존 ADR의 상태를 `Superseded`로 바꾼 뒤 대체 ADR을 연결한다.
+- 하나의 ADR은 하나의 설계 결정만 다룬다.
+- ADR에는 구현 목록이 아니라 설계의 context, decision, consequences를 기록한다.
+- 상태는 최소한 `Proposed`, `Accepted`, `Rejected`, `Deprecated`, `Superseded` 중 하나를 사용한다.
+
 # ADR-001
 
 ## Title

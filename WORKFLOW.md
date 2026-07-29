@@ -12,6 +12,35 @@ Article
   → Analyze → Aggregate → Score → Recommend → WorkflowResult / CLI JSON
 ```
 
+## 노드 계약 형식
+
+아래의 모든 실행 노드는 같은 여섯 개 계약 필드를 사용한다.
+
+```text
+Input → Output → Failure → Retry → Owner → Responsibility
+```
+
+- **Input**: 직전 노드가 보존해야 하는 Domain 값과 identity
+- **Output**: 다음 노드에 전달하는 검증된 Domain 값 또는 workflow state
+- **Failure**: 부분 실패를 격리하는 범위와 fatal error 조건
+- **Retry**: Workflow가 소유하는 재시도 여부와 provider 재시도의 경계
+- **Owner**: 결과를 관측·검증·결정하는 구현/계층
+- **Responsibility**: 수행하는 일과 명시적으로 수행하지 않는 일
+
+## 계약 요약
+
+| Node | Input | Output | Failure 범위 | Retry | Owner |
+| --- | --- | --- | --- | --- | --- |
+| Evaluate | `Article[]` | `ArticleEvaluationResult[]` | 실행 오류 | 없음 | Evaluator |
+| Extract | 허용된 `Article[]` | inference, `NewsEvent[]` | event, batch | SDK transport만 | LLM, Parser |
+| Screen | inference | `ScreeningDecision[]` | event, batch | SDK transport만 | LLM, Parser, Policy |
+| Cross Validate | REVIEW decision, article evidence | `CrossValidationResult[]` | evidence, event, batch | SDK transport만 | LLM, Parser, Policy |
+| Resolve | decision, validation, ticker | `ResolvedNewsEvent[]` | identity 불변식 | 없음 | Resolver, Policy |
+| Analyze | resolved event | `ImpactAnalysis[]` | 실행 오류 | 없음 | Analyzer |
+| Aggregate | impact analyses | `EvidenceAggregation` | 실행 오류 | 없음 | Aggregator |
+| Score | aggregation | `ScoringResult` | 실행 오류 | 없음 | Scoring strategy |
+| Recommend | scoring | recommendation, statistics | 실행 오류 | 없음 | Recommendation policy |
+
 ## Evaluate
 
 ### Input
