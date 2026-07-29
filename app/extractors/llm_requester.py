@@ -8,7 +8,7 @@ from app.llms.models import ChatMessage, ChatResponse
 
 
 class LLMNewsEventRequester(NewsEventRequester):
-    """Stateless infrastructure adapter that forwards requests to an LLM."""
+    """Stateless infrastructure adapter that calls its injected LLM client."""
 
     def __init__(self, llm_client: LLMClient) -> None:
         self._llm_client: LLMClient = llm_client

@@ -6,13 +6,13 @@ from app.llms.models import ChatMessage, ChatResponse
 
 
 class NewsEventRequester(Protocol):
-    """Forwards prepared news event messages to an LLM client."""
+    """Defines forwarding of a prepared news event request."""
 
     async def request(self, messages: List[ChatMessage]) -> ChatResponse:
-        """Forward one request without copying, interpreting, or wrapping.
+        """Forward prepared messages while preserving their identity.
 
-        Implementations call LLMClient exactly once with the unchanged message
-        list and ``config=None``. They return the unchanged ChatResponse and
-        propagate exceptions without wrapping or conversion.
+        Implementations do not copy or interpret the input messages, and they
+        return the received ChatResponse unchanged. Exceptions propagate
+        without wrapping or conversion.
         """
         ...

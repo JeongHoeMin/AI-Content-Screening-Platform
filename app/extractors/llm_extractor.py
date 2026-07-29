@@ -13,7 +13,14 @@ from app.prompts.news_event import NewsEventPromptInput
 
 
 class LLMNewsEventExtractor(NewsEventExtractor):
-    """Orchestrates prompt building, LLM requesting, and response parsing."""
+    """Application-layer orchestrator for news event extraction.
+
+    This class coordinates PromptBuilder, NewsEventRequester, and
+    NewsEventParser. It does not create prompts, call an LLM directly, parse
+    responses, process JSON, validate DTOs, create domain values, or make
+    business and investment decisions. Retry, timeout, logging, metrics, and
+    guardrail policies also remain outside this orchestrator.
+    """
 
     def __init__(
         self,
