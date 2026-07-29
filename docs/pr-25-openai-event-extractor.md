@@ -22,7 +22,8 @@ OPENAI_TIMEOUT_SECONDS=60
 OPENAI_MAX_RETRIES=2
 ```
 
-No dotenv file is loaded automatically.
+OpenAI mode automatically loads the repository-root `.env` when it exists.
+Existing shell environment values take precedence over `.env` values.
 `OPENAI_MODEL` must be non-empty after trimming, `OPENAI_TIMEOUT_SECONDS` must
 be a finite positive number, and `OPENAI_MAX_RETRIES` must be a non-negative
 integer.
@@ -70,4 +71,4 @@ model's extraction confidence, not the factual truth of the event.
 Unit tests use fake SDK clients; no automated test calls the OpenAI service.
 This PR excludes OpenAI screeners and validators, article collection, crawling,
 web search, RAG, persistence, scheduling, UI, event clustering, ticker
-inference, dotenv loading, prompt versioning, and cost tracking.
+inference, prompt versioning, and cost tracking.

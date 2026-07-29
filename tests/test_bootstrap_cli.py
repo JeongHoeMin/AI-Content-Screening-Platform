@@ -11,6 +11,7 @@ import pytest
 import app.bootstrap as bootstrap
 from app import cli
 from app.bootstrap import ExecutionMode, create_screening_workflow
+from app.config import ConfigurationError, OpenAIConfig
 from app.extractors import LLMNewsEventExtractor
 from app.mock_grouping import build_mock_grouping_key, normalize_mock_title
 from app.mock_screening import (
@@ -93,6 +94,19 @@ def test_mock_bootstrap_creates_new_workflow_instances() -> None:
     assert first is not second
 
 
+def test_mock_bootstrap_does_not_load_openai_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_openai_config_load() -> object:
+        raise AssertionError("OpenAI config must not load in mock mode")
+
+    monkeypatch.setattr(bootstrap, "load_openai_config", fail_openai_config_load)
+
+    workflow = bootstrap.create_screening_workflow(ExecutionMode.MOCK)
+
+    assert workflow is not None
+
+
 def test_openai_bootstrap_assembles_only_the_extractor_as_llm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -100,8 +114,17 @@ def test_openai_bootstrap_assembles_only_the_extractor_as_llm(
         def __init__(self, **components: object) -> None:
             self.components: dict[str, object] = components
 
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setattr(bootstrap, "ScreeningWorkflow", CapturingWorkflow)
+    monkeypatch.setattr(
+        bootstrap,
+        "load_openai_config",
+        lambda: OpenAIConfig(
+            api_key="test-key",
+            model="gpt-4o-mini",
+            timeout_seconds=60.0,
+            max_retries=2,
+        ),
+    )
 
     first = bootstrap.create_screening_workflow(ExecutionMode.OPENAI)
     second = bootstrap.create_screening_workflow(ExecutionMode.OPENAI)
@@ -147,25 +170,66 @@ def test_cli_input_errors_write_no_stdout_and_return_exit_two(
     assert result.stderr
 
 
-def test_cli_openai_mode_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+def test_cli_openai_mode_requires_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class CapturingLogger:
+        def error(self, event: str, **kwargs: object) -> None:
+            sys.stderr.write(f"{event}: {kwargs['error']}\n")
 
-    result = _command("-m", "app", "--input", str(SAMPLE_INPUT), "--mode", "openai")
+    def fail_workflow_factory(mode: ExecutionMode) -> object:
+        raise ConfigurationError("OPENAI_API_KEY is required for openai mode.")
 
-    assert result.returncode == 2
-    assert result.stdout == ""
-    assert "OPENAI_API_KEY is required" in result.stderr
+    monkeypatch.setattr(cli, "create_screening_workflow", fail_workflow_factory)
+    monkeypatch.setattr(cli, "logger", CapturingLogger())
+
+    exit_code: int = asyncio.run(
+        cli.run(("--input", str(SAMPLE_INPUT), "--mode", "openai"))
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "OPENAI_API_KEY is required" in captured.err
 
 
-def test_cli_openai_mode_rejects_blank_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+def test_cli_openai_mode_rejects_blank_model(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class CapturingLogger:
+        def error(self, event: str, **kwargs: object) -> None:
+            sys.stderr.write(f"{event}: {kwargs['error']}\n")
+
+    def fail_workflow_factory(mode: ExecutionMode) -> object:
+        raise ConfigurationError("OPENAI_MODEL must not be empty.")
+
+    monkeypatch.setattr(cli, "create_screening_workflow", fail_workflow_factory)
+    monkeypatch.setattr(cli, "logger", CapturingLogger())
+
+    exit_code: int = asyncio.run(
+        cli.run(("--input", str(SAMPLE_INPUT), "--mode", "openai"))
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 2
+    assert captured.out == ""
+    assert "OPENAI_MODEL must not be empty" in captured.err
+
+
+def test_mock_cli_ignores_invalid_openai_environment(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
     monkeypatch.setenv("OPENAI_MODEL", "   ")
 
-    result = _command("-m", "app", "--input", str(SAMPLE_INPUT), "--mode", "openai")
+    exit_code: int = asyncio.run(cli.run(("--input", str(SAMPLE_INPUT), "--mode", "mock")))
+    captured = capsys.readouterr()
 
-    assert result.returncode == 2
-    assert result.stdout == ""
-    assert "OPENAI_MODEL must not be empty" in result.stderr
+    assert exit_code == 0
+    assert captured.err == ""
+    ScreeningResult.model_validate_json(captured.out)
 
 
 def test_cli_returns_execution_error_when_workflow_fails(

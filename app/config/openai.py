@@ -3,6 +3,13 @@ from __future__ import annotations
 import math
 import os
 from dataclasses import dataclass
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+
+_REPOSITORY_ROOT: Path = Path(__file__).resolve().parents[2]
+_OPENAI_DOTENV_PATH: Path = _REPOSITORY_ROOT / ".env"
 
 
 class ConfigurationError(ValueError):
@@ -20,7 +27,23 @@ class OpenAIConfig:
 
 
 def load_openai_config() -> OpenAIConfig:
-    """Load OpenAI settings from environment variables without loading dotenv files."""
+    """Load OpenAI settings after merging the optional repository dotenv file."""
+    _load_openai_dotenv()
+    return _load_openai_config_from_environment()
+
+
+def _load_openai_dotenv() -> None:
+    """Load the optional repository dotenv file without overriding shell values."""
+    if not _OPENAI_DOTENV_PATH.is_file():
+        return
+    try:
+        load_dotenv(dotenv_path=_OPENAI_DOTENV_PATH, override=False)
+    except OSError as error:
+        raise ConfigurationError("Unable to load OpenAI dotenv configuration.") from error
+
+
+def _load_openai_config_from_environment() -> OpenAIConfig:
+    """Validate the final dotenv and process-environment configuration values."""
     api_key: str = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
         raise ConfigurationError("OPENAI_API_KEY is required for openai mode.")
