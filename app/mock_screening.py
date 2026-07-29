@@ -8,8 +8,10 @@ from app.extractors.base import NewsEventExtractor
 from app.models.article import Article
 from app.models.cross_validation import (
     CrossValidationAssessment,
+    CrossValidationAssessmentEvidence,
     CrossValidationCandidate,
     CrossValidationResult,
+    EvidenceRelation,
 )
 from app.models.llm_inference import LLMExtractionResult, LLMInferenceResult
 from app.models.news_event import NewsEvent
@@ -125,14 +127,14 @@ class DeterministicMockCrossValidator(CrossValidator):
             assessment: CrossValidationAssessment = CrossValidationAssessment(
                 candidate_id=candidate.candidate_id,
                 confidence=100,
-                supporting_article_ids=tuple(article.id for article in related),
+                evidence=tuple(CrossValidationAssessmentEvidence(article_id=article.id, relation=EvidenceRelation.SUPPORTS, matched_claims=("Deterministic mock support.",)) for article in related),
                 reasons=("Deterministic mock supporting evidence.",),
             )
         elif len(related) == 1:
             assessment = CrossValidationAssessment(
                 candidate_id=candidate.candidate_id,
                 confidence=100,
-                partially_matching_article_ids=(related[0].id,),
+                evidence=(CrossValidationAssessmentEvidence(article_id=related[0].id, relation=EvidenceRelation.PARTIAL),),
                 reasons=("Deterministic mock partial evidence.",),
             )
         else:

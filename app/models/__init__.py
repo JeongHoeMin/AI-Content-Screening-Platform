@@ -74,9 +74,11 @@ from app.models.screening import (
     ScreeningParseResult,
 )
 from app.models.cross_validation import (
-    BatchCrossValidationConfig, CrossValidationAssessment, CrossValidationAssessmentResponse,
-    CrossValidationCandidate, CrossValidationResult, CrossValidationStatus, EvidenceRelation,
-    ValidationEvidence,
+    BatchCrossValidationConfig, CrossValidationAssessment, CrossValidationAssessmentEvidence,
+    CrossValidationAssessmentResponse, CrossValidationAssessmentResponseItem,
+    CrossValidationCandidate, CrossValidationEvidenceResponseItem, CrossValidationParseError,
+    CrossValidationParseErrorKind, CrossValidationParseResult, CrossValidationResult,
+    CrossValidationStatus, EvidenceRelation, ValidationEvidence,
 )
 from app.models.workflow import ContentPipelineRequest, ContentPipelineResult
 
@@ -149,8 +151,14 @@ __all__ = [
     "ScreeningParseErrorKind",
     "ScreeningParseResult",
     "CrossValidationAssessment",
+    "CrossValidationAssessmentEvidence",
     "CrossValidationAssessmentResponse",
+    "CrossValidationAssessmentResponseItem",
     "CrossValidationCandidate",
+    "CrossValidationEvidenceResponseItem",
+    "CrossValidationParseError",
+    "CrossValidationParseErrorKind",
+    "CrossValidationParseResult",
     "CrossValidationResult",
     "CrossValidationStatus",
     "EvidenceRelation",

@@ -7,7 +7,7 @@ from openai import AsyncOpenAI
 
 from app.aggregators import DefaultAggregationStrategy, DefaultEvidenceAggregator
 from app.analyzers import DefaultImpactAnalyzer, RuleImpactStrategy
-from app.cross_validators import DefaultCrossValidationPolicy
+from app.cross_validators import CrossValidationPolicyConfig, DefaultCrossValidationAssessmentParser, DefaultCrossValidationPolicy, LLMEventCrossValidator
 from app.config import OpenAIConfig, load_openai_config
 from app.extractors import DefaultNewsEventParser, LLMNewsEventExtractor
 from app.llms import (
@@ -17,7 +17,7 @@ from app.llms import (
     StructuredOutputLLM,
     create_async_openai_client,
 )
-from app.models import BatchExtractionConfig, BatchScreeningConfig
+from app.models import BatchCrossValidationConfig, BatchExtractionConfig, BatchScreeningConfig
 from app.evaluators import RuleArticleEvaluator, RuleArticleEvaluatorConfig
 from app.mock_screening import (
     DeterministicMockCrossValidator,
@@ -25,7 +25,7 @@ from app.mock_screening import (
     DeterministicMockScreener,
 )
 from app.recommenders import DefaultRecommendationEngine, RuleRecommendationPolicy
-from app.prompts import NewsEventPromptBuilder, ScreeningPromptBuilder
+from app.prompts import CrossValidationPromptBuilder, NewsEventPromptBuilder, ScreeningPromptBuilder
 from app.resolvers import DefaultResolvePolicy, DefaultTickerResolver, StaticTickerLookup
 from app.scorers import DefaultScoringEngine, RuleScoringStrategy
 from app.screeners import (
@@ -57,7 +57,7 @@ def create_screening_workflow(
 def _create_mock_workflow() -> ScreeningWorkflow:
     screening_policy: DefaultScreeningPolicy = DefaultScreeningPolicy()
     cross_validation_policy: DefaultCrossValidationPolicy = (
-        DefaultCrossValidationPolicy()
+        DefaultCrossValidationPolicy(CrossValidationPolicyConfig(use_url_domain_identity=False))
     )
     return ScreeningWorkflow(
         evaluator=RuleArticleEvaluator(RuleArticleEvaluatorConfig()),
@@ -107,7 +107,7 @@ def _create_openai_workflow() -> ScreeningWorkflow:
             policy=screening_policy,
             config=BatchScreeningConfig(),
         ),
-        cross_validator=DeterministicMockCrossValidator(cross_validation_policy),
+        cross_validator=LLMEventCrossValidator(structured_llm=structured_llm, parser=DefaultCrossValidationAssessmentParser(), prompt_builder=CrossValidationPromptBuilder(), policy=cross_validation_policy, config=BatchCrossValidationConfig()),
         resolver=DefaultTickerResolver(StaticTickerLookup({})),
         resolve_policy=DefaultResolvePolicy(),
         impact_analyzer=DefaultImpactAnalyzer(RuleImpactStrategy()),

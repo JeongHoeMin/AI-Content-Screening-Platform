@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Tuple
+from typing import List, Optional, Tuple, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt, StrictStr, field_validator, model_validator
 
 from app.models.article import Article
 from app.models.news_event import NewsEvent
@@ -36,7 +36,6 @@ class ValidationEvidence(BaseModel):
 
 class CrossValidationCandidate(BaseModel):
     model_config = ConfigDict(frozen=True)
-
     candidate_id: str = Field(min_length=1)
     decision: ScreeningDecision
     source_article: Article
@@ -51,16 +50,19 @@ class CrossValidationCandidate(BaseModel):
         return self
 
 
-class CrossValidationAssessment(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    candidate_id: str = Field(min_length=1)
-    confidence: int = Field(ge=0, le=100)
-    supporting_article_ids: Tuple[str, ...] = ()
-    partially_matching_article_ids: Tuple[str, ...] = ()
-    contradicting_article_ids: Tuple[str, ...] = ()
+class CrossValidationAssessmentEvidence(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    article_id: str = Field(min_length=1)
+    relation: EvidenceRelation
     matched_claims: Tuple[str, ...] = ()
     conflicting_claims: Tuple[str, ...] = ()
+
+
+class CrossValidationAssessment(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    candidate_id: str = Field(min_length=1)
+    confidence: int = Field(ge=0, le=100)
+    evidence: Tuple[CrossValidationAssessmentEvidence, ...] = ()
     reasons: Tuple[str, ...] = Field(min_length=1, max_length=3)
 
     @field_validator("reasons")
@@ -71,14 +73,63 @@ class CrossValidationAssessment(BaseModel):
         return reasons
 
 
+IndexValue = Union[StrictInt, StrictStr, StrictBool, None]
+ScoreValue = Union[StrictInt, StrictFloat, StrictStr, StrictBool, None]
+RelationValue = Union[StrictStr, StrictInt, StrictBool, None]
+
+
+class CrossValidationEvidenceResponseItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    evidence_index: IndexValue = None
+    relation: RelationValue = None
+    matched_claims: List[object] = Field(default_factory=list)
+    conflicting_claims: List[object] = Field(default_factory=list)
+
+
+class CrossValidationAssessmentResponseItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    event_index: IndexValue = None
+    evidence: List[CrossValidationEvidenceResponseItem] = Field(default_factory=list)
+    confidence: ScoreValue = None
+    reasons: List[object] = Field(default_factory=list)
+
+
 class CrossValidationAssessmentResponse(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(extra="forbid")
+    assessments: List[CrossValidationAssessmentResponseItem]
+
+
+class CrossValidationParseErrorKind(str, Enum):
+    INVALID_EVENT_INDEX = "invalid_event_index"
+    DUPLICATE_EVENT_INDEX = "duplicate_event_index"
+    MISSING_EVENT_INDEX = "missing_event_index"
+    INVALID_EVIDENCE_INDEX = "invalid_evidence_index"
+    DUPLICATE_EVIDENCE_INDEX = "duplicate_evidence_index"
+    INVALID_RELATION = "invalid_relation"
+    INVALID_MATCHED_CLAIMS = "invalid_matched_claims"
+    INVALID_CONFLICTING_CLAIMS = "invalid_conflicting_claims"
+    INVALID_CONFIDENCE = "invalid_confidence"
+    INVALID_REASONS = "invalid_reasons"
+    DOMAIN_CONVERSION = "domain_conversion"
+
+
+class CrossValidationParseError(BaseModel):
+    model_config = ConfigDict(frozen=True)
+    kind: CrossValidationParseErrorKind
+    event_index: Optional[int] = None
+    evidence_index: Optional[int] = None
+    candidate_id: Optional[str] = Field(default=None, min_length=1)
+    article_id: Optional[str] = Field(default=None, min_length=1)
+
+
+class CrossValidationParseResult(BaseModel):
+    model_config = ConfigDict(frozen=True)
     assessments: Tuple[CrossValidationAssessment, ...]
+    errors: Tuple[CrossValidationParseError, ...] = ()
 
 
 class CrossValidationResult(BaseModel):
     model_config = ConfigDict(frozen=True)
-
     event: NewsEvent
     status: CrossValidationStatus
     confidence: int = Field(ge=0, le=100)

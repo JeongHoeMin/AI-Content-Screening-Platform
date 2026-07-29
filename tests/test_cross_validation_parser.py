@@ -1,57 +1,48 @@
 from __future__ import annotations
 
-from typing import Tuple
-
 import pytest
+from pydantic import ValidationError
 
-from app.cross_validators import (
-    CrossValidationAssessmentValidationError,
-    DefaultCrossValidationAssessmentParser,
-)
-from app.models import CrossValidationAssessment, CrossValidationAssessmentResponse, CrossValidationCandidate
+from app.cross_validators import DefaultCrossValidationAssessmentParser
+from app.models import CrossValidationAssessmentResponse, CrossValidationAssessmentResponseItem, CrossValidationEvidenceResponseItem, CrossValidationParseErrorKind
 from tests.test_cross_validation_policy import article, candidate
 
 
-def assessment(candidate_id: str, **values: object) -> CrossValidationAssessment:
-    return CrossValidationAssessment(candidate_id=candidate_id, confidence=70, reasons=("Compared.",), **values)
+def item(event_index: object, evidence: list[CrossValidationEvidenceResponseItem]) -> CrossValidationAssessmentResponseItem:
+    return CrossValidationAssessmentResponseItem(event_index=event_index, confidence=80, reasons=["Compared."], evidence=evidence)
 
 
-def parser() -> DefaultCrossValidationAssessmentParser:
-    return DefaultCrossValidationAssessmentParser()
+def evidence(index: object, relation: object = "supports", matched: list[object] | None = None, conflicting: list[object] | None = None) -> CrossValidationEvidenceResponseItem:
+    return CrossValidationEvidenceResponseItem(evidence_index=index, relation=relation, matched_claims=matched if matched is not None else ["Match"], conflicting_claims=conflicting if conflicting is not None else [])
 
 
-def test_parser_restores_candidate_order() -> None:
-    first: CrossValidationCandidate = candidate((article("a", "Reuters"),))
-    second: CrossValidationCandidate = first.model_copy(update={"candidate_id": "source:1"})
-    result = parser().parse(CrossValidationAssessmentResponse(assessments=(assessment("source:1"), assessment("source:0"))), (first, second))
-    assert tuple(item.candidate_id for item in result) == ("source:0", "source:1")
+def test_parser_preserves_valid_sibling_and_evidence_identity() -> None:
+    candidates = (candidate((article("a", "Reuters"), article("b", "Bloomberg"))), candidate((article("c", "AP"),)))
+    response = CrossValidationAssessmentResponse(assessments=[item(1, [evidence(0)]), item(0, [evidence(0), evidence("bad")])])
+    parsed = DefaultCrossValidationAssessmentParser().parse(response, candidates)
+    assert tuple(value.candidate_id for value in parsed.assessments) == ("source:0", "source:0")
+    assert parsed.assessments[0].evidence[0].article_id == "a"
+    assert any(error.kind is CrossValidationParseErrorKind.INVALID_EVIDENCE_INDEX for error in parsed.errors)
 
 
-@pytest.mark.parametrize(
-    "response,candidates",
-    [
-        (CrossValidationAssessmentResponse(assessments=(assessment("source:0"),)), (candidate(()), candidate(()))),
-        (CrossValidationAssessmentResponse(assessments=(assessment("unknown"),)), (candidate(()),)),
-        (CrossValidationAssessmentResponse(assessments=(assessment("source:0"), assessment("source:0"))), (candidate(()),)),
-        (CrossValidationAssessmentResponse(assessments=(assessment("source:0"),)), (candidate(()).model_copy(update={"candidate_id": "duplicate"}), candidate(()).model_copy(update={"candidate_id": "duplicate"}))),
-    ],
-)
-def test_parser_rejects_candidate_id_contract_violations(response: CrossValidationAssessmentResponse, candidates: Tuple[CrossValidationCandidate, ...]) -> None:
-    with pytest.raises(CrossValidationAssessmentValidationError):
-        parser().parse(response, candidates)
+@pytest.mark.parametrize("index", ["1", True, None, -1, 2])
+def test_parser_records_invalid_event_index(index: object) -> None:
+    candidates = (candidate((article("a", "Reuters"),)),)
+    parsed = DefaultCrossValidationAssessmentParser().parse(CrossValidationAssessmentResponse(assessments=[item(index, [evidence(0)])]), candidates)
+    assert any(error.kind is CrossValidationParseErrorKind.INVALID_EVENT_INDEX for error in parsed.errors)
 
 
-@pytest.mark.parametrize(
-    "values",
-    [
-        {"supporting_article_ids": ("a", "a")},
-        {"supporting_article_ids": ("a",), "partially_matching_article_ids": ("a",)},
-        {"supporting_article_ids": ("unknown",)},
-        {"contradicting_article_ids": ("source",)},
-    ],
-)
-def test_parser_rejects_invalid_evidence_article_references(values: dict[str, object]) -> None:
-    item: CrossValidationCandidate = candidate((article("a", "Reuters"),))
-    response = CrossValidationAssessmentResponse(assessments=(assessment("source:0", **values),))
-    with pytest.raises(CrossValidationAssessmentValidationError):
-        parser().parse(response, (item,))
+@pytest.mark.parametrize("relation", ["support", "verified", 1, True, None])
+def test_parser_rejects_invalid_relation_without_other_evidence_loss(relation: object) -> None:
+    candidates = (candidate((article("a", "Reuters"), article("b", "Bloomberg"))),)
+    parsed = DefaultCrossValidationAssessmentParser().parse(CrossValidationAssessmentResponse(assessments=[item(0, [evidence(0), evidence(1, relation=relation)])]), candidates)
+    assert len(parsed.assessments) == 1
+    assert len(parsed.assessments[0].evidence) == 1
+    assert any(error.kind is CrossValidationParseErrorKind.INVALID_RELATION for error in parsed.errors)
+
+
+def test_response_rejects_extra_property_and_root_error() -> None:
+    with pytest.raises(ValidationError):
+        CrossValidationAssessmentResponse.model_validate({"assessments": {}})
+    with pytest.raises(ValidationError):
+        CrossValidationEvidenceResponseItem.model_validate({"evidence_index": 0, "relation": "supports", "extra": True})
