@@ -1,63 +1,149 @@
-# 로드맵
+# 제품 로드맵
 
-## 현재 기준선
+## 운영 원칙
 
-PR1–PR28에서 core contract, provider/normalization, content pipeline, LangGraph workflow, 결정적 downstream, OpenAI 기반 event extraction/screening/cross validation, CLI/bootstrap을 구현했다. 현재 OpenAI는 이벤트 관측 단계까지만 담당하고, ticker resolver·impact·aggregation·scoring·recommendation은 결정적 구현과 static lookup 기반으로 동작한다.
+로드맵은 PR 번호가 아닌 기능 phase를 기준으로 관리한다. 각 phase의 세부 PR은 시작 전 `docs/`에 계획으로 작성하며, `PROJECT_GUIDE.md`의 Non Goals와 LLM/Parser/Policy 책임 분리를 지켜야 한다.
 
-아래 순서는 제품 목표를 향한 계획이며, 각 PR은 시작 전에 `docs/`에 승인된 계획을 작성하고 현재 계약과 운영 데이터에 맞춰 세부 범위를 확정한다.
+# Phase 1 — News Collection 및 Normalization
 
-## PR29 — Company Mapping 신뢰성 강화
+**Status:** Completed
 
-- 정적 ticker lookup을 실제 company/ticker resolution adapter로 확장한다.
-- 동명이인, ticker 변경, 복수 상장, 미해결 회사의 관측 결과를 명시한다.
-- resolution confidence와 근거를 Domain/Policy 경계에 맞게 설계한다.
-- 외부 provider 실패가 전체 Workflow를 중단하지 않도록 부분 성공을 유지한다.
+## 목적
 
-완료 기준: `ResolvedNewsEvent`가 검증 가능한 회사 매핑 관측을 가지며, 미해결 event는 가짜 ticker 없이 정책적으로 처리된다.
+여러 community/provider의 원본 데이터를 공통 처리 경로로 수집하고 표준화한다.
 
-## PR30 — Evidence 기반 Impact Analysis
+## 완료 조건
 
-- 기업·산업·시장·거시경제 영향 모델을 확장한다.
-- LLM을 쓴다면 영향 관측과 근거만 반환하고, 방향·점수의 최종 해석은 Policy/strategy가 수행한다.
-- event, cross-validation, company mapping 근거가 분석 결과에 추적 가능하게 연결된다.
+Provider 실패가 다른 source를 막지 않고, `RawPost → NormalizeResult → Post/Article` 흐름이 공통 계약으로 동작한다.
 
-완료 기준: 분석 결과가 원인과 근거를 보존하며, 투자 조언이나 Policy 판단을 LLM에 위임하지 않는다.
+## 산출물
 
-## PR31 — Stock Scoring 및 Recommendation 고도화
+Provider/Normalizer registry, core Skill contract, 수집·정규화 오류 관측, 결정적 테스트 경로.
 
-- 증거 집계, 최신성, 신뢰도, impact를 명시적 scoring factor로 정리한다.
-- Recommendation은 score와 위험 규칙에 근거해 buy/watch/caution 등 제품 상태를 생성한다.
-- 점수/추천 임계값은 설정 가능하되 재현 가능한 Policy 테스트로 고정한다.
+# Phase 2 — Event Extraction
 
-완료 기준: 사용자 출력이 종목, 이유, 출처 근거, 불확실성을 함께 설명하고 동일 입력에서 재현된다.
+**Status:** Completed
 
-## PR32 — 실데이터 News Collection 운영화
+## 목적
 
-- RSS, 공시, 신뢰할 수 있는 뉴스 provider를 registry 기반으로 추가한다.
-- 수집 시간, 중복 제거, normalize 오류, source 품질을 관측한다.
-- rate limit, timeout, provider 장애와 재시도 정책을 Harness 경계에서 다룬다.
+정규화된 기사를 투자 분석 가능한 `NewsEvent`로 구조화한다.
 
-완료 기준: provider 하나의 실패가 전체 수집을 막지 않고, 입력 provenance가 추적된다.
+## 완료 조건
 
-## PR33 — Portfolio Optimization 및 사용자 경험
+Mock과 OpenAI extraction이 같은 workflow contract를 사용하고, malformed event가 정상 sibling을 막지 않는다.
 
-- 단일 종목 추천을 포트폴리오 수준 제약과 위험 분산으로 확장한다.
-- 사용자 risk profile, 보유 종목, 노출 한도는 명시적인 입력 모델과 Policy로 다룬다.
-- 결과는 설명 가능하고 투자 자문으로 오인되지 않도록 제품 고지를 포함한다.
+## 산출물
 
-완료 기준: recommendation을 비중·제약·근거와 함께 제시하고, 무단 거래 실행을 하지 않는다.
+NewsEvent Domain, extraction Parser, structured-output adapter, PromptBuilder, batch 오류 관측.
 
-## PR34 — 운영 안정성 및 품질 관리
+# Phase 3 — AI Screening
 
-- scheduled run, persistence, audit trail, metrics, alerting을 Harness 중심으로 도입한다.
-- prompt/model version, parser 오류율, provider 품질, policy outcome을 민감정보 없이 관측한다.
-- 데이터 보존·삭제, secret 관리, 비용/latency budget을 운영 정책으로 정한다.
+**Status:** Completed
 
-완료 기준: 매일 자동 실행이 재현·감사·복구 가능하며, 실패가 안전하게 격리되고 운영자가 원인을 파악할 수 있다.
+## 목적
 
-## 단계별 공통 게이트
+이벤트의 relevance, importance, credibility 관측을 생성하고 Policy가 처리 우선순위를 결정하게 한다.
 
-- `PROJECT_GUIDE.md`의 LLM/Parser/Policy 분리와 부분 성공을 유지한다.
-- Mock mode 및 CLI JSON 계약을 의도적 버전 변경 없이는 깨지 않는다.
-- 모든 새 외부 경계에는 Pydantic validation, 제한 로그, fake 기반 테스트를 둔다.
-- 실제 투자 데이터와 모델 출력에 대한 장기 평가 기준은 운영 데이터가 축적된 뒤 별도 decision log로 확정한다.
+## 완료 조건
+
+점수는 0–100 Domain int 계약을 지키고, `ScreeningPolicy`만 ACCEPT/REVIEW/REJECT를 결정한다.
+
+## 산출물
+
+Screening DTO/Parser, 부분 성공 계약, 결정적 Mock Screener, OpenAI Screener, 안전한 로그.
+
+# Phase 4 — Cross Validation 및 Resolve
+
+**Status:** Completed
+
+## 목적
+
+REVIEW 이벤트를 다른 기사와 비교해 근거 관계를 만들고, Policy가 검증 상태와 resolve 결론을 결정하게 한다.
+
+## 완료 조건
+
+LLM은 relation만 반환하며 independent source와 final status는 Policy가 보수적으로 계산한다. 검증 결과 일부가 없어도 Resolve가 유효 decision으로 완료된다.
+
+## 산출물
+
+Cross-validation Parser/Policy, 연결 요소 기반 출처 계산, Resolve policy, OpenAI/Mock validator, CLI mode 조립.
+
+# Phase 5 — Company Resolution
+
+**Status:** Planned
+
+## 목적
+
+추출 event의 회사명을 신뢰할 수 있는 ticker/company identity로 해석한다.
+
+## 완료 조건
+
+동명이인, ticker 변경, 복수 상장, 미해결 회사를 명시적으로 다루고 가짜 ticker를 만들지 않는다.
+
+## 산출물
+
+외부 company lookup adapter, resolution 관측 모델, provenance, partial-failure Policy 및 테스트.
+
+# Phase 6 — Impact Analysis
+
+**Status:** Planned
+
+## 목적
+
+검증된 event가 기업·산업·시장·거시경제에 미치는 영향을 근거와 함께 분석한다.
+
+## 완료 조건
+
+영향 결과가 event, validation, company mapping 근거로 추적 가능하며 LLM을 사용해도 최종 해석은 Policy/strategy가 소유한다.
+
+## 산출물
+
+확장 impact Domain, evidence-aware analysis strategy, 방향·불확실성 정책, 테스트 가능한 deterministic baseline.
+
+# Phase 7 — Stock Scoring
+
+**Status:** Planned
+
+## 목적
+
+검증된 근거, 최신성, 신뢰도, impact를 투명한 종목 점수로 집계한다.
+
+## 완료 조건
+
+score factor, 가중치, 경계값이 명시적 Policy로 관리되고 같은 입력에서 재현된다.
+
+## 산출물
+
+scoring factor contract, aggregation strategy, 설정 가능한 Policy, 회귀 테스트와 설명 가능한 score breakdown.
+
+# Phase 8 — Portfolio Recommendation
+
+**Status:** Planned
+
+## 목적
+
+종목 점수를 사용자에게 이해 가능한 buy/watch/caution 관찰과 포트폴리오 수준 제약으로 연결한다.
+
+## 완료 조건
+
+추천은 근거·불확실성·위험 제약을 함께 설명하고 자동 거래를 수행하지 않는다.
+
+## 산출물
+
+recommendation Policy, risk/profile input model, portfolio constraint strategy, 사용자 출력과 제품 고지.
+
+# Phase 9 — 운영 안정성 및 자동화
+
+**Status:** Planned
+
+## 목적
+
+매일 실행되는 수집·분석 작업을 재현, 감사, 복구 가능한 운영 시스템으로 만든다.
+
+## 완료 조건
+
+스케줄 실행, persistence, metrics, audit trail, alerting, 비용·latency·secret 관리가 Harness 중심으로 운영된다.
+
+## 산출물
+
+실행 scheduler, 보안 관측 체계, 품질 지표, 장애 대응 문서, 데이터 보존 정책.

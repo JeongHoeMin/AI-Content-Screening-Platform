@@ -1,67 +1,300 @@
-# Workflow 상세
+# Workflow 상세 계약
 
-## 현재 실행 흐름
+## 공통 계약
 
-`ScreeningWorkflow`는 LangGraph로 구성되며, bootstrap이 주입한 서비스만 호출한다. 기사 평가 결과에 따라 추출 단계를 실행할지 분기하고, 이후 단계는 다음 순서로 진행한다.
+`ScreeningWorkflow`는 LangGraph로 실행되며 bootstrap에서 주입한 interface만 호출한다. 모든 노드는 immutable tuple 중심의 state를 입력·출력으로 사용한다. `NewsEvent` object identity는 Extract → Screen → Cross Validation → Resolve 사이의 연결 키이므로 동등하지만 다른 객체로 교체하면 안 된다.
+
+recover 가능한 오류는 item 또는 batch 단위로 격리하고, 예상하지 못한 RuntimeError와 object identity 불변식 위반은 전파한다. 현재 Workflow에는 노드 수준의 자동 재시도 정책이 없다. OpenAI provider의 네트워크 재시도는 설정된 SDK `max_retries` 경계에서만 수행된다.
 
 ```text
-입력 Article
-  → Evaluate
-  → Extract
-  → Screen
-  → Cross Validate (REVIEW만)
-  → Resolve
-  → Analyze
-  → Aggregate
-  → Score
-  → Recommend
-  → WorkflowResult / CLI JSON
+Article
+  → Evaluate → Extract → Screen → Cross Validate → Resolve
+  → Analyze → Aggregate → Score → Recommend → WorkflowResult / CLI JSON
 ```
 
-## 노드별 계약
+## Evaluate
 
-| 단계 | 입력 | 출력 | 결정 주체 |
-| --- | --- | --- | --- |
-| Evaluate | `Article` | `ArticleEvaluationResult` | evaluator 규칙 |
-| Extract | 허용된 `Article` | `LLMInferenceResult`, `NewsEvent` | Parser가 유효 event 확정 |
-| Screen | 추출 inference | `ScreeningDecision` | `ScreeningPolicy` |
-| Cross Validate | `REVIEW` decision | `CrossValidationResult` | `CrossValidationPolicy` |
-| Resolve | decision + 선택적 validation + ticker | `ResolvedNewsEvent` | `ResolvePolicy` |
-| Analyze | resolved event | `ImpactAnalysis` | 분석 전략 |
-| Aggregate | impact analyses | `EvidenceAggregation` | 집계 전략 |
-| Score | evidence | `ScoringResult` | scoring 전략 |
-| Recommend | scoring | `RecommendationResult` | recommendation policy |
+### Input
 
-현재 cross validation은 `REVIEW` decision만 후보로 만든다. 후보는 원본 event object identity로 추적되며, 동일 event를 가진 `ScreeningDecision`과 결과가 정확히 연결되어야 한다. 검증 결과가 일부 누락되어도 Resolve는 남아 있는 decision으로 계속 진행하며, 없는 validation은 선택적 입력으로 취급한다.
+- `Article[]`
 
-## 상태와 identity
+### Output
 
-Workflow state는 각 노드의 결과를 immutable tuple 중심으로 전달한다. `NewsEvent`의 object identity는 extract → screen → cross validation → resolve 경계에서 연결 키로 사용한다. 따라서 복사된 동등 객체로 원본 event를 대체해서는 안 되며, 여러 결과가 하나의 event identity를 가리키는 것은 불변식 오류다.
+- `ArticleEvaluationResult[]`
 
-후속 단계에는 `ScreeningDecision`만 전달된다. screening 단계에서 유효하지 않았던 candidate에 가짜 0점 decision을 만들지 않는다. 이 계약은 item 수준 부분 성공을 안전하게 유지한다.
+### Failure
 
-## 실행 모드
+- 현재 규칙 evaluator의 오류는 실행 오류로 전파한다.
+- 허용되지 않은 기사는 실패가 아니라 `accepted=False` 관측으로 다음 추출 대상에서 제외한다.
 
-### Mock
+### Retry
 
-`ExecutionMode.MOCK`은 deterministic extractor, screener, cross validator를 사용한다. 나머지 Workflow와 downstream Policy는 OpenAI mode와 동일하다. 로컬 개발, 회귀 테스트, CLI schema 검증의 기본 모드다.
+- Workflow 자동 재시도 없음
 
-### OpenAI
+### Owner
 
-`ExecutionMode.OPENAI`는 OpenAI structured output LLM 기반 Extractor, Screener, Cross Validator를 조립한다. Cross validation 뒤의 resolver, analyzer, aggregator, scorer, recommender는 현재 결정적 구현을 유지한다. OpenAI 설정은 `app/config/openai.py`의 환경변수 계약을 사용한다.
+- `ArticleEvaluator`
 
-## 실패 처리
+### Responsibility
 
-- 빈 입력은 성공한 빈 결과이며 불필요한 LLM 호출을 하지 않는다.
-- 개별 event/evidence의 파싱 오류는 해당 결과만 제외하고 제한된 경고 로그로 관측한다.
-- provider·structured response·root response 오류는 해당 batch를 건너뛰고 뒤 batch를 계속 처리한다.
-- 처리 대상이 있었으나 유효 결과가 0개이면 해당 LLM 단계의 명시적 예외로 실행을 실패시킨다.
-- 예상하지 못한 RuntimeError와 identity 위반은 전파한다.
+- 기사의 처리 대상 여부를 평가한다.
+- LLM 호출, event 추출, 최종 투자 판단은 수행하지 않는다.
 
-## CLI 계약
+## Extract
 
-`python -m app screening --input <articles.json> --mode mock|openai`가 표준 입력 경로다. 표준 출력은 workflow 결과 JSON만 사용하고, 운영 로그와 오류는 표준 오류로 분리한다. mode에 관계없이 최종 JSON schema는 유지되어야 한다.
+### Input
 
-## 향후 확장 기준
+- `accepted=True`인 `Article[]`
 
-Company mapping, richer impact analysis, portfolio optimization을 추가할 때에도 event→decision→resolved event의 identity 계약과 Policy 최종 결정 원칙은 유지한다. 새 노드는 상태 필드를 명시하고, 이전 단계의 외부 계약을 임의로 변경하지 않는다.
+### Output
+
+- `LLMInferenceResult[]`
+- 원본 identity를 유지한 `NewsEvent[]`
+- 성공 batch 수
+
+### Failure
+
+- 빈 입력은 LLM 호출 없이 빈 결과다.
+- event 단위 parser 오류는 정상 sibling event를 보존한다.
+- provider, structured-response, root-validation 오류는 해당 batch를 건너뛰고 다음 batch를 계속 처리한다.
+- 처리 대상이 있었지만 유효 inference가 0개면 단계 예외를 발생시킨다.
+
+### Retry
+
+- Workflow 자동 재시도 없음
+- OpenAI SDK retry는 설정이 허용하는 transport 오류에만 적용
+
+### Owner
+
+- `LLMNewsEventExtractor`
+- extraction Parser
+
+### Responsibility
+
+- Article에서 구조화된 event 관측을 만든다.
+- Parser는 transport를 Domain으로 검증한다.
+- 최종 event 정책이나 투자 추천을 결정하지 않는다.
+
+## Screen
+
+### Input
+
+- extraction의 `LLMInferenceResult[]`
+
+### Output
+
+- `ScreeningDecision[]`
+
+### Failure
+
+- 빈 입력은 LLM 호출 없이 빈 decision이다.
+- event 단위 score/reason/index 오류는 해당 event만 제외한다.
+- batch 오류는 뒤 batch 처리를 막지 않는다.
+- 입력 event가 있었는데 유효 decision이 하나도 없으면 `NoValidScreeningDecisionsError`를 발생시킨다.
+
+### Retry
+
+- Workflow 자동 재시도 없음
+- OpenAI SDK retry는 설정이 허용하는 transport 오류에만 적용
+
+### Owner
+
+- `LLMEventScreener` 또는 Mock Screener
+- screening Parser
+- `ScreeningPolicy`
+
+### Responsibility
+
+- LLM은 relevance, importance, credibility, 근거, cross-validation 필요성을 관측한다.
+- Parser는 0–100 정수 Domain 계약을 보장한다.
+- Policy만 `ACCEPT/REVIEW/REJECT`를 결정한다.
+
+## Cross Validation
+
+### Input
+
+- `REVIEW` 상태의 `ScreeningDecision[]`
+- 각 decision의 원본 `NewsEvent`, source `Article`, related `Article[]`
+
+### Output
+
+- `CrossValidationResult[]`
+
+### Failure
+
+- REVIEW 대상이 없으면 LLM 호출 없이 빈 결과다.
+- 관련 기사가 없는 candidate는 Policy의 deterministic `INSUFFICIENT_EVIDENCE` 결과를 반환한다.
+- event/evidence 단위 오류는 정상 evidence와 sibling event를 보존한다.
+- batch 오류는 뒤 batch 처리를 막지 않는다.
+- 대상 candidate가 있었는데 유효 result가 하나도 없으면 `NoValidCrossValidationResultsError`를 발생시킨다.
+
+### Retry
+
+- Workflow 자동 재시도 없음
+- OpenAI SDK retry는 설정이 허용하는 transport 오류에만 적용
+
+### Owner
+
+- `LLMEventCrossValidator` 또는 Mock Cross Validator
+- cross-validation Parser
+- `CrossValidationPolicy`
+
+### Responsibility
+
+- LLM은 evidence별 `supports`/`conflicts`/`unrelated` 관계와 claim을 관측한다.
+- Parser는 local event/evidence index, relation, claim, confidence를 검증한다.
+- Policy가 independent source 연결 요소, validation status, `ValidationEvidence`를 결정한다.
+
+## Resolve
+
+### Input
+
+- `ScreeningDecision[]`
+- 선택적 `CrossValidationResult[]`
+- event별 `TickerResolvedEvent[]`
+
+### Output
+
+- `ResolvedNewsEvent[]`
+
+### Failure
+
+- cross-validation result가 없는 decision은 유효하며 optional validation으로 처리한다.
+- 같은 event identity에 여러 validation/ticker 결과가 있거나 decision과 연결되지 않으면 불변식 오류를 전파한다.
+- 모든 decision에 ticker snapshot이 없으면 불변식 오류를 전파한다.
+
+### Retry
+
+- Workflow 자동 재시도 없음
+
+### Owner
+
+- `TickerResolver`
+- `ResolvePolicy`
+
+### Responsibility
+
+- ticker 해석 결과와 screening/validation을 같은 원본 event identity로 연결한다.
+- Policy가 최종 resolve decision을 결정한다.
+- LLM 호출이나 독립 출처 계산을 수행하지 않는다.
+
+## Analyze
+
+### Input
+
+- `ResolvedNewsEvent[]`
+
+### Output
+
+- `ImpactAnalysis[]`
+
+### Failure
+
+- 현재 strategy의 예상 밖 오류는 전파한다.
+- 빈 입력은 빈 analysis 결과다.
+
+### Retry
+
+- Workflow 자동 재시도 없음
+
+### Owner
+
+- `ImpactAnalyzer`
+- impact strategy
+
+### Responsibility
+
+- resolved event가 기업·산업·시장·거시에 미치는 영향을 분석한다.
+- 최종 stock score와 recommendation을 결정하지 않는다.
+
+## Aggregate
+
+### Input
+
+- `ImpactAnalysis[]`
+
+### Output
+
+- `EvidenceAggregation`
+
+### Failure
+
+- 현재 strategy의 예상 밖 오류는 전파한다.
+- 빈 analysis는 정의된 빈 aggregation으로 처리한다.
+
+### Retry
+
+- Workflow 자동 재시도 없음
+
+### Owner
+
+- `EvidenceAggregator`
+- aggregation strategy
+
+### Responsibility
+
+- 분석 결과를 scoring에 사용할 증거 집계로 변환한다.
+- 새 기사 사실을 생성하거나 recommendation을 결정하지 않는다.
+
+## Score
+
+### Input
+
+- `EvidenceAggregation`
+
+### Output
+
+- `ScoringResult`
+
+### Failure
+
+- 현재 strategy의 예상 밖 오류는 전파한다.
+
+### Retry
+
+- Workflow 자동 재시도 없음
+
+### Owner
+
+- `ScoringEngine`
+- scoring strategy
+
+### Responsibility
+
+- 검증된 aggregation을 명시적인 규칙으로 종목 점수로 변환한다.
+- LLM 출력만으로 점수 또는 매수 결론을 만들지 않는다.
+
+## Recommend
+
+### Input
+
+- `ScoringResult`
+
+### Output
+
+- `RecommendationResult`
+- workflow statistics
+
+### Failure
+
+- 현재 policy의 예상 밖 오류는 전파한다.
+
+### Retry
+
+- Workflow 자동 재시도 없음
+
+### Owner
+
+- `RecommendationEngine`
+- recommendation policy
+
+### Responsibility
+
+- scoring 결과를 제품의 추천 관측으로 표현하고 처리 통계를 완성한다.
+- 자동 주문, 초단위 거래 실행, 새로운 사실 추론을 수행하지 않는다.
+
+## 실행 모드 및 CLI
+
+`ExecutionMode.MOCK`은 결정적 extractor/screener/cross validator를 사용하고, `ExecutionMode.OPENAI`는 같은 structured-output gateway를 사용하는 LLM 구현을 사용한다. 이후 downstream과 CLI JSON schema는 두 mode에서 동일하다.
+
+CLI는 `python -m app screening --input <articles.json> --mode mock|openai`로 실행한다. 표준 출력은 결과 JSON만 사용하고, 제한된 structlog 로그와 오류는 표준 오류로 분리한다.
