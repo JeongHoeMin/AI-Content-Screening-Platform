@@ -22,6 +22,7 @@ from app.models import (
     NewsEvent,
     RecommendationResult,
     ResolvedNewsEvent,
+    ResolvedDecisionType,
     TickerResolvedEvent,
     ScreeningDecision,
     ScreeningDecisionType,
@@ -175,11 +176,23 @@ class FakeCrossValidator(CrossValidator):
     def __init__(self) -> None:
         self.calls: List[Tuple[CrossValidationCandidate, ...]] = []
         self.statuses: Tuple[CrossValidationStatus, ...] = ()
+        self.mode: Optional[str] = None
 
     async def validate(
         self, candidates: Tuple[CrossValidationCandidate, ...]
     ) -> Tuple[CrossValidationResult, ...]:
         self.calls.append(candidates)
+        if self.mode == "duplicate":
+            event: NewsEvent = candidates[0].decision.event
+            return (
+                CrossValidationResult(event=event, status=CrossValidationStatus.VERIFIED, confidence=70, independent_source_count=2, evidence=(), reasons=("Verified.",)),
+                CrossValidationResult(event=event, status=CrossValidationStatus.VERIFIED, confidence=70, independent_source_count=2, evidence=(), reasons=("Verified.",)),
+            )
+        if self.mode == "unknown":
+            event = NewsEvent.model_validate(candidates[0].decision.event.model_dump())
+            return (
+                CrossValidationResult(event=event, status=CrossValidationStatus.VERIFIED, confidence=70, independent_source_count=2, evidence=(), reasons=("Verified.",)),
+            )
         return tuple(
             CrossValidationResult(
                 event=candidate.decision.event,
@@ -445,21 +458,54 @@ async def test_workflow_applies_verified_cross_validation_to_final_resolve_decis
     result: ScreeningResult = await workflow.run(articles)
 
     assert result.resolved_events[0].event is extractor.events[0]
-    assert result.resolved_events[0].decision.value == "accept"
-    assert result.resolved_events[1].decision.value == "accept"
+    assert result.resolved_events[0].decision is ResolvedDecisionType.ACCEPT
+    assert result.resolved_events[1].decision is ResolvedDecisionType.ACCEPT
     assert result.statistics.resolved_accept_count == 2
     assert analyzer.calls[0] == list(result.resolved_events)
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("mode", ("missing", "duplicate", "unknown"))
-async def test_workflow_rejects_invalid_ticker_result_identity_contract(mode: str) -> None:
+@pytest.mark.parametrize(
+    ("mode", "message"),
+    (
+        ("missing", "No ticker snapshot"),
+        ("duplicate", "Multiple ticker snapshots"),
+        ("unknown", "ticker snapshot references an Event object"),
+    ),
+)
+async def test_workflow_rejects_invalid_ticker_result_identity_contract(
+    mode: str,
+    message: str,
+) -> None:
     articles: Tuple[Article, ...] = (build_article(1), build_article(2))
     workflow, _, extractor, _, _, resolver, _, _, _, _ = build_workflow(
         ("article-1", "article-2")
     )
     resolver.mode = mode
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=message):
+        await workflow.run(articles)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("mode", "message"),
+    (
+        ("duplicate", "Multiple cross-validation results"),
+        ("unknown", "cross-validation result references an Event object"),
+    ),
+)
+async def test_workflow_rejects_invalid_cross_validation_identity_contract(
+    mode: str,
+    message: str,
+) -> None:
+    articles: Tuple[Article, ...] = (build_article(1), build_article(2))
+    workflow, _, _, _, cross_validator, _, _, _, _, _ = build_workflow(
+        ("article-1", "article-2"),
+        decisions=(ScreeningDecisionType.REVIEW, ScreeningDecisionType.ACCEPT),
+    )
+    cross_validator.mode = mode
+
+    with pytest.raises(ValueError, match=message):
         await workflow.run(articles)
 
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Protocol, Tuple
+from typing import Iterable, Optional, Protocol, Tuple
 
 from app.models.cross_validation import CrossValidationResult, CrossValidationStatus
 from app.models.resolve import ResolveDecision
@@ -33,10 +33,19 @@ class DefaultResolvePolicy(ResolvePolicy):
             final_decision = ResolvedDecisionType.REJECT
             transition_reason = "Cross validation found contradicting evidence."
         validation_reasons: Tuple[str, ...] = validation.reasons if validation is not None else ()
-        reasons: Tuple[str, ...] = self._deduplicate((*decision.reasons, *validation_reasons, transition_reason))
+        reasons: Tuple[str, ...] = self._deduplicate_reasons(
+            (*decision.reasons, *validation_reasons, transition_reason)
+        )
         return ResolveDecision(decision=final_decision, reasons=reasons)
 
     @staticmethod
-    def _deduplicate(reasons: Tuple[str, ...]) -> Tuple[str, ...]:
+    def _deduplicate_reasons(reasons: Iterable[str]) -> Tuple[str, ...]:
+        normalized_reasons: list[str] = []
         seen: set[str] = set()
-        return tuple(reason for reason in reasons if reason.strip() and not (reason in seen or seen.add(reason)))
+        for reason in reasons:
+            normalized_reason: str = reason.strip()
+            if not normalized_reason or normalized_reason in seen:
+                continue
+            seen.add(normalized_reason)
+            normalized_reasons.append(normalized_reason)
+        return tuple(normalized_reasons)

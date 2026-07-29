@@ -38,7 +38,22 @@ def test_policy_applies_resolve_status_precedence(screening: ScreeningDecisionTy
 
 
 def test_policy_keeps_accept_without_validation_and_deduplicates_reasons() -> None:
-    screening_decision = decision(ScreeningDecisionType.ACCEPT).model_copy(update={"reasons": ("Same.",)})
+    screening_decision = decision(ScreeningDecisionType.ACCEPT).model_copy(
+        update={
+            "reasons": (
+                " First reason ",
+                "Second reason",
+                "First reason",
+                "   ",
+                " Second reason ",
+                "Third reason",
+            )
+        }
+    )
     result: ResolveDecision = DefaultResolvePolicy().resolve(screening_decision, None)
     assert result.decision is ResolvedDecisionType.ACCEPT
-    assert result.reasons.count("Same.") == 1
+    assert result.reasons[:3] == (
+        "First reason",
+        "Second reason",
+        "Third reason",
+    )

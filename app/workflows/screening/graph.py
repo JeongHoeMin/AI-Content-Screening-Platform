@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, Mapping, Tuple, cast
+from typing import Dict, Mapping, Protocol, Tuple, TypeVar
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
@@ -15,7 +15,11 @@ from app.models.impact_analysis import ImpactAnalysis
 from app.models.llm_inference import LLMExtractionResult, LLMInferenceResult
 from app.models.news_event import NewsEvent
 from app.models.recommendation import RecommendationResult
-from app.models.resolved_news_event import ResolvedNewsEvent, TickerResolvedEvent
+from app.models.resolved_news_event import (
+    ResolvedDecisionType,
+    ResolvedNewsEvent,
+    TickerResolvedEvent,
+)
 from app.models.scoring import ScoringResult
 from app.models.screening import ScreeningDecision, ScreeningDecisionType
 from app.recommenders.recommendation_engine import RecommendationEngine
@@ -27,6 +31,15 @@ from app.cross_validators.base import CrossValidator
 from app.models.cross_validation import CrossValidationCandidate, CrossValidationResult, CrossValidationStatus
 from app.workflows.screening.result import WorkflowStatistics
 from app.workflows.screening.state import ScreeningState
+
+
+class HasNewsEvent(Protocol):
+    """Typed contract for values indexed by NewsEvent object identity."""
+
+    event: NewsEvent
+
+
+TEventItem = TypeVar("TEventItem", bound=HasNewsEvent)
 
 
 class _ScreeningNodes:
@@ -121,23 +134,36 @@ class _ScreeningNodes:
 
     def resolve(self, state: ScreeningState) -> Mapping[str, object]:
         decisions: Tuple[ScreeningDecision, ...] = state.get("decisions", ())
-        validations_by_event_id: Dict[int, CrossValidationResult] = cast(
-            Dict[int, CrossValidationResult], self._index_by_event_identity(
-            state.get("cross_validation_results", ()), "cross-validation result"
+        validations_by_event_id: Dict[int, CrossValidationResult] = (
+            self._index_by_event_identity(
+                state.get("cross_validation_results", ()),
+                item_name="cross-validation result",
             )
         )
         decision_ids: set[int] = {id(decision.event) for decision in decisions}
         if not set(validations_by_event_id).issubset(decision_ids):
-            raise ValueError("Cross-validation result cannot be matched to a screening decision event identity")
+            raise ValueError(
+                "A cross-validation result references an Event object "
+                "that does not match any ScreeningDecision."
+            )
         ticker_results: Tuple[TickerResolvedEvent, ...] = tuple(
             self._resolver.resolve([decision.event for decision in decisions])
         )
-        tickers_by_event_id: Dict[int, TickerResolvedEvent] = cast(
-            Dict[int, TickerResolvedEvent],
-            self._index_by_event_identity(ticker_results, "ticker result"),
+        tickers_by_event_id: Dict[int, TickerResolvedEvent] = (
+            self._index_by_event_identity(
+                ticker_results,
+                item_name="ticker snapshot",
+            )
         )
-        if set(tickers_by_event_id) != decision_ids:
-            raise ValueError("Ticker results must contain exactly one result for every screening decision event identity")
+        if not set(tickers_by_event_id).issubset(decision_ids):
+            raise ValueError(
+                "A ticker snapshot references an Event object "
+                "that does not match any ScreeningDecision."
+            )
+        if not decision_ids.issubset(tickers_by_event_id):
+            raise ValueError(
+                "No ticker snapshot was found for a ScreeningDecision Event."
+            )
         resolved_events: Tuple[ResolvedNewsEvent, ...] = tuple(
             self._resolve_event(
                 decision,
@@ -150,17 +176,27 @@ class _ScreeningNodes:
 
     def _resolve_event(self, decision: ScreeningDecision, validation: CrossValidationResult | None, ticker_result: TickerResolvedEvent) -> ResolvedNewsEvent:
         if ticker_result.event is not decision.event:
-            raise ValueError("Ticker result event identity does not match the screening decision event")
+            raise ValueError(
+                "Ticker snapshot Event identity does not match "
+                "the ScreeningDecision Event identity."
+            )
         policy_decision = self._resolve_policy.resolve(decision, validation)
         return ResolvedNewsEvent(event=decision.event, companies=ticker_result.companies, screening_decision=decision.decision, cross_validation_status=validation.status if validation is not None else None, decision=policy_decision.decision, reasons=policy_decision.reasons)
 
     @staticmethod
-    def _index_by_event_identity(items: Tuple[object, ...], item_name: str) -> Dict[int, object]:
-        indexed: Dict[int, object] = {}
+    def _index_by_event_identity(
+        items: Tuple[TEventItem, ...],
+        *,
+        item_name: str,
+    ) -> Dict[int, TEventItem]:
+        indexed: Dict[int, TEventItem] = {}
         for item in items:
             event_id: int = id(item.event)
             if event_id in indexed:
-                raise ValueError(f"Multiple {item_name}s exist for the same event identity")
+                raise ValueError(
+                    f"Multiple {item_name}s were found "
+                    "for the same Event object identity."
+                )
             indexed[event_id] = item
         return indexed
 
@@ -211,9 +247,9 @@ class _ScreeningNodes:
             partially_verified_events=sum(result.status is CrossValidationStatus.PARTIALLY_VERIFIED for result in state.get("cross_validation_results", ())),
             conflicted_events=sum(result.status is CrossValidationStatus.CONFLICTED for result in state.get("cross_validation_results", ())),
             insufficient_evidence_events=sum(result.status is CrossValidationStatus.INSUFFICIENT_EVIDENCE for result in state.get("cross_validation_results", ())),
-            resolved_accept_count=sum(event.decision.value == "accept" for event in state.get("resolved_events", ())),
-            resolved_review_count=sum(event.decision.value == "review" for event in state.get("resolved_events", ())),
-            resolved_reject_count=sum(event.decision.value == "reject" for event in state.get("resolved_events", ())),
+            resolved_accept_count=sum(event.decision is ResolvedDecisionType.ACCEPT for event in state.get("resolved_events", ())),
+            resolved_review_count=sum(event.decision is ResolvedDecisionType.REVIEW for event in state.get("resolved_events", ())),
+            resolved_reject_count=sum(event.decision is ResolvedDecisionType.REJECT for event in state.get("resolved_events", ())),
         )
         return {"recommendation": recommendation, "statistics": statistics}
 
