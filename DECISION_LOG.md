@@ -210,3 +210,29 @@ LLM과 뉴스 데이터에는 기사 원문, prompt, 비밀값, 개인정보가 
 ## Consequences
 
 운영자가 오류를 상관관계로 추적하면서 데이터 노출 위험을 줄인다. 상세 진단이 필요하면 별도의 보호된 관측 체계를 설계해야 한다.
+
+# ADR-010
+
+## Title
+
+Company Resolution은 ticker보다 영구 company identity를 우선한다.
+
+## Status
+
+Accepted
+
+## Context
+
+ticker와 exchange는 시장 표현이며 ticker 변경, 상장폐지, 재상장, 시장 이동이 일어날 수 있다. ticker를 회사의 동일성으로 사용하면 장기적으로 같은 회사를 다른 entity로 보거나 다른 회사를 잘못 합칠 수 있다. 또한 회사명 alias가 여러 개여도 하나의 회사 identity를 가리킬 수 있다.
+
+## Decision
+
+Company Resolution v1은 KRX 상장사만 지원하고 승인된 KRX 기반 versioned local CSV를 유일한 master data로 사용한다. `CanonicalCompany.company_id`를 ticker와 독립적인 영구 identity로 정의하고, Business Logic은 ticker가 아닌 `company_id`로 동일성을 비교한다.
+
+`CompanyDirectory`는 canonical name과 alias의 정규화·name index 조회·candidate 제공만 수행하며 후보를 선택하지 않는다. 동일 alias가 다른 company ID를 가리키는 것은 configuration error가 아니라 `AMBIGUOUS` 후보로 보존한다. `CompanyResolutionPolicy`는 distinct company ID 수가 1개이면 `RESOLVED`, 0개이면 `UNRESOLVED`, 2개 이상이면 `AMBIGUOUS`로 결정한다. 모호하거나 미해결된 경우 ticker는 만들지 않는다.
+
+Company Resolution은 Workflow에서 정확히 한 번 수행되며 이후 단계는 immutable resolution snapshot만 소비한다. external API, 실시간 sync, 다중 시장은 별도 ADR로 확장한다.
+
+## Consequences
+
+같은 version의 local master data와 같은 입력은 결정적으로 같은 결과를 낸다. ticker lifecycle 변화에도 company identity의 의미를 보존할 수 있고, 모호성을 임의의 ticker 선택으로 숨기지 않는다. `AMBIGUOUS`·`UNRESOLVED`는 snapshot에는 보존하지만 종목 evidence aggregation에는 포함하지 않는다. 반면 KRX 외 시장은 지원하지 않으며 master data 갱신은 운영 절차가 책임져야 한다.

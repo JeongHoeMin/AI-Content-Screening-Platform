@@ -35,7 +35,7 @@ Input → Output → Failure → Retry → Owner → Responsibility
 | Extract | 허용된 `Article[]` | inference, `NewsEvent[]` | event, batch | SDK transport만 | LLM, Parser |
 | Screen | inference | `ScreeningDecision[]` | event, batch | SDK transport만 | LLM, Parser, Policy |
 | Cross Validate | REVIEW decision, article evidence | `CrossValidationResult[]` | evidence, event, batch | SDK transport만 | LLM, Parser, Policy |
-| Resolve | decision, validation, ticker | `ResolvedNewsEvent[]` | identity 불변식 | 없음 | Resolver, Policy |
+| Resolve | decision, validation, company snapshot | `ResolvedNewsEvent[]` | identity 불변식 | 없음 | Company Resolver, Policy |
 | Analyze | resolved event | `ImpactAnalysis[]` | 실행 오류 | 없음 | Analyzer |
 | Aggregate | impact analyses | `EvidenceAggregation` | 실행 오류 | 없음 | Aggregator |
 | Score | aggregation | `ScoringResult` | 실행 오류 | 없음 | Scoring strategy |
@@ -180,7 +180,7 @@ Input → Output → Failure → Retry → Owner → Responsibility
 
 - `ScreeningDecision[]`
 - 선택적 `CrossValidationResult[]`
-- event별 `TickerResolvedEvent[]`
+- event별 `TickerResolvedEvent[]` company snapshot
 
 ### Output
 
@@ -198,13 +198,14 @@ Input → Output → Failure → Retry → Owner → Responsibility
 
 ### Owner
 
-- `TickerResolver`
+- `DefaultCompanyResolver`
 - `ResolvePolicy`
 
 ### Responsibility
 
-- ticker 해석 결과와 screening/validation을 같은 원본 event identity로 연결한다.
+- Company Resolution은 이 단계에서 정확히 한 번 수행하고, 결과 snapshot과 screening/validation을 같은 원본 event identity로 연결한다.
 - Policy가 최종 resolve decision을 결정한다.
+- 이후 단계는 Directory를 다시 조회하지 않는다. `AMBIGUOUS`·`UNRESOLVED` 회사는 snapshot에는 보존하지만 종목 evidence aggregation에서는 제외한다.
 - LLM 호출이나 독립 출처 계산을 수행하지 않는다.
 
 ## Analyze

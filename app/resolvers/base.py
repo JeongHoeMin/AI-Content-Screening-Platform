@@ -7,11 +7,11 @@ from app.models.resolved_news_event import TickerResolvedEvent
 
 
 class TickerResolver(Protocol):
-    """Assembles immutable resolved event snapshots through ticker lookup.
+    """Assembles immutable resolved event snapshots through Company Resolution.
 
-    Original NewsEvent objects remain unchanged. Ticker resolution is delegated
-    entirely to TickerLookup, while this resolver only assembles resolved domain
-    models and performs no investment analysis.
+    Original NewsEvent objects remain unchanged. Company Directory facts and
+    Company Resolution Policy determine canonical identities before this
+    resolver assembles snapshots. It performs no investment analysis.
     """
 
     def resolve(self, events: List[NewsEvent]) -> List[TickerResolvedEvent]:

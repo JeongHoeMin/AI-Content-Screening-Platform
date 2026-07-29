@@ -8,7 +8,13 @@ from openai import AsyncOpenAI
 from app.aggregators import DefaultAggregationStrategy, DefaultEvidenceAggregator
 from app.analyzers import DefaultImpactAnalyzer, RuleImpactStrategy
 from app.cross_validators import CrossValidationPolicyConfig, DefaultCrossValidationAssessmentParser, DefaultCrossValidationPolicy, LLMEventCrossValidator
-from app.config import OpenAIConfig, load_openai_config
+from app.config import (
+    CompanyDirectoryConfig,
+    OpenAIConfig,
+    create_company_directory,
+    load_company_directory_config,
+    load_openai_config,
+)
 from app.extractors import DefaultNewsEventParser, LLMNewsEventExtractor
 from app.llms import (
     OpenAIResponsesStructuredOutputClient,
@@ -26,7 +32,7 @@ from app.mock_screening import (
 )
 from app.recommenders import DefaultRecommendationEngine, RuleRecommendationPolicy
 from app.prompts import CrossValidationPromptBuilder, NewsEventPromptBuilder, ScreeningPromptBuilder
-from app.resolvers import DefaultResolvePolicy, DefaultTickerResolver, StaticTickerLookup
+from app.resolvers import CompanyResolutionPolicy, DefaultCompanyResolver, DefaultResolvePolicy
 from app.scorers import DefaultScoringEngine, RuleScoringStrategy
 from app.screeners import (
     DefaultScreeningAssessmentParser,
@@ -59,12 +65,16 @@ def _create_mock_workflow() -> ScreeningWorkflow:
     cross_validation_policy: DefaultCrossValidationPolicy = (
         DefaultCrossValidationPolicy(CrossValidationPolicyConfig(use_url_domain_identity=False))
     )
+    directory_config: CompanyDirectoryConfig = load_company_directory_config()
     return ScreeningWorkflow(
         evaluator=RuleArticleEvaluator(RuleArticleEvaluatorConfig()),
         extractor=DeterministicMockExtractor(),
         screener=DeterministicMockScreener(screening_policy),
         cross_validator=DeterministicMockCrossValidator(cross_validation_policy),
-        resolver=DefaultTickerResolver(StaticTickerLookup({})),
+        resolver=DefaultCompanyResolver(
+            create_company_directory(directory_config),
+            CompanyResolutionPolicy(),
+        ),
         resolve_policy=DefaultResolvePolicy(),
         impact_analyzer=DefaultImpactAnalyzer(RuleImpactStrategy()),
         evidence_aggregator=DefaultEvidenceAggregator(DefaultAggregationStrategy()),
@@ -76,6 +86,7 @@ def _create_mock_workflow() -> ScreeningWorkflow:
 def _create_openai_workflow() -> ScreeningWorkflow:
     """Assemble the OpenAI extractor with deterministic downstream stages."""
     config: OpenAIConfig = load_openai_config()
+    directory_config: CompanyDirectoryConfig = load_company_directory_config()
     sdk_client: AsyncOpenAI = create_async_openai_client(
         api_key=config.api_key,
         timeout_seconds=config.timeout_seconds,
@@ -108,7 +119,10 @@ def _create_openai_workflow() -> ScreeningWorkflow:
             config=BatchScreeningConfig(),
         ),
         cross_validator=LLMEventCrossValidator(structured_llm=structured_llm, parser=DefaultCrossValidationAssessmentParser(), prompt_builder=CrossValidationPromptBuilder(), policy=cross_validation_policy, config=BatchCrossValidationConfig()),
-        resolver=DefaultTickerResolver(StaticTickerLookup({})),
+        resolver=DefaultCompanyResolver(
+            create_company_directory(directory_config),
+            CompanyResolutionPolicy(),
+        ),
         resolve_policy=DefaultResolvePolicy(),
         impact_analyzer=DefaultImpactAnalyzer(RuleImpactStrategy()),
         evidence_aggregator=DefaultEvidenceAggregator(DefaultAggregationStrategy()),

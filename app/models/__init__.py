@@ -32,6 +32,13 @@ from app.models.llm_inference import (
 )
 from app.models.normalize import NormalizeResult
 from app.models.news_event import CompanyRelation, ExtractedCompany, NewsEvent
+from app.models.company_resolution import (
+    CanonicalCompany,
+    CompanyDirectoryEntry,
+    CompanyResolutionObservation,
+    CompanyResolutionStatus,
+    KRXExchange,
+)
 from app.models.news_event_response import (
     ArticleInferenceResponseItem,
     ExtractedCompanyResponseItem,
@@ -98,6 +105,10 @@ __all__ = [
     "CommunityType",
     "CompanyImpact",
     "CompanyEvidence",
+    "CanonicalCompany",
+    "CompanyDirectoryEntry",
+    "CompanyResolutionObservation",
+    "CompanyResolutionStatus",
     "CompanyRecommendation",
     "CompanyRelation",
     "CompanyScore",
@@ -112,6 +123,7 @@ __all__ = [
     "GenerateScriptRequest",
     "ImpactAnalysis",
     "ImpactDirection",
+    "KRXExchange",
     "LLMInferenceResult",
     "LLMExtractionResult",
     "ExtractionError",

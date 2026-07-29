@@ -14,8 +14,23 @@ from pydantic import ValidationError
 from app.bootstrap import ExecutionMode, create_screening_workflow
 from app.config import ConfigurationError
 from app.models.article import Article
+from app.workflows import ScreeningResult
 
 logger = structlog.get_logger(__name__)
+
+_INTERNAL_RESOLUTION_FIELDS: dict[str, object] = {
+    "resolved_events": {
+        "__all__": {
+            "companies": {
+                "__all__": {
+                    "company_id",
+                    "resolution_status",
+                    "directory_version",
+                }
+            }
+        }
+    }
+}
 
 
 class ExitCode(IntEnum):
@@ -67,6 +82,12 @@ def _load_articles(path: Path) -> Tuple[Article, ...]:
         raise CliInputError("Input JSON contains an invalid Article") from error
 
 
+def _serialize_result(result: ScreeningResult) -> str:
+    """Keep internal company-resolution metadata out of the public CLI schema."""
+    payload: object = result.model_dump(mode="json", exclude=_INTERNAL_RESOLUTION_FIELDS)
+    return json.dumps(payload, ensure_ascii=False, indent=2)
+
+
 async def run(arguments: Sequence[str] | None = None) -> int:
     args: argparse.Namespace = parse_args(arguments)
     try:
@@ -89,7 +110,7 @@ async def run(arguments: Sequence[str] | None = None) -> int:
             error=str(error),
         )
         return int(ExitCode.EXECUTION_ERROR)
-    sys.stdout.write(result.model_dump_json(indent=2))
+    sys.stdout.write(_serialize_result(result))
     sys.stdout.write("\n")
     return int(ExitCode.SUCCESS)
 

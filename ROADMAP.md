@@ -70,19 +70,19 @@ Cross-validation Parser/Policy, 연결 요소 기반 출처 계산, Resolve poli
 
 # Phase 5 — Company Resolution
 
-**Status:** Planned
+**Status:** Completed
 
 ## 목적
 
-추출 event의 회사명을 신뢰할 수 있는 ticker/company identity로 해석한다.
+추출 event의 회사명을 KRX 상장사의 신뢰할 수 있는 canonical company identity로 해석한다.
 
 ## 완료 조건
 
-동명이인, ticker 변경, 복수 상장, 미해결 회사를 명시적으로 다루고 가짜 ticker를 만들지 않는다.
+동명이인, ticker 변경, 미해결 회사를 명시적으로 다루고 가짜 ticker를 만들지 않는다. v1은 승인된 KRX 기반 versioned local CSV를 사용하며 다중 시장과 실시간 동기화는 후속 ADR의 범위다.
 
 ## 산출물
 
-외부 company lookup adapter, resolution 관측 모델, provenance, partial-failure Policy 및 테스트.
+KRX local master-data directory, 영구 company identity, resolution 관측 모델, provenance, 보수적 aggregation 정책 및 결정성 테스트.
 
 # Phase 6 — Impact Analysis
 

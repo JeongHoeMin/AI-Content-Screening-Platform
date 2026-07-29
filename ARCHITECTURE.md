@@ -30,6 +30,7 @@ LangGraph ScreeningWorkflow / Harness / CLI Bootstrap
 | Extractor | Article에서 `NewsEvent`를 추출 | `app/extractors/` |
 | Screener | 이벤트의 점수를 평가하고 Policy에 전달 | `app/screeners/` |
 | Cross Validator | 비교 기사와의 근거 관계를 평가 | `app/cross_validators/` |
+| Company Directory | KRX name index에서 canonical candidate 사실을 제공 | `app/resolvers/`, `app/config/` |
 | Policy | screening, 검증, resolve의 최종 상태를 결정 | 각 기능의 `policy.py` |
 | 후속 처리 | ticker 해석, 영향 분석, 증거 집계, 점수, 추천 | `app/resolvers/`, `app/analyzers/`, `app/aggregators/`, `app/scorers/`, `app/recommenders/` |
 | Workflow | 단계 호출과 상태 전달 | `app/workflows/` |
@@ -53,6 +54,8 @@ OpenAIResponsesStructuredOutputLLM
 ```
 
 Mock mode는 같은 Workflow·Policy·후속 단계를 사용하고 LLM 관측 부분만 결정적 구현으로 교체한다. 따라서 Mock은 단순한 별도 제품이 아니라 빠르고 재현 가능한 계약 검증 경로다.
+
+Company Directory mode는 LLM execution mode와 독립적이다. `empty` mode는 version `empty`의 후보 없는 immutable directory를 사용하며, `local_csv` mode는 versioned KRX CSV를 한 번 읽어 immutable name index를 만든다. Directory는 후보만 제공하고 Company Resolution Policy가 canonical ID 기반 status를 결정한다.
 
 ## 실패와 관측성
 

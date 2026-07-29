@@ -17,17 +17,22 @@ from app.models import (
     ResolvedCompany,
     ResolvedNewsEvent,
     ResolvedTicker,
+    CompanyResolutionStatus,
 )
 
 
 def build_company(
     name: str,
     ticker: Optional[ResolvedTicker],
+    company_id: Optional[str] = None,
+    resolution_status: CompanyResolutionStatus = CompanyResolutionStatus.UNRESOLVED,
 ) -> ResolvedCompany:
     return ResolvedCompany(
         name=name,
         relation=CompanyRelation.DIRECT,
         ticker=ticker,
+        company_id=company_id,
+        resolution_status=resolution_status,
     )
 
 
@@ -66,18 +71,24 @@ def build_analysis(
     return ImpactAnalysis(event=resolved_event, impacts=impacts)
 
 
-def test_strategy_groups_equal_ticker_values_and_preserves_first_company() -> None:
+def test_strategy_groups_equal_company_ids_and_preserves_first_company() -> None:
     first_company: ResolvedCompany = build_company(
         "Samsung Electronics",
         ResolvedTicker(ticker="005930", exchange="KRX"),
+        "KRX-COMPANY-000001",
+        CompanyResolutionStatus.RESOLVED,
     )
     second_company: ResolvedCompany = build_company(
         "Samsung Elec.",
         ResolvedTicker(ticker="005930", exchange="KRX"),
+        "KRX-COMPANY-000001",
+        CompanyResolutionStatus.RESOLVED,
     )
     third_company: ResolvedCompany = build_company(
         "Samsung",
         ResolvedTicker(ticker="005930", exchange="KRX"),
+        "KRX-COMPANY-000001",
+        CompanyResolutionStatus.RESOLVED,
     )
     impacts: Tuple[CompanyImpact, ...] = (
         build_impact(first_company),
@@ -99,9 +110,13 @@ def test_strategy_groups_equal_ticker_values_and_preserves_first_company() -> No
     )
 
 
-def test_strategy_preserves_unresolved_impacts_as_independent_groups() -> None:
+def test_strategy_excludes_ambiguous_and_unresolved_impacts() -> None:
     first_company: ResolvedCompany = build_company("OpenAI", None)
-    second_company: ResolvedCompany = build_company("OpenAI", None)
+    second_company: ResolvedCompany = build_company(
+        "Anthropic",
+        None,
+        resolution_status=CompanyResolutionStatus.AMBIGUOUS,
+    )
     impacts: Tuple[CompanyImpact, ...] = (
         build_impact(first_company),
         build_impact(second_company),
@@ -112,23 +127,60 @@ def test_strategy_preserves_unresolved_impacts_as_independent_groups() -> None:
         [build_analysis("Unresolved", impacts)]
     )
 
-    assert len(result) == 2
-    assert result[0].company is first_company
-    assert result[1].company is second_company
-    assert result[0].impacts == (impacts[0],)
-    assert result[1].impacts == (impacts[1],)
+    assert result == ()
+
+
+def test_strategy_does_not_merge_distinct_company_ids_with_the_same_ticker() -> None:
+    ticker: ResolvedTicker = ResolvedTicker(ticker="005930", exchange="KRX")
+    first: CompanyImpact = build_impact(
+        build_company(
+            "First",
+            ticker,
+            "KRX-COMPANY-000001",
+            CompanyResolutionStatus.RESOLVED,
+        )
+    )
+    second: CompanyImpact = build_impact(
+        build_company(
+            "Second",
+            ticker,
+            "KRX-COMPANY-000002",
+            CompanyResolutionStatus.RESOLVED,
+        )
+    )
+    strategy: DefaultAggregationStrategy = DefaultAggregationStrategy()
+
+    result: Tuple[CompanyEvidence, ...] = strategy.aggregate(
+        [build_analysis("Distinct", (first, second))]
+    )
+
+    assert [evidence.company.company_id for evidence in result] == [
+        "KRX-COMPANY-000001",
+        "KRX-COMPANY-000002",
+    ]
 
 
 def test_strategy_preserves_flatten_group_and_impact_order() -> None:
     ticker_a: ResolvedTicker = ResolvedTicker(ticker="005930", exchange="KRX")
     ticker_b: ResolvedTicker = ResolvedTicker(ticker="000660", exchange="KRX")
     ticker_c: ResolvedTicker = ResolvedTicker(ticker="035420", exchange="KRX")
-    impact_a1: CompanyImpact = build_impact(build_company("A1", ticker_a))
-    impact_b: CompanyImpact = build_impact(build_company("B", ticker_b))
-    impact_a2: CompanyImpact = build_impact(
-        build_company("A2", ResolvedTicker(ticker="005930", exchange="KRX"))
+    impact_a1: CompanyImpact = build_impact(
+        build_company("A1", ticker_a, "KRX-COMPANY-000001", CompanyResolutionStatus.RESOLVED)
     )
-    impact_c: CompanyImpact = build_impact(build_company("C", ticker_c))
+    impact_b: CompanyImpact = build_impact(
+        build_company("B", ticker_b, "KRX-COMPANY-000002", CompanyResolutionStatus.RESOLVED)
+    )
+    impact_a2: CompanyImpact = build_impact(
+        build_company(
+            "A2",
+            ResolvedTicker(ticker="005930", exchange="KRX"),
+            "KRX-COMPANY-000001",
+            CompanyResolutionStatus.RESOLVED,
+        )
+    )
+    impact_c: CompanyImpact = build_impact(
+        build_company("C", ticker_c, "KRX-COMPANY-000003", CompanyResolutionStatus.RESOLVED)
+    )
     first_analysis: ImpactAnalysis = build_analysis(
         "First",
         (impact_a1, impact_b),
@@ -159,6 +211,8 @@ def test_strategy_handles_empty_input_and_does_not_mutate_analyses() -> None:
     company: ResolvedCompany = build_company(
         "Samsung",
         ResolvedTicker(ticker="005930", exchange="KRX"),
+        "KRX-COMPANY-000001",
+        CompanyResolutionStatus.RESOLVED,
     )
     impact: CompanyImpact = build_impact(company)
     analysis: ImpactAnalysis = build_analysis("Original", (impact,))

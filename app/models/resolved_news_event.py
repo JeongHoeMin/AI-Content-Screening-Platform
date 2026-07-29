@@ -8,6 +8,7 @@ from app.models.cross_validation import CrossValidationStatus
 from app.models.screening import ScreeningDecisionType
 
 from app.models.news_event import CompanyRelation, NewsEvent
+from app.models.company_resolution import CompanyResolutionStatus, KRXExchange
 
 
 @dataclass(frozen=True)
@@ -21,7 +22,7 @@ class ResolvedTicker:
     """
 
     ticker: str
-    exchange: str
+    exchange: KRXExchange
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,9 @@ class ResolvedCompany:
     name: str
     relation: CompanyRelation
     ticker: Optional[ResolvedTicker]
+    company_id: Optional[str] = None
+    resolution_status: CompanyResolutionStatus = CompanyResolutionStatus.UNRESOLVED
+    directory_version: str = "empty"
 
 
 @dataclass(frozen=True)

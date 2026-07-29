@@ -7,13 +7,11 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from app.config.errors import ConfigurationError
+
 
 _REPOSITORY_ROOT: Path = Path(__file__).resolve().parents[2]
 _OPENAI_DOTENV_PATH: Path = _REPOSITORY_ROOT / ".env"
-
-
-class ConfigurationError(ValueError):
-    """Raised when the OpenAI runtime configuration is invalid."""
 
 
 @dataclass(frozen=True)
