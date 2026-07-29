@@ -53,3 +53,9 @@ non-negative constraint. The parser records negative and out-of-range indexes
 as event-level observations, retaining valid siblings. Cross-validation flags
 are strict JSON booleans, and candidate IDs are indexed once per screening run
 to preserve the internal identity invariant.
+
+2026-07-29: Transport DTO fields deliberately preserve malformed primitive
+values so the parser can record event-level errors without discarding valid
+siblings. Batch-level failures are provider calls, structured-output response
+failures, or invalid response roots; field types, indexes, scores, flags, and
+reasons are event-level failures.

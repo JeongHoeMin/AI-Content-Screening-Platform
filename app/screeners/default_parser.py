@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import math
 from collections import Counter
-from typing import Dict, List, Sequence, Set, Tuple
+from typing import Dict, List, Set, Tuple
 
 from pydantic import ValidationError
 
@@ -27,16 +27,29 @@ class DefaultScreeningAssessmentParser(ScreeningAssessmentParser):
         candidates: Tuple[ScreeningCandidate, ...],
     ) -> ScreeningParseResult:
         valid_indexes: Set[int] = set(range(len(candidates)))
-        counts: Counter[int] = Counter(item.event_index for item in response.assessments)
+        indexed_items: List[tuple[int, ScreeningAssessmentResponseItem]] = []
+        errors: List[ScreeningParseError] = []
+        for item in response.assessments:
+            try:
+                event_index: int = self._parse_event_index(item.event_index)
+            except ValueError:
+                errors.append(
+                    ScreeningParseError(
+                        kind=ScreeningParseErrorKind.INVALID_EVENT_INDEX,
+                    )
+                )
+                continue
+            indexed_items.append((event_index, item))
+        counts: Counter[int] = Counter(
+            event_index for event_index, _ in indexed_items
+        )
         duplicate_indexes: Set[int] = {
             event_index for event_index, count in counts.items() if count > 1
         }
         response_by_index: Dict[int, ScreeningAssessmentResponseItem] = {}
-        errors: List[ScreeningParseError] = []
         invalid_indexes: Set[int] = set()
 
-        for item in response.assessments:
-            event_index: int = item.event_index
+        for event_index, item in indexed_items:
             if event_index not in valid_indexes:
                 errors.append(
                     ScreeningParseError(
@@ -104,6 +117,16 @@ class DefaultScreeningAssessmentParser(ScreeningAssessmentParser):
                 candidates,
             )
         try:
+            requires_cross_validation: bool = self._parse_cross_validation_flag(
+                item.requires_cross_validation
+            )
+        except ValueError:
+            return None, self._error(
+                ScreeningParseErrorKind.INVALID_CROSS_VALIDATION_FLAG,
+                event_index,
+                candidates,
+            )
+        try:
             reasons: Tuple[str, ...] = self._normalize_reasons(item.reasons)
         except ValueError:
             return None, self._error(
@@ -118,7 +141,7 @@ class DefaultScreeningAssessmentParser(ScreeningAssessmentParser):
                     relevance=relevance,
                     importance=importance,
                     credibility=credibility,
-                    requires_cross_validation=item.requires_cross_validation,
+                    requires_cross_validation=requires_cross_validation,
                     reasons=reasons,
                 ),
                 None,
@@ -131,9 +154,17 @@ class DefaultScreeningAssessmentParser(ScreeningAssessmentParser):
             )
 
     @staticmethod
-    def _parse_integer_score(value: int | float) -> int:
+    def _parse_event_index(value: object) -> int:
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise ValueError("event index must be an integer")
+        return value
+
+    @staticmethod
+    def _parse_integer_score(value: object) -> int:
         if isinstance(value, bool):
             raise ValueError("score must not be boolean")
+        if not isinstance(value, (int, float)):
+            raise ValueError("score must be a JSON number")
         if isinstance(value, float):
             if not math.isfinite(value):
                 raise ValueError("score must be finite")
@@ -145,10 +176,20 @@ class DefaultScreeningAssessmentParser(ScreeningAssessmentParser):
         return score
 
     @staticmethod
-    def _normalize_reasons(values: Sequence[str]) -> Tuple[str, ...]:
+    def _parse_cross_validation_flag(value: object) -> bool:
+        if type(value) is not bool:
+            raise ValueError("requires_cross_validation must be a boolean")
+        return value
+
+    @staticmethod
+    def _normalize_reasons(values: object) -> Tuple[str, ...]:
+        if not isinstance(values, list):
+            raise ValueError("reasons must be a list")
         seen: Set[str] = set()
         normalized: List[str] = []
         for value in values:
+            if not isinstance(value, str):
+                raise ValueError("every reason must be a string")
             reason: str = " ".join(value.split())
             if reason and reason not in seen:
                 seen.add(reason)

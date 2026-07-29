@@ -68,7 +68,9 @@ class ScreeningAssessmentResponse(BaseModel):
     assessments: List["ScreeningAssessmentResponseItem"]
 
 
-ScoreValue = Union[StrictInt, StrictFloat]
+IndexValue = Union[StrictInt, StrictStr, StrictBool, None]
+ScoreValue = Union[StrictInt, StrictFloat, StrictStr, StrictBool, None]
+BooleanValue = Union[StrictBool, StrictInt, StrictStr, None]
 
 
 class ScreeningAssessmentResponseItem(BaseModel):
@@ -76,12 +78,12 @@ class ScreeningAssessmentResponseItem(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    event_index: StrictInt
-    relevance: ScoreValue
-    importance: ScoreValue
-    credibility: ScoreValue
-    requires_cross_validation: StrictBool
-    reasons: List[StrictStr] = Field(default_factory=list)
+    event_index: IndexValue = None
+    relevance: ScoreValue = None
+    importance: ScoreValue = None
+    credibility: ScoreValue = None
+    requires_cross_validation: BooleanValue = None
+    reasons: List[object] = Field(default_factory=list)
 
 
 class ScreeningParseErrorKind(str, Enum):
@@ -91,6 +93,7 @@ class ScreeningParseErrorKind(str, Enum):
     DUPLICATE_EVENT_INDEX = "duplicate_event_index"
     MISSING_EVENT_INDEX = "missing_event_index"
     INVALID_SCORE = "invalid_score"
+    INVALID_CROSS_VALIDATION_FLAG = "invalid_cross_validation_flag"
     INVALID_REASONS = "invalid_reasons"
     DOMAIN_CONVERSION = "domain_conversion"
 

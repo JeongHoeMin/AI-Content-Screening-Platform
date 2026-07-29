@@ -126,6 +126,19 @@ def item(index: int, score: int | float = 80) -> ScreeningAssessmentResponseItem
     )
 
 
+def raw_item(**values: object) -> ScreeningAssessmentResponseItem:
+    defaults: dict[str, object] = {
+        "event_index": 1,
+        "relevance": 80,
+        "importance": 80,
+        "credibility": 80,
+        "requires_cross_validation": False,
+        "reasons": ["Material event."],
+    }
+    defaults.update(values)
+    return ScreeningAssessmentResponseItem.model_validate(defaults)
+
+
 def response(*items: ScreeningAssessmentResponseItem) -> ScreeningAssessmentResponse:
     return ScreeningAssessmentResponse(assessments=list(items))
 
@@ -173,9 +186,27 @@ def test_parser_converts_integral_number_to_domain_int(score: int | float) -> No
         '{"event_index": 0, "relevance": 50, "importance": 50, "credibility": 50, "requires_cross_validation": "true", "reasons": ["Reason"]}',
     ],
 )
-def test_response_dto_rejects_json_strings_and_boolean_indexes(payload: str) -> None:
-    with pytest.raises(ValidationError):
+def test_response_dto_preserves_malformed_primitives_for_parser(payload: str) -> None:
+    parsed_item: ScreeningAssessmentResponseItem = (
         ScreeningAssessmentResponseItem.model_validate_json(payload)
+    )
+
+    assert parsed_item is not None
+
+
+def test_response_dto_rejects_extra_properties() -> None:
+    with pytest.raises(ValidationError):
+        ScreeningAssessmentResponseItem.model_validate(
+            {
+                "event_index": 0,
+                "relevance": 50,
+                "importance": 50,
+                "credibility": 50,
+                "requires_cross_validation": False,
+                "reasons": ["Reason"],
+                "unexpected": True,
+            }
+        )
 
 
 @pytest.mark.parametrize("score", [50.5, float("nan"), float("inf"), -1, 101])
@@ -191,6 +222,66 @@ def test_parser_records_invalid_scores_without_discarding_siblings(
     assert parsed.assessments[0].candidate_id == "article-1:0"
     assert parsed.errors[0].kind is ScreeningParseErrorKind.INVALID_SCORE
     assert parsed.errors[0].candidate_id == "article-1:1"
+
+
+@pytest.mark.parametrize("invalid_score", ["50", True, None])
+def test_parser_records_malformed_score_without_discarding_sibling(
+    invalid_score: object,
+) -> None:
+    candidates = LLMEventScreener._candidates(build_inferences())
+    parsed = DefaultScreeningAssessmentParser().parse(
+        response(item(0), raw_item(relevance=invalid_score)), candidates
+    )
+
+    assert len(parsed.assessments) == 1
+    assert parsed.errors[0].kind is ScreeningParseErrorKind.INVALID_SCORE
+    assert parsed.errors[0].candidate_id == "article-1:1"
+
+
+@pytest.mark.parametrize("invalid_flag", [1, "true", None])
+def test_parser_records_invalid_cross_validation_flag_without_discarding_sibling(
+    invalid_flag: object,
+) -> None:
+    candidates = LLMEventScreener._candidates(build_inferences())
+    parsed = DefaultScreeningAssessmentParser().parse(
+        response(item(0), raw_item(requires_cross_validation=invalid_flag)), candidates
+    )
+
+    assert len(parsed.assessments) == 1
+    assert parsed.errors[0].kind is ScreeningParseErrorKind.INVALID_CROSS_VALIDATION_FLAG
+    assert parsed.errors[0].candidate_id == "article-1:1"
+
+
+def test_parser_records_non_string_reason_without_discarding_sibling() -> None:
+    candidates = LLMEventScreener._candidates(build_inferences())
+    parsed = DefaultScreeningAssessmentParser().parse(
+        response(item(0), raw_item(reasons=["Valid reason", 123])), candidates
+    )
+
+    assert len(parsed.assessments) == 1
+    assert parsed.errors[0].kind is ScreeningParseErrorKind.INVALID_REASONS
+    assert parsed.errors[0].candidate_id == "article-1:1"
+
+
+def test_parser_records_non_integer_event_index_without_discarding_sibling() -> None:
+    candidates = LLMEventScreener._candidates(build_inferences())
+    parsed = DefaultScreeningAssessmentParser().parse(
+        response(item(0), raw_item(event_index="1")), candidates
+    )
+
+    assert len(parsed.assessments) == 1
+    assert any(
+        error.kind is ScreeningParseErrorKind.INVALID_EVENT_INDEX
+        and error.event_index is None
+        and error.candidate_id is None
+        for error in parsed.errors
+    )
+    assert any(
+        error.kind is ScreeningParseErrorKind.MISSING_EVENT_INDEX
+        and error.event_index == 1
+        and error.candidate_id == "article-1:1"
+        for error in parsed.errors
+    )
 
 
 def test_parser_rejects_duplicate_and_missing_indexes() -> None:
