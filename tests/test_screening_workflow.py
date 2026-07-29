@@ -135,8 +135,10 @@ class FakeEventScreener(EventScreener):
     def __init__(
         self,
         decisions: Tuple[ScreeningDecisionType, ...] = (),
+        returned_event_count: Optional[int] = None,
     ) -> None:
         self.decisions: Tuple[ScreeningDecisionType, ...] = decisions
+        self.returned_event_count: Optional[int] = returned_event_count
         self.calls: List[Tuple[LLMInferenceResult, ...]] = []
 
     async def screen(
@@ -147,6 +149,8 @@ class FakeEventScreener(EventScreener):
         events: Tuple[NewsEvent, ...] = tuple(
             event for inference in inferences for event in inference.events
         )
+        if self.returned_event_count is not None:
+            events = events[: self.returned_event_count]
         return tuple(
             ScreeningDecision(
                 event=event,
@@ -251,6 +255,7 @@ def build_workflow(
     accepted_ids: Tuple[str, ...],
     extractor_error: Optional[Exception] = None,
     decisions: Tuple[ScreeningDecisionType, ...] = (),
+    returned_event_count: Optional[int] = None,
 ) -> tuple[
     ScreeningWorkflow,
     FakeArticleEvaluator,
@@ -265,7 +270,7 @@ def build_workflow(
 ]:
     evaluator: FakeArticleEvaluator = FakeArticleEvaluator(accepted_ids)
     extractor: FakeExtractor = FakeExtractor(extractor_error)
-    screener: FakeEventScreener = FakeEventScreener(decisions)
+    screener: FakeEventScreener = FakeEventScreener(decisions, returned_event_count)
     cross_validator: FakeCrossValidator = FakeCrossValidator()
     resolver: FakeResolver = FakeResolver()
     analyzer: FakeAnalyzer = FakeAnalyzer()
@@ -445,6 +450,25 @@ async def test_workflow_cross_validates_only_review_events_with_article_context(
     assert result.statistics.insufficient_evidence_events == 1
     assert result.statistics.verified_events == 0
     assert resolver.calls[0] == extractor.events
+
+
+@pytest.mark.anyio
+async def test_workflow_allows_screener_partial_decisions() -> None:
+    articles: Tuple[Article, ...] = (build_article(1), build_article(2))
+    workflow, _, extractor, _, cross_validator, resolver, _, _, _, _ = build_workflow(
+        ("article-1", "article-2"),
+        decisions=(ScreeningDecisionType.REVIEW,),
+        returned_event_count=1,
+    )
+
+    result: ScreeningResult = await workflow.run(articles)
+
+    assert len(result.decisions) == 1
+    assert result.decisions[0].event is extractor.events[0]
+    assert len(cross_validator.calls) == 1
+    assert cross_validator.calls[0][0].decision.event is extractor.events[0]
+    assert resolver.calls[0] == [extractor.events[0]]
+    assert "screening_errors" not in result.model_dump()
 
 
 @pytest.mark.anyio

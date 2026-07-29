@@ -7,6 +7,7 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    StrictBool,
     StrictFloat,
     StrictInt,
     StrictStr,
@@ -75,11 +76,11 @@ class ScreeningAssessmentResponseItem(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    event_index: StrictInt = Field(ge=0)
+    event_index: StrictInt
     relevance: ScoreValue
     importance: ScoreValue
     credibility: ScoreValue
-    requires_cross_validation: bool
+    requires_cross_validation: StrictBool
     reasons: List[StrictStr] = Field(default_factory=list)
 
 
@@ -100,7 +101,7 @@ class ScreeningParseError(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     kind: ScreeningParseErrorKind
-    event_index: Optional[int] = Field(default=None, ge=0)
+    event_index: Optional[int] = None
     candidate_id: Optional[str] = Field(default=None, min_length=1)
 
 

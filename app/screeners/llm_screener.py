@@ -50,6 +50,9 @@ class LLMEventScreener(EventScreener):
         inferences: Tuple[LLMInferenceResult, ...],
     ) -> Tuple[ScreeningDecision, ...]:
         candidates: Tuple[ScreeningCandidate, ...] = self._candidates(inferences)
+        candidates_by_id: dict[str, ScreeningCandidate] = self._index_candidates(
+            candidates
+        )
         decisions: List[ScreeningDecision] = []
         for batch_index, batch in enumerate(self._batches(candidates)):
             try:
@@ -72,11 +75,15 @@ class LLMEventScreener(EventScreener):
                 continue
             for error in parsed.errors:
                 self._log_parse_error(batch_index, error)
-            decisions.extend(
-                self._policy.decide(candidate.event, assessment)
-                for assessment in parsed.assessments
-                for candidate in (self._candidate_for_assessment(batch, assessment),)
-            )
+            for assessment in parsed.assessments:
+                candidate: ScreeningCandidate | None = candidates_by_id.get(
+                    assessment.candidate_id
+                )
+                if candidate is None:
+                    raise RuntimeError(
+                        "Parsed screening assessment references an unknown candidate"
+                    )
+                decisions.append(self._policy.decide(candidate.event, assessment))
         if candidates and not decisions:
             raise NoValidScreeningDecisionsError(
                 "No valid screening decisions were produced"
@@ -98,15 +105,15 @@ class LLMEventScreener(EventScreener):
         return self._parser.parse(response, candidates)
 
     @staticmethod
-    def _candidate_for_assessment(
+    def _index_candidates(
         candidates: Tuple[ScreeningCandidate, ...],
-        assessment: ScreeningAssessment,
-    ) -> ScreeningCandidate:
-        return next(
-            candidate
-            for candidate in candidates
-            if candidate.candidate_id == assessment.candidate_id
-        )
+    ) -> dict[str, ScreeningCandidate]:
+        candidates_by_id: dict[str, ScreeningCandidate] = {
+            candidate.candidate_id: candidate for candidate in candidates
+        }
+        if len(candidates_by_id) != len(candidates):
+            raise RuntimeError("Screening candidates contain duplicate candidate IDs")
+        return candidates_by_id
 
     @staticmethod
     def _log_parse_error(batch_index: int, error: ScreeningParseError) -> None:

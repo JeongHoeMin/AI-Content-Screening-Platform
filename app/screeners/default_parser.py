@@ -94,13 +94,34 @@ class DefaultScreeningAssessmentParser(ScreeningAssessmentParser):
         candidates: Tuple[ScreeningCandidate, ...],
     ) -> tuple[ScreeningAssessment | None, ScreeningParseError | None]:
         try:
-            assessment: ScreeningAssessment = ScreeningAssessment(
-                candidate_id=candidates[event_index].candidate_id,
-                relevance=self._parse_integer_score(item.relevance),
-                importance=self._parse_integer_score(item.importance),
-                credibility=self._parse_integer_score(item.credibility),
-                requires_cross_validation=item.requires_cross_validation,
-                reasons=self._normalize_reasons(item.reasons),
+            relevance: int = self._parse_integer_score(item.relevance)
+            importance: int = self._parse_integer_score(item.importance)
+            credibility: int = self._parse_integer_score(item.credibility)
+        except ValueError:
+            return None, self._error(
+                ScreeningParseErrorKind.INVALID_SCORE,
+                event_index,
+                candidates,
+            )
+        try:
+            reasons: Tuple[str, ...] = self._normalize_reasons(item.reasons)
+        except ValueError:
+            return None, self._error(
+                ScreeningParseErrorKind.INVALID_REASONS,
+                event_index,
+                candidates,
+            )
+        try:
+            return (
+                ScreeningAssessment(
+                    candidate_id=candidates[event_index].candidate_id,
+                    relevance=relevance,
+                    importance=importance,
+                    credibility=credibility,
+                    requires_cross_validation=item.requires_cross_validation,
+                    reasons=reasons,
+                ),
+                None,
             )
         except ValidationError:
             return None, self._error(
@@ -108,14 +129,6 @@ class DefaultScreeningAssessmentParser(ScreeningAssessmentParser):
                 event_index,
                 candidates,
             )
-        except ValueError as error:
-            kind: ScreeningParseErrorKind = (
-                ScreeningParseErrorKind.INVALID_SCORE
-                if "score" in str(error)
-                else ScreeningParseErrorKind.INVALID_REASONS
-            )
-            return None, self._error(kind, event_index, candidates)
-        return assessment, None
 
     @staticmethod
     def _parse_integer_score(value: int | float) -> int:

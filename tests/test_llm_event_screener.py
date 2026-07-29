@@ -12,6 +12,7 @@ from app.llms import (
     ChatRole,
     StructuredOutputCallError,
     StructuredOutputLLM,
+    StructuredOutputResponseError,
 )
 from app.models import (
     Article,
@@ -168,6 +169,8 @@ def test_parser_converts_integral_number_to_domain_int(score: int | float) -> No
         '{"event_index": 0, "relevance": "50", "importance": 50, "credibility": 50, "requires_cross_validation": false, "reasons": ["Reason"]}',
         '{"event_index": true, "relevance": 50, "importance": 50, "credibility": 50, "requires_cross_validation": false, "reasons": ["Reason"]}',
         '{"event_index": 0, "relevance": true, "importance": 50, "credibility": 50, "requires_cross_validation": false, "reasons": ["Reason"]}',
+        '{"event_index": 0, "relevance": 50, "importance": 50, "credibility": 50, "requires_cross_validation": 1, "reasons": ["Reason"]}',
+        '{"event_index": 0, "relevance": 50, "importance": 50, "credibility": 50, "requires_cross_validation": "true", "reasons": ["Reason"]}',
     ],
 )
 def test_response_dto_rejects_json_strings_and_boolean_indexes(payload: str) -> None:
@@ -201,6 +204,32 @@ def test_parser_rejects_duplicate_and_missing_indexes() -> None:
         ScreeningParseErrorKind.DUPLICATE_EVENT_INDEX,
         ScreeningParseErrorKind.MISSING_EVENT_INDEX,
     }
+
+
+@pytest.mark.parametrize("invalid_index", [-1, 2])
+def test_parser_records_invalid_indexes_without_discarding_valid_siblings(
+    invalid_index: int,
+) -> None:
+    candidates = LLMEventScreener._candidates(build_inferences())
+
+    parsed = DefaultScreeningAssessmentParser().parse(
+        response(item(0), item(invalid_index)), candidates
+    )
+
+    assert len(parsed.assessments) == 1
+    assert parsed.assessments[0].candidate_id == "article-1:0"
+    assert any(
+        error.kind is ScreeningParseErrorKind.INVALID_EVENT_INDEX
+        and error.event_index == invalid_index
+        and error.candidate_id is None
+        for error in parsed.errors
+    )
+    assert any(
+        error.kind is ScreeningParseErrorKind.MISSING_EVENT_INDEX
+        and error.event_index == 1
+        and error.candidate_id == "article-1:1"
+        for error in parsed.errors
+    )
 
 
 def test_parser_normalizes_reasons_and_preserves_input_event_order() -> None:
@@ -266,6 +295,7 @@ async def test_screener_allows_partial_event_success_and_safe_logs(
             records.append((event, kwargs))
 
     monkeypatch.setattr(llm_screener_module, "logger", CapturingLogger())
+    monkeypatch.setenv("OPENAI_API_KEY", "secret-openai-test-key")
     screener, _, _ = build_screener([response(item(0, 80), item(1, 50.5))])
 
     decisions = await screener.screen(build_inferences())
@@ -283,12 +313,21 @@ async def test_screener_allows_partial_event_success_and_safe_logs(
         )
     ]
     assert "private article content" not in repr(records)
+    assert "secret-openai-test-key" not in repr(records)
 
 
 @pytest.mark.anyio
 async def test_screener_continues_after_batch_call_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    records: List[tuple[str, dict[str, object]]] = []
+
+    class CapturingLogger:
+        def warning(self, event: str, **kwargs: object) -> None:
+            records.append((event, kwargs))
+
+    monkeypatch.setattr(llm_screener_module, "logger", CapturingLogger())
+    monkeypatch.setenv("OPENAI_API_KEY", "secret-openai-test-key")
     screener, _, llm = build_screener(
         [response(item(0))], config=BatchScreeningConfig(max_events_per_batch=1)
     )
@@ -310,6 +349,113 @@ async def test_screener_continues_after_batch_call_failure(
 
     assert len(decisions) == 1
     assert decisions[0].event.title == "Event 1"
+    assert records[0][0] == "screening_batch_failed"
+    assert records[0][1] == {
+        "batch_index": 0,
+        "candidate_count": 1,
+        "error_kind": "structured_output_call",
+    }
+    assert "secret-openai-test-key" not in repr(records)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "failure_kind",
+    [
+        "structured_output_response",
+        "validation",
+    ],
+)
+async def test_screener_continues_after_response_processing_failure(
+    failure_kind: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    screener, _, llm = build_screener(
+        [response(item(0))], config=BatchScreeningConfig(max_events_per_batch=1)
+    )
+    original_generate = llm.generate
+    calls: int = 0
+    error: Exception
+    if failure_kind == "validation":
+        try:
+            ScreeningAssessmentResponse.model_validate({})
+        except ValidationError as validation_error:
+            error = validation_error
+    else:
+        error = StructuredOutputResponseError("response_incomplete")
+
+    async def fail_first_call(
+        messages: List[ChatMessage], response_model: Type[OutputT]
+    ) -> OutputT:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise error
+        return await original_generate(messages, response_model)
+
+    llm.generate = fail_first_call  # type: ignore[method-assign]
+
+    decisions = await screener.screen(build_inferences())
+
+    assert len(decisions) == 1
+    assert decisions[0].event.title == "Event 1"
+
+
+@pytest.mark.anyio
+async def test_screener_propagates_unexpected_runtime_error() -> None:
+    expected_error = RuntimeError("programming bug")
+    screener, _, llm = build_screener([])
+    llm.error_on_call = expected_error
+
+    with pytest.raises(RuntimeError) as error_info:
+        await screener.screen(build_inferences(1))
+
+    assert error_info.value is expected_error
+
+
+@pytest.mark.anyio
+async def test_screener_raises_when_every_batch_call_fails() -> None:
+    screener, _, llm = build_screener([], config=BatchScreeningConfig(max_events_per_batch=1))
+    llm.error_on_call = StructuredOutputCallError(provider="test", error_type="APIError")
+
+    with pytest.raises(NoValidScreeningDecisionsError):
+        await screener.screen(build_inferences())
+
+
+@pytest.mark.anyio
+async def test_screener_raises_for_empty_assessment_response() -> None:
+    screener, _, _ = build_screener([response()])
+
+    with pytest.raises(NoValidScreeningDecisionsError):
+        await screener.screen(build_inferences())
+
+
+@pytest.mark.anyio
+async def test_screener_processes_multiple_batches_in_input_order() -> None:
+    screener, _, llm = build_screener(
+        [response(item(0)), response(item(0)), response(item(0))],
+        config=BatchScreeningConfig(max_events_per_batch=1),
+    )
+
+    decisions = await screener.screen(build_inferences(3))
+
+    assert llm.calls == 3
+    assert tuple(decision.event.title for decision in decisions) == (
+        "Event 0",
+        "Event 1",
+        "Event 2",
+    )
+
+
+@pytest.mark.anyio
+async def test_screener_rejects_duplicate_candidate_ids_before_llm_call() -> None:
+    duplicate_inferences = (build_inferences(1)[0], build_inferences(1)[0])
+    screener, _, llm = build_screener([])
+
+    with pytest.raises(RuntimeError, match="duplicate candidate IDs"):
+        await screener.screen(duplicate_inferences)
+
+    assert llm.calls == 0
 
 
 @pytest.mark.anyio

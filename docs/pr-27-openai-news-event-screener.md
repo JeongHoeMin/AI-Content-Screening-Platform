@@ -47,3 +47,9 @@ parser owns 0--100 and integral-value validation. This preserves valid sibling
 events when one score is invalid. The final result omits recoverable screening
 errors by design; limited structured logs preserve operational observability
 without exposing article or provider payloads.
+
+2026-07-29: Response DTO indexes are strict integers but deliberately have no
+non-negative constraint. The parser records negative and out-of-range indexes
+as event-level observations, retaining valid siblings. Cross-validation flags
+are strict JSON booleans, and candidate IDs are indexed once per screening run
+to preserve the internal identity invariant.

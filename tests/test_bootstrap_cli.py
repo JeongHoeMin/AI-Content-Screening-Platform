@@ -134,6 +134,10 @@ def test_openai_bootstrap_assembles_extractor_and_screener_as_llms(
     assert isinstance(first.components["extractor"], LLMNewsEventExtractor)
     assert isinstance(first.components["screener"], LLMEventScreener)
     assert isinstance(first.components["cross_validator"], DeterministicMockCrossValidator)
+    assert (
+        first.components["extractor"]._structured_llm
+        is first.components["screener"]._structured_llm
+    )
     assert first is not second
 
 
