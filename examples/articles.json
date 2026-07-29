@@ -1,0 +1,34 @@
+[
+  {
+    "id": "article-001",
+    "title": "Samsung AI semiconductor launch",
+    "content": "Samsung announced a new AI semiconductor platform with expanded production capacity and long-term supply plans. The company said the product launch is intended to support data-center customers and future artificial intelligence workloads across global markets. This deterministic sample body is intentionally long enough for the article evaluator.",
+    "source": "news-a",
+    "url": "https://example.com/article-001",
+    "published_at": "2026-07-29T10:00:00+09:00"
+  },
+  {
+    "id": "article-002",
+    "title": "  samsung  ai semiconductor launch ",
+    "content": "A second outlet reported the Samsung AI semiconductor launch and described the same platform, planned production expansion, and expected demand from data-center customers. The report independently confirms the same announced event with a sufficiently long article body for the deterministic local screening workflow sample.",
+    "source": "news-b",
+    "url": "https://example.com/article-002",
+    "published_at": "2026-07-29T10:10:00+09:00"
+  },
+  {
+    "id": "article-003",
+    "title": "SAMSUNG AI SEMICONDUCTOR LAUNCH",
+    "content": "A third independent publication covered the Samsung AI semiconductor launch, the planned product release, and the company's expected capacity increase. It uses the same underlying event while providing another source for the deterministic mock cross-validation path and has enough content to pass structural evaluation.",
+    "source": "news-c",
+    "url": "https://example.com/article-003",
+    "published_at": "2026-07-29T10:20:00+09:00"
+  },
+  {
+    "id": "article-004",
+    "title": "Independent market commentary",
+    "content": "This independent market commentary is intentionally unrelated to the semiconductor launch samples above. It has a unique normalized title, which exercises the deterministic mock insufficient-evidence path while still containing enough text to pass the workflow article evaluator without depending on any external service.",
+    "source": "news-d",
+    "url": "https://example.com/article-004",
+    "published_at": "2026-07-29T10:30:00+09:00"
+  }
+]
