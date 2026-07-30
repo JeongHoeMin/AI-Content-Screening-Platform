@@ -58,7 +58,8 @@ def test_system_prompt_defines_extraction_boundary_and_rationale_contract() -> N
     assert "ticker" in prompt
     assert "event_type" in prompt
     assert "event_facts" in prompt
-    assert "bankruptcy requires financial_event" in prompt
+    assert "major_supply_contract" in prompt
+    assert "bankruptcy and major_supply_contract require financial_event" in prompt
 
 
 def test_user_prompt_separates_article_fields_as_data() -> None:

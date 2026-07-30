@@ -173,7 +173,7 @@ def test_compatibility_rejects_fact_assigned_to_multiple_event_types() -> None:
 
 
 def test_compatibility_rejects_table_with_missing_event_facts() -> None:
-    with pytest.raises(ValidationError, match="Missing facts: MASS_LAYOFF, BANKRUPTCY"):
+    with pytest.raises(ValidationError, match="Missing facts: MASS_LAYOFF, BANKRUPTCY, MAJOR_SUPPLY_CONTRACT"):
         EventTypeCompatibility(
             entries=(
                 EventTypeCompatibilityEntry(
@@ -201,7 +201,10 @@ def test_compatibility_accepts_all_distinct_facts_for_distinct_event_types() -> 
             ),
             EventTypeCompatibilityEntry(
                 event_type=EventType.FINANCIAL_EVENT,
-                event_facts=(EventFact.BANKRUPTCY,),
+                event_facts=(
+                    EventFact.BANKRUPTCY,
+                    EventFact.MAJOR_SUPPLY_CONTRACT,
+                ),
             ),
             EventTypeCompatibilityEntry(
                 event_type=EventType.PRODUCT_EVENT,

@@ -82,6 +82,17 @@ def test_rule_strategy_skips_indirect_companies_and_factless_events() -> None:
     assert strategy.analyze(build_resolved_event()) == ()
 
 
+def test_rule_strategy_interprets_major_supply_contract_as_positive() -> None:
+    strategy: ImpactStrategy = RuleImpactStrategy(DEFAULT_IMPACT_RULE_CATALOG)
+
+    observations: Tuple[ImpactObservation, ...] = strategy.analyze(
+        build_resolved_event((EventFact.MAJOR_SUPPLY_CONTRACT,))
+    )
+
+    assert observations[0].direction is ImpactDirection.POSITIVE
+    assert observations[0].reason_code is ImpactReasonCode.MAJOR_SUPPLY_CONTRACT_POSITIVE
+
+
 def test_rule_strategy_preserves_conflicting_facts_and_direct_company_order() -> None:
     strategy: ImpactStrategy = RuleImpactStrategy(DEFAULT_IMPACT_RULE_CATALOG)
     event: ResolvedNewsEvent = build_resolved_event(

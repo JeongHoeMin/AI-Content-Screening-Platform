@@ -209,6 +209,41 @@ def test_parser_keeps_valid_facts_and_records_fact_local_errors() -> None:
     assert [error.fact_index for error in result.errors] == [1, 2]
 
 
+def test_parser_preserves_explicit_major_supply_contract_fact() -> None:
+    article: Article = build_article(1)
+    response: NewsEventExtractionResponse = NewsEventExtractionResponse(
+        articles=[
+            ArticleInferenceResponseItem(
+                article_id=article.id,
+                summary="Article summary",
+                reasoning="Article reasoning",
+                confidence=0.8,
+                events=[
+                    NewsEventResponseItem(
+                        title="Supply contract",
+                        summary="Example Corp entered a supply contract.",
+                        event_type=EventType.FINANCIAL_EVENT.value,
+                        event_facts=[EventFact.MAJOR_SUPPLY_CONTRACT.value],
+                        companies=[
+                            ExtractedCompanyResponseItem(
+                                name="Example Corp",
+                                relation=CompanyRelation.DIRECT.value,
+                            )
+                        ],
+                    )
+                ],
+            )
+        ]
+    )
+
+    result = DefaultNewsEventParser().parse(response, (article,))
+
+    assert result.errors == ()
+    assert result.inferences[0].events[0].event_facts == (
+        EventFact.MAJOR_SUPPLY_CONTRACT,
+    )
+
+
 def test_parser_excludes_event_with_invalid_event_type() -> None:
     article: Article = build_article(1)
     response: NewsEventExtractionResponse = NewsEventExtractionResponse(
@@ -252,7 +287,10 @@ def test_parser_uses_injected_event_type_compatibility_table() -> None:
             ),
             EventTypeCompatibilityEntry(
                 event_type=EventType.FINANCIAL_EVENT,
-                event_facts=(EventFact.BANKRUPTCY,),
+                event_facts=(
+                    EventFact.BANKRUPTCY,
+                    EventFact.MAJOR_SUPPLY_CONTRACT,
+                ),
             ),
             EventTypeCompatibilityEntry(
                 event_type=EventType.MACRO_EVENT,

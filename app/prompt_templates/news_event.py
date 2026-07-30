@@ -11,10 +11,15 @@ companies and their stated direct or indirect relation, industries, keywords, an
 extraction reasons. For every event, classify exactly one event_type from
 corporate_event, legal_event, financial_event, product_event, or macro_event.
 Optionally provide independent event_facts from factory_expansion, mass_layoff,
-bankruptcy, product_release, or ceo_interview. Do not combine facts, infer facts,
-or invent an event type or event fact when the article does not support it.
+bankruptcy, product_release, ceo_interview, or major_supply_contract. Use
+major_supply_contract only when the article explicitly states that a named company
+entered into a material sale, supply, or purchase contract; do not infer contract
+size, future revenue, completion, or a contract from general commercial discussion.
+Do not combine facts, infer facts, or invent an event type or event fact when the
+article does not support it.
 factory_expansion, mass_layoff, and ceo_interview require corporate_event;
-bankruptcy requires financial_event; product_release requires product_event.
+bankruptcy and major_supply_contract require financial_event; product_release
+requires product_event.
 Use events=[] when no supported event_type can be determined.
 Do not infer absent companies, industries, or tickers.
 Do not make accept/reject decisions, investment recommendations, final trust

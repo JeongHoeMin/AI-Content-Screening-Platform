@@ -44,6 +44,7 @@ class ImpactReasonCode(str, Enum):
     BANKRUPTCY_NEGATIVE = "bankruptcy_negative"
     PRODUCT_RELEASE_DIRECTION_UNKNOWN = "product_release_direction_unknown"
     CEO_INTERVIEW_DIRECTION_UNKNOWN = "ceo_interview_direction_unknown"
+    MAJOR_SUPPLY_CONTRACT_POSITIVE = "major_supply_contract_positive"
 
 
 class ImpactExclusionReason(str, Enum):

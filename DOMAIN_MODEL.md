@@ -76,6 +76,8 @@ Directory는 normalized canonical name과 aliases의 name index에서 후보 사
 
 `ImpactDirection`의 `UNKNOWN`은 근거 부족을, `NEUTRAL`은 영향 없다는 적극적 판단을 뜻한다. 둘은 동일시하지 않는다. 모든 observation은 방향이나 resolution 상태와 무관하게 analysis snapshot에 보존한다.
 
+v1 EventFact에는 명시된 `MAJOR_SUPPLY_CONTRACT`도 포함한다. 이는 공시나 기사에 계약 체결 사실이 직접 명시되고 계약 당사 기업이 DIRECT로 식별된 경우에만 사용한다. 계약 규모·이행 가능성·미래 실적은 추가로 추론하지 않는다. 기본 catalog는 이 계약 체결 사실을 positive observation으로 해석한다.
+
 Direction은 versioned Impact Rule Catalog의 등록된 Fact, Direction, Reason Code 조합으로만 생성한다. Catalog는 모든 `EventFact`를 정확히 한 번씩 등록해야 하며 중복·누락은 fail-fast한다. v1에서 `CompanyRelation.DIRECT`만 direction 생성 대상이며 `INDIRECT`는 자동 전파 대상이 아니다. 각 Fact는 독립 observation을 만들고 상충 direction은 보존한다.
 
 `ImpactPolicy`는 observation의 허용·제외와 downstream 전달 여부만 결정하는 filtering 계층이다. `ImpactEvaluation`은 observation과 eligibility를 함께 보관하며, eligible이면 reason이 null, ineligible이면 하나의 Policy 전용 `exclusion_reason`을 가진다. 우선순위는 `EVENT_REJECTED` → `EVENT_REVIEW_NOT_VERIFIED` → `COMPANY_NOT_RESOLVED` → `COMPANY_IDENTITY_MISSING` → `UNSUPPORTED_SCOPE` → `UNKNOWN_DIRECTION`이다. Policy는 Strategy observation의 identity와 순서를 유지하며 `direction`, `scope`, `reason_code`, `uncertainty`, company reference를 수정·교체·삭제하지 않는다. Aggregation adapter는 eligible evaluation의 observation 하나를 CompanyImpact 하나로 변환하며 병합·상쇄하지 않는다.

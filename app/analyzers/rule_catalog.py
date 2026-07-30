@@ -85,5 +85,10 @@ DEFAULT_IMPACT_RULE_CATALOG = ImpactRuleCatalog(
             direction=ImpactDirection.UNKNOWN,
             reason_code=ImpactReasonCode.CEO_INTERVIEW_DIRECTION_UNKNOWN,
         ),
+        ImpactRule(
+            event_fact=EventFact.MAJOR_SUPPLY_CONTRACT,
+            direction=ImpactDirection.POSITIVE,
+            reason_code=ImpactReasonCode.MAJOR_SUPPLY_CONTRACT_POSITIVE,
+        ),
     )
 )

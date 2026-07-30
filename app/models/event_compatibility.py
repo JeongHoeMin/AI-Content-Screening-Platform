@@ -82,7 +82,10 @@ DEFAULT_EVENT_TYPE_COMPATIBILITY = EventTypeCompatibility(
         ),
         EventTypeCompatibilityEntry(
             event_type=EventType.FINANCIAL_EVENT,
-            event_facts=(EventFact.BANKRUPTCY,),
+            event_facts=(
+                EventFact.BANKRUPTCY,
+                EventFact.MAJOR_SUPPLY_CONTRACT,
+            ),
         ),
         EventTypeCompatibilityEntry(
             event_type=EventType.PRODUCT_EVENT,

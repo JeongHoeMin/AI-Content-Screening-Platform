@@ -26,3 +26,4 @@
 - 2026-07-30: 실제 Compose 버튼 실행에서 Naver/DART 100건 수집과 KRX snapshot 준비까지 확인했다. KRX external failure는 고정된 safe transport detail만 추가 관측하도록 보완 중이다.
 - 2026-07-30: KRX API가 HTTP 401을 반환해 사용자가 제공한 CP949 KRX master CSV를 runtime directory로 사용하는 fallback을 추가한다. 원본 CSV는 수정하지 않고 표준코드·단축코드·종목약명·시장구분만 canonical snapshot으로 변환한다.
 - 2026-07-30: Docker Compose는 user-provided KRX master CSV를 read-only mount하는 기본 경로로 전환한다. CSV를 통해 API authorization 없이 reproducible company snapshot을 사용한다.
+- 2026-07-30: 실제 DART 공시 제목에서 `단일판매·공급계약`을 event fact로 보존할 수 있도록, 해당 공시 사실만 `financial_event`의 보수적 긍정 영향 규칙으로 추가한다. LLM은 공시에 명시된 계약만 관측하고, 영향 방향과 추천은 기존 deterministic catalog·policy가 계속 결정한다.

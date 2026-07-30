@@ -19,6 +19,7 @@ def test_default_catalog_has_the_approved_direction_and_reason_mapping() -> None
         EventFact.BANKRUPTCY: (ImpactDirection.NEGATIVE, ImpactReasonCode.BANKRUPTCY_NEGATIVE),
         EventFact.PRODUCT_RELEASE: (ImpactDirection.UNKNOWN, ImpactReasonCode.PRODUCT_RELEASE_DIRECTION_UNKNOWN),
         EventFact.CEO_INTERVIEW: (ImpactDirection.UNKNOWN, ImpactReasonCode.CEO_INTERVIEW_DIRECTION_UNKNOWN),
+        EventFact.MAJOR_SUPPLY_CONTRACT: (ImpactDirection.POSITIVE, ImpactReasonCode.MAJOR_SUPPLY_CONTRACT_POSITIVE),
     }
 
     assert {

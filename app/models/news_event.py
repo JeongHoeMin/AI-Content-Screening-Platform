@@ -24,6 +24,7 @@ class EventFact(str, Enum):
     BANKRUPTCY = "bankruptcy"
     PRODUCT_RELEASE = "product_release"
     CEO_INTERVIEW = "ceo_interview"
+    MAJOR_SUPPLY_CONTRACT = "major_supply_contract"
 
 
 class CompanyRelation(str, Enum):
