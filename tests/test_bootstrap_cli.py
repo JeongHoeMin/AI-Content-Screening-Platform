@@ -22,12 +22,14 @@ from app.mock_screening import (
 from app.screeners import LLMEventScreener
 from app.cross_validators import LLMEventCrossValidator
 from app.models import (
+    DEFAULT_RANKING_POLICY_CONFIG,
     DEFAULT_SCORING_POLICY_CONFIG,
     Article,
     CrossValidationStatus,
     ResolvedDecisionType,
 )
 from app.scorers import EvidenceAwareScoringStrategy
+from app.candidates import RuleCandidateSelectionPolicy
 from app.workflows import ScreeningResult
 
 PROJECT_ROOT: Path = Path(__file__).resolve().parents[1]
@@ -116,6 +118,22 @@ def test_bootstrap_reuses_the_default_scoring_config_instance(
 
     assert isinstance(strategy, EvidenceAwareScoringStrategy)
     assert strategy.config is DEFAULT_SCORING_POLICY_CONFIG
+
+
+def test_bootstrap_reuses_the_default_ranking_config_instance(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class CapturingWorkflow:
+        def __init__(self, **components: object) -> None:
+            self.components: dict[str, object] = components
+
+    monkeypatch.setattr(bootstrap, "ScreeningWorkflow", CapturingWorkflow)
+    workflow = bootstrap.create_screening_workflow(ExecutionMode.MOCK)
+    candidate_selection_engine = workflow.components["candidate_selection_engine"]
+    policy = candidate_selection_engine._policy
+
+    assert isinstance(policy, RuleCandidateSelectionPolicy)
+    assert policy.config is DEFAULT_RANKING_POLICY_CONFIG
 
 
 def test_mock_bootstrap_does_not_load_openai_config(

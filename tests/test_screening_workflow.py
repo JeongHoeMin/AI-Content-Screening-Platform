@@ -11,12 +11,14 @@ from app.analyzers import ImpactAnalyzer
 from app.evaluators import ArticleEvaluator
 from app.extractors import NewsEventExtractor
 from app.models import (
+    DEFAULT_RANKING_POLICY_CONFIG,
     DEFAULT_RECOMMENDATION_POLICY_CONFIG,
     Article,
     ArticleEvaluationResult,
     CompanyRelation,
     EventType,
     EvidenceAggregation,
+    CandidateSelectionResult,
     ExtractedCompany,
     ImpactAnalysis,
     LLMExtractionResult,
@@ -246,6 +248,19 @@ class FakeRecommendationEngine(RecommendationEngine):
         return self.result
 
 
+class FakeCandidateSelectionEngine:
+    def __init__(self) -> None:
+        self.calls: List[RecommendationResult] = []
+        self.result: CandidateSelectionResult = CandidateSelectionResult(
+            policy_version=DEFAULT_RANKING_POLICY_CONFIG.policy_version,
+            evaluations=(),
+        )
+
+    def select(self, recommendation: RecommendationResult) -> CandidateSelectionResult:
+        self.calls.append(recommendation)
+        return self.result
+
+
 def build_article(index: int) -> Article:
     return Article(
         id=f"article-{index}",
@@ -283,6 +298,7 @@ def build_workflow(
     aggregator: FakeAggregator = FakeAggregator()
     scorer: FakeScoringEngine = FakeScoringEngine()
     recommender: FakeRecommendationEngine = FakeRecommendationEngine()
+    candidate_selector: FakeCandidateSelectionEngine = FakeCandidateSelectionEngine()
     workflow: ScreeningWorkflow = ScreeningWorkflow(
         evaluator=evaluator,
         extractor=extractor,
@@ -294,6 +310,7 @@ def build_workflow(
         evidence_aggregator=aggregator,
         scoring_engine=scorer,
         recommendation_engine=recommender,
+        candidate_selection_engine=candidate_selector,
     )
     return (
         workflow,
@@ -332,6 +349,8 @@ async def test_workflow_runs_in_order_and_preserves_event_identity() -> None:
     assert analyzer.calls[0][0].event is extractor.events[0]
     assert len(aggregator.calls) == len(scorer.calls) == len(recommender.calls) == 1
     assert result.recommendation is recommender.result
+    assert result.candidate_selection is not None
+    assert result.candidate_selection.evaluations == ()
     assert result.statistics.total_articles == 2
     assert result.statistics.accepted_articles == 2
     assert result.statistics.rejected_articles == 0

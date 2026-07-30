@@ -111,6 +111,20 @@ decision tuple만 저장한다. 기존 `companies` access는 별도 legacy view�
 `RecommendationDecision` collection을 반환하는 read-only compatibility alias다.
 CLI는 이 내부 Decision을 기존 `companies[].score`/`companies[].recommendation` schema로만 투영한다.
 
+## Candidate Selection 계약
+
+`RecommendationRankCatalog`은 모든 `RecommendationAction`을 정확히 한 번씩 등록하고, action 중복·누락,
+negative/duplicate priority를 fail-fast한다. priority는 Catalog 전체의 결정적 순서이며 v1 ranking에는 eligible
+entry만 사용한다. 비eligible priority는 catalog completeness와 향후 policy 확장을 위한 값이다.
+`RankingPolicyConfig`는 nonblank version, `max_candidates >= 1`, Catalog를 단일 immutable policy input으로
+소유한다.
+
+`CandidateEvaluation`은 원본 `RecommendationDecision`, status, reason code, input index, optional rank를
+원자적으로 보존한다. SELECTED만 1 이상 rank를 가지고, NOT_ELIGIBLE과 OUTSIDE_LIMIT에는 rank가 없다.
+`CandidateSelectionResult.evaluations`는 input index ascending의 canonical audit trail이며, candidates는 rank
+ascending, excluded와 decisions는 input order로 계산한다. OUTSIDE_LIMIT reason은 action-independent하며 원래
+action은 Decision에 보존된다.
+
 ## Policy 경계
 
 Policy는 검증된 Domain 입력을 받아 결정만 반환한다. Policy는 Prompt·LLM·DB·네트워크를 호출하지 않는다. 점수 임계값, cross-validation 상태, resolve 결론, stock score, recommendation은 Policy/strategy가 소유하며 transport 오류나 model 편차에 의해 직접 바뀌지 않아야 한다.

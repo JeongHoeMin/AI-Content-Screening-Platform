@@ -86,7 +86,7 @@ def _serialize_result(result: ScreeningResult) -> str:
     """Keep internal metadata and explainability fields out of the CLI schema."""
     payload: dict[str, Any] = result.model_dump(
         mode="json",
-        exclude=_INTERNAL_RESOLUTION_FIELDS,
+        exclude={**_INTERNAL_RESOLUTION_FIELDS, "candidate_selection": True},
     )
     payload["recommendation"] = {
         "companies": [

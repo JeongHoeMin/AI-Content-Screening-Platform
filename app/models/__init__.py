@@ -1,6 +1,17 @@
 """Domain models."""
 
 from app.models.article import Article, ArticleEvaluationResult, ArticleRejectReason
+from app.models.candidate_selection import (
+    DEFAULT_RANKING_POLICY_CONFIG,
+    DEFAULT_RECOMMENDATION_RANK_CATALOG,
+    CandidateEvaluation,
+    CandidateReasonCode,
+    CandidateSelectionResult,
+    CandidateStatus,
+    RankingPolicyConfig,
+    RecommendationRankCatalog,
+    RecommendationRankEntry,
+)
 from app.models.collect_posts import (
     CollectPostsData,
     CollectPostsMetadata,
@@ -132,6 +143,10 @@ __all__ = [
     "BatchExtractionConfig",
     "BatchScreeningConfig",
     "BatchCrossValidationConfig",
+    "CandidateEvaluation",
+    "CandidateReasonCode",
+    "CandidateSelectionResult",
+    "CandidateStatus",
     "CollectPostsData",
     "CollectPostsMetadata",
     "CollectPostsRequest",
@@ -147,7 +162,9 @@ __all__ = [
     "CompanyRecommendation",
     "CompanyRelation",
     "CompanyScore",
+    "DEFAULT_RANKING_POLICY_CONFIG",
     "DEFAULT_RECOMMENDATION_POLICY_CONFIG",
+    "DEFAULT_RECOMMENDATION_RANK_CATALOG",
     "DEFAULT_RECOMMENDATION_THRESHOLD_SNAPSHOT",
     "DirectionScoreCatalog",
     "DirectionScoreEntry",
@@ -204,8 +221,11 @@ __all__ = [
     "RecommendationDecision",
     "RecommendationPolicyConfig",
     "RecommendationReasonCode",
+    "RecommendationRankCatalog",
+    "RecommendationRankEntry",
     "RecommendationResult",
     "RecommendationThresholdSnapshot",
+    "RankingPolicyConfig",
     "ScreeningResult",
     "ScreenPostsData",
     "ScreenPostsMetadata",

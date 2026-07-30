@@ -14,8 +14,9 @@ Article
 
 `Recommend` 노드는 하나의 `ScoringResult`를 `RecommendationPolicy`에 전달한다. Policy는 threshold snapshot,
 reason code, action을 포함한 final immutable `RecommendationResult`를 만들고, Engine은 이를 정확히 한 번 호출해
-같은 객체 identity로 반환한다. CLI는 workflow result 직렬화 경계에서만 Decision을 기존 recommendation JSON
-schema로 투영하며 Policy provenance를 외부 schema에 추가하지 않는다.
+같은 객체 identity로 반환한다. 이어지는 `Select Candidates` 노드는 RecommendationDecision만 소비해 internal
+`CandidateSelectionResult`를 만들며 score/action을 수정하지 않는다. CLI는 workflow result 직렬화 경계에서만
+Decision을 기존 recommendation JSON schema로 투영하고 candidate provenance는 외부 schema에 추가하지 않는다.
 
 ## 노드 계약 형식
 

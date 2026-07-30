@@ -5,10 +5,12 @@ from typing import Mapping, Optional, Tuple, cast
 from langgraph.graph.state import CompiledStateGraph
 
 from app.aggregators.base import EvidenceAggregator
+from app.candidates.candidate_selection_engine import CandidateSelectionEngine
 from app.analyzers.base import ImpactAnalyzer
 from app.evaluators.article_evaluator import ArticleEvaluator
 from app.extractors.base import NewsEventExtractor
 from app.models.article import Article
+from app.models.candidate_selection import CandidateSelectionResult
 from app.models.recommendation import RecommendationResult
 from app.models.screening import ScreeningDecision
 from app.recommenders.recommendation_engine import RecommendationEngine
@@ -41,6 +43,7 @@ class ScreeningWorkflow:
         evidence_aggregator: EvidenceAggregator,
         scoring_engine: ScoringEngine,
         recommendation_engine: RecommendationEngine,
+        candidate_selection_engine: CandidateSelectionEngine,
     ) -> None:
         self._graph: CompiledStateGraph = _build_screening_graph(
             evaluator=evaluator,
@@ -53,6 +56,7 @@ class ScreeningWorkflow:
             evidence_aggregator=evidence_aggregator,
             scoring_engine=scoring_engine,
             recommendation_engine=recommendation_engine,
+            candidate_selection_engine=candidate_selection_engine,
         )
 
     async def run(
@@ -69,6 +73,10 @@ class ScreeningWorkflow:
             RecommendationResult,
             final_state["recommendation"],
         )
+        candidate_selection: CandidateSelectionResult = cast(
+            CandidateSelectionResult,
+            final_state["candidate_selection"],
+        )
         statistics: WorkflowStatistics = cast(
             WorkflowStatistics,
             final_state["statistics"],
@@ -83,6 +91,7 @@ class ScreeningWorkflow:
         resolved_events = cast(tuple, final_state.get("resolved_events", ()))
         return ScreeningResult(
             recommendation=recommendation,
+            candidate_selection=candidate_selection,
             decisions=decisions,
             cross_validation_results=cross_validation_results,
             resolved_events=resolved_events,

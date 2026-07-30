@@ -116,21 +116,21 @@ score factor, 가중치, 경계값이 명시적 Policy로 관리되고 같은 �
 
 scoring factor contract, aggregation strategy, 설정 가능한 Policy, 회귀 테스트와 설명 가능한 score breakdown.
 
-# Phase 8 — Explainable Recommendation
+# Phase 8 — Explainable Recommendation & Candidate Selection
 
 **Status:** Completed
 
 ## 목적
 
-종목 점수를 기존 다섯 recommendation action으로 연결하고, 결정된 action의 정책 근거를 immutable Domain으로 보존한다.
+종목 점수를 기존 다섯 recommendation action으로 연결하고, 결정된 action의 정책 근거와 후보 선택 결과를 immutable Domain으로 보존한다.
 
 ## 완료 조건
 
-기존 threshold boundary 및 CLI JSON schema를 유지하면서 action·reason code·threshold snapshot을 설명 가능하게 보존한다.
+기존 threshold boundary 및 CLI JSON schema를 유지하면서 action·reason code·threshold snapshot, deterministic candidate rank·exclusion을 설명 가능하게 보존한다.
 
 ## 산출물
 
-explainable recommendation policy, threshold snapshot, result-level policy provenance, regression tests.
+explainable recommendation policy, threshold snapshot, result-level provenance, exhaustive ranking catalog, candidate-selection audit trail, regression tests.
 
 # Phase 9 — 운영 안정성 및 자동화
 

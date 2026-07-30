@@ -208,3 +208,12 @@ feat: add deterministic candidate selection
   처리 및 Engine 동일-result identity를 구현 전 acceptance contract로 통합했다.
 - CLI에는 candidate provenance를 추가하지 않고, 기존 Recommendation 결과·workflow 순서·JSON schema를
   회귀 검증 대상으로 유지한다.
+
+### 2026-07-30 — Implementation completed
+
+- immutable Candidate Selection Domain, exhaustive ranking catalog/config, stable sort Policy 및 transparent
+  Engine identity contract를 구현했다.
+- workflow의 Recommend 다음에 internal Candidate Selection node를 연결하고, CLI projection에서 해당 result를
+  제외해 외부 JSON schema를 유지했다.
+- Python 3.9 환경에서 config package import order에 따라 발생하던 resolver/config cycle은 directory config의
+  lazy export로 분리해 candidate package의 독립 import도 보장했다.

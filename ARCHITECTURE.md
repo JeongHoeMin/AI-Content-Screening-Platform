@@ -25,6 +25,11 @@ LangGraph ScreeningWorkflow / Harness / CLI Bootstrap
 result-level policy version을 생성한다. Engine은 Policy 결과를 재조립하지 않는다. CLI adapter만 내부 explainability
 필드를 legacy JSON schema로 변환하므로 Domain policy와 외부 표현의 책임이 분리된다.
 
+`app/candidates/`는 `RecommendationResult` 이후의 deterministic candidate-selection policy와 Engine을 둔다.
+`RankingPolicyConfig`와 exhaustive Catalog가 action eligibility, priority, candidate limit을 소유하며 Policy는
+candidate audit trail만 만든다. Workflow는 이 internal result를 보존하지만 CLI adapter는 candidate status, rank,
+reason code, policy version을 출력하지 않는다.
+
 ## 주요 구성 요소
 
 | 경계 | 책임 | 현재 구현 위치 |

@@ -6,6 +6,7 @@ from enum import Enum
 from openai import AsyncOpenAI
 
 from app.aggregators import DefaultAggregationStrategy, DefaultEvidenceAggregator
+from app.candidates import DefaultCandidateSelectionEngine, RuleCandidateSelectionPolicy
 from app.analyzers import (
     DEFAULT_IMPACT_RULE_CATALOG,
     DefaultImpactAnalyzer,
@@ -29,6 +30,7 @@ from app.llms import (
     create_async_openai_client,
 )
 from app.models import (
+    DEFAULT_RANKING_POLICY_CONFIG,
     DEFAULT_RECOMMENDATION_POLICY_CONFIG,
     DEFAULT_SCORING_POLICY_CONFIG,
     BatchCrossValidationConfig,
@@ -98,6 +100,9 @@ def _create_mock_workflow() -> ScreeningWorkflow:
         recommendation_engine=DefaultRecommendationEngine(
             RuleRecommendationPolicy(DEFAULT_RECOMMENDATION_POLICY_CONFIG)
         ),
+        candidate_selection_engine=DefaultCandidateSelectionEngine(
+            RuleCandidateSelectionPolicy(DEFAULT_RANKING_POLICY_CONFIG)
+        ),
     )
 
 
@@ -152,6 +157,9 @@ def _create_openai_workflow() -> ScreeningWorkflow:
         ),
         recommendation_engine=DefaultRecommendationEngine(
             RuleRecommendationPolicy(DEFAULT_RECOMMENDATION_POLICY_CONFIG)
+        ),
+        candidate_selection_engine=DefaultCandidateSelectionEngine(
+            RuleCandidateSelectionPolicy(DEFAULT_RANKING_POLICY_CONFIG)
         ),
     )
 

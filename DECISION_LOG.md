@@ -406,3 +406,30 @@ Decision을 기존 score/recommendation JSON shape로 투영하고 explainabilit
 
 추천 결과는 정책 근거를 잃지 않으면서 CLI public contract를 유지한다. reason code나 threshold를 외부에 노출하는
 새 API/CLI schema는 별도 버전의 후속 작업으로 다룬다.
+
+# ADR-018
+
+## Title
+
+Candidate Selection은 recommendation을 재해석하지 않는 deterministic audit trail이다.
+
+## Status
+
+Accepted
+
+## Context
+
+추천 action만으로는 여러 매수 가능한 회사 중 어떤 항목이 limit 안에 선택됐는지와 제외 근거를 설명할 수 없다.
+반면 Candidate Selection이 score contribution이나 impact evidence를 다시 읽으면 PR30~32의 책임 경계가 흐려진다.
+
+## Decision
+
+Policy는 `RecommendationDecision`의 action과 score만 소비한다. exhaustive ranking catalog와 max-candidate
+config로 eligible Decision을 priority, score, input index 순으로 결정적으로 정렬한다. Result는 input order의
+evaluation audit trail을 저장하고 selected rank와 exclusion reason을 보존한다. Workflow는 internal result를
+보관하지만 CLI schema는 변경하지 않는다.
+
+## Consequences
+
+후보 선택의 재현성과 감사 가능성이 생기며 scoring/recommendation 결과는 그대로 유지된다. portfolio allocation,
+risk weighting, market data 및 사용자별 후보 정책은 후속 policy로 분리된다.
