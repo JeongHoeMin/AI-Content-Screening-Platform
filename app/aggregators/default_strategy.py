@@ -26,13 +26,12 @@ class DefaultAggregationStrategy(AggregationStrategy):
         grouped_impacts: List[List[CompanyImpact]] = []
 
         for analysis in analyses:
-            for observation, filter_result in zip(
-                analysis.observations,
-                analysis.filters,
-            ):
-                if not filter_result.eligible:
+            for evaluation in analysis.evaluations:
+                if not evaluation.eligible:
                     continue
-                impact: CompanyImpact = self.adapter.to_company_impact(observation)
+                impact: CompanyImpact = self.adapter.to_company_impact(
+                    evaluation.observation
+                )
                 company_id: Optional[str] = impact.company.company_id
                 if (
                     impact.company.resolution_status

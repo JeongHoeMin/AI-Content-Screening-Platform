@@ -7,7 +7,7 @@ from app.models.cross_validation import CrossValidationStatus
 from app.models.impact_analysis import (
     ImpactDirection,
     ImpactExclusionReason,
-    ImpactFilterResult,
+    ImpactEvaluation,
     ImpactObservation,
     ImpactScope,
 )
@@ -17,30 +17,30 @@ from app.models.resolved_news_event import ResolvedDecisionType, ResolvedNewsEve
 class ImpactPolicy(Protocol):
     """Determines downstream eligibility without changing observations."""
 
-    def filter(
+    def evaluate(
         self,
         event: ResolvedNewsEvent,
         observations: Tuple[ImpactObservation, ...],
-    ) -> Tuple[ImpactFilterResult, ...]:
-        """Return one eligibility result in the same order as observations."""
+    ) -> Tuple[ImpactEvaluation, ...]:
+        """Return one paired evaluation in the same order as observations."""
         ...
 
 
 class DefaultImpactPolicy:
     """Deterministic v1 filtering with a fixed exclusion precedence."""
 
-    def filter(
+    def evaluate(
         self,
         event: ResolvedNewsEvent,
         observations: Tuple[ImpactObservation, ...],
-    ) -> Tuple[ImpactFilterResult, ...]:
-        return tuple(self._filter_one(event, observation) for observation in observations)
+    ) -> Tuple[ImpactEvaluation, ...]:
+        return tuple(self._evaluate_one(event, observation) for observation in observations)
 
     @staticmethod
-    def _filter_one(
+    def _evaluate_one(
         event: ResolvedNewsEvent,
         observation: ImpactObservation,
-    ) -> ImpactFilterResult:
+    ) -> ImpactEvaluation:
         reason: ImpactExclusionReason | None = None
         if event.decision is ResolvedDecisionType.REJECT:
             reason = ImpactExclusionReason.EVENT_REJECTED
@@ -74,5 +74,9 @@ class DefaultImpactPolicy:
             reason = ImpactExclusionReason.UNKNOWN_DIRECTION
 
         if reason is None:
-            return ImpactFilterResult(eligible=True)
-        return ImpactFilterResult(eligible=False, exclusion_reason=reason)
+            return ImpactEvaluation(observation=observation, eligible=True)
+        return ImpactEvaluation(
+            observation=observation,
+            eligible=False,
+            exclusion_reason=reason,
+        )

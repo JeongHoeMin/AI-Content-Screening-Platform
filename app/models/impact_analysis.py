@@ -78,16 +78,17 @@ class ImpactObservation(BaseModel):
         return self
 
 
-class ImpactFilterResult(BaseModel):
-    """Eligibility decision aligned one-to-one with an impact observation."""
+class ImpactEvaluation(BaseModel):
+    """Immutable policy decision permanently paired with one observation."""
 
     model_config = ConfigDict(frozen=True)
 
+    observation: ImpactObservation
     eligible: bool
     exclusion_reason: Optional[ImpactExclusionReason] = None
 
     @model_validator(mode="after")
-    def _validate_eligibility(self) -> "ImpactFilterResult":
+    def _validate_eligibility(self) -> "ImpactEvaluation":
         if self.eligible and self.exclusion_reason is not None:
             raise ValueError("Eligible result must not have an exclusion reason")
         if not self.eligible and self.exclusion_reason is None:
@@ -104,18 +105,14 @@ class CompanyImpact:
 
 
 class ImpactAnalysis(BaseModel):
-    """Immutable analysis snapshot preserving observations before filtering."""
+    """Immutable analysis snapshot preserving observation-policy pairs."""
 
     model_config = ConfigDict(frozen=True, revalidate_instances="never")
 
     event: ResolvedNewsEvent
-    observations: Tuple[ImpactObservation, ...] = ()
-    filters: Tuple[ImpactFilterResult, ...] = ()
+    evaluations: Tuple[ImpactEvaluation, ...] = ()
 
-    @model_validator(mode="after")
-    def _validate_filter_alignment(self) -> "ImpactAnalysis":
-        if len(self.observations) != len(self.filters):
-            raise ValueError(
-                "ImpactAnalysis observations and filters must have equal length"
-            )
-        return self
+    @property
+    def observations(self) -> Tuple[ImpactObservation, ...]:
+        """Expose all audit observations without duplicating stored fields."""
+        return tuple(evaluation.observation for evaluation in self.evaluations)

@@ -18,7 +18,7 @@ from app.models import (
     ExtractedCompany,
     ImpactAnalysis,
     ImpactDirection,
-    ImpactFilterResult,
+    ImpactEvaluation,
     ImpactObservation,
     ImpactReasonCode,
     ImpactScope,
@@ -85,8 +85,7 @@ def build_analysis(title: str) -> ImpactAnalysis:
     )
     return ImpactAnalysis(
         event=resolved_event,
-        observations=(observation,),
-        filters=(ImpactFilterResult(eligible=True),),
+        evaluations=(ImpactEvaluation(observation=observation, eligible=True),),
     )
 
 

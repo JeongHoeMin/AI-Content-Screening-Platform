@@ -13,7 +13,7 @@ from app.models import (
     ExtractedCompany,
     ImpactAnalysis,
     ImpactDirection,
-    ImpactFilterResult,
+    ImpactEvaluation,
     ImpactObservation,
     ImpactReasonCode,
     ImpactScope,
@@ -89,8 +89,10 @@ def build_analysis(
     )
     return ImpactAnalysis(
         event=resolved_event,
-        observations=observations,
-        filters=tuple(ImpactFilterResult(eligible=True) for _ in observations),
+        evaluations=tuple(
+            ImpactEvaluation(observation=observation, eligible=True)
+            for observation in observations
+        ),
     )
 
 
@@ -149,6 +151,30 @@ def test_strategy_excludes_ambiguous_and_unresolved_impacts() -> None:
     )
 
     assert result == ()
+
+
+def test_strategy_converts_only_the_eligible_conflicting_evaluation() -> None:
+    company: ResolvedCompany = build_company(
+        "Samsung",
+        ResolvedTicker(ticker="005930", exchange="KRX"),
+        "KRX-COMPANY-000001",
+        CompanyResolutionStatus.RESOLVED,
+    )
+    base: ImpactAnalysis = build_analysis(
+        "Conflict",
+        (build_impact(company, ImpactDirection.POSITIVE), build_impact(company, ImpactDirection.NEGATIVE)),
+    )
+    analysis: ImpactAnalysis = ImpactAnalysis(
+        event=base.event,
+        evaluations=(
+            ImpactEvaluation(observation=base.observations[0], eligible=False, exclusion_reason="unknown_direction"),
+            ImpactEvaluation(observation=base.observations[1], eligible=True),
+        ),
+    )
+
+    result: Tuple[CompanyEvidence, ...] = DefaultAggregationStrategy().aggregate([analysis])
+
+    assert [impact.direction for impact in result[0].impacts] == [ImpactDirection.NEGATIVE]
 
 
 def test_strategy_does_not_merge_distinct_company_ids_with_the_same_ticker() -> None:

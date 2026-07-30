@@ -7,7 +7,7 @@ import pytest
 from app.analyzers import DefaultImpactAnalyzer, ImpactPolicy, ImpactStrategy
 from app.models import (
     CompanyRelation, EventFact, EventType, ExtractedCompany, ImpactAnalysis,
-    ImpactFilterResult, ImpactObservation, ImpactDirection, ImpactReasonCode,
+    ImpactEvaluation, ImpactObservation, ImpactDirection, ImpactReasonCode,
     ImpactScope, ImpactUncertainty, NewsEvent, ResolvedCompany, ResolvedNewsEvent,
     ResolvedTicker,
 )
@@ -27,13 +27,13 @@ class FakeImpactStrategy(ImpactStrategy):
 
 
 class FakeImpactPolicy(ImpactPolicy):
-    def __init__(self, filters: Tuple[ImpactFilterResult, ...]) -> None:
-        self.filters: Tuple[ImpactFilterResult, ...] = filters
+    def __init__(self, evaluations: Tuple[ImpactEvaluation, ...]) -> None:
+        self.evaluations: Tuple[ImpactEvaluation, ...] = evaluations
         self.calls: List[Tuple[ResolvedNewsEvent, Tuple[ImpactObservation, ...]]] = []
 
-    def filter(self, event: ResolvedNewsEvent, observations: Tuple[ImpactObservation, ...]) -> Tuple[ImpactFilterResult, ...]:
+    def evaluate(self, event: ResolvedNewsEvent, observations: Tuple[ImpactObservation, ...]) -> Tuple[ImpactEvaluation, ...]:
         self.calls.append((event, observations))
-        return self.filters
+        return self.evaluations
 
 
 def build_resolved_event(title: str) -> ResolvedNewsEvent:
@@ -46,12 +46,12 @@ def build_observations(event: ResolvedNewsEvent) -> Tuple[ImpactObservation, ...
     return (ImpactObservation(scope=ImpactScope.COMPANY, company=event.companies[0], event_fact=EventFact.FACTORY_EXPANSION, direction=ImpactDirection.POSITIVE, uncertainty=ImpactUncertainty.HIGH, reason_code=ImpactReasonCode.FACTORY_EXPANSION_POSITIVE),)
 
 
-def test_analyzer_preserves_event_identity_observation_tuple_and_filter_alignment() -> None:
+def test_analyzer_preserves_event_identity_and_observation_evaluation_identity() -> None:
     first_event: ResolvedNewsEvent = build_resolved_event("First")
     second_event: ResolvedNewsEvent = build_resolved_event("Second")
     observations: Tuple[ImpactObservation, ...] = build_observations(first_event)
     strategy: FakeImpactStrategy = FakeImpactStrategy(observations)
-    policy: FakeImpactPolicy = FakeImpactPolicy((ImpactFilterResult(eligible=True),))
+    policy: FakeImpactPolicy = FakeImpactPolicy((ImpactEvaluation(observation=observations[0], eligible=True),))
 
     result: List[ImpactAnalysis] = DefaultImpactAnalyzer(strategy, policy).analyze([first_event, second_event])
 
@@ -59,7 +59,7 @@ def test_analyzer_preserves_event_identity_observation_tuple_and_filter_alignmen
     assert result[0].event is first_event and result[1].event is second_event
     assert result[0].observations == observations and result[1].observations == observations
     assert result[0].observations[0] is observations[0]
-    assert all(analysis.filters == (ImpactFilterResult(eligible=True),) for analysis in result)
+    assert all(analysis.evaluations[0].observation is observations[0] for analysis in result)
     assert policy.calls == [(first_event, observations), (second_event, observations)]
 
 
@@ -80,3 +80,17 @@ def test_analyzer_propagates_strategy_error_without_wrapping() -> None:
         DefaultImpactAnalyzer(strategy, policy).analyze([event])
 
     assert error_info.value is expected_error
+
+
+def test_analyzer_rejects_policy_evaluations_reordered_from_strategy_observations() -> None:
+    event: ResolvedNewsEvent = build_resolved_event("First")
+    first: ImpactObservation = build_observations(event)[0]
+    second: ImpactObservation = first.model_copy(update={"event_fact": EventFact.MASS_LAYOFF, "direction": ImpactDirection.NEGATIVE, "reason_code": ImpactReasonCode.MASS_LAYOFF_NEGATIVE})
+    strategy: FakeImpactStrategy = FakeImpactStrategy((first, second))
+    policy: FakeImpactPolicy = FakeImpactPolicy((
+        ImpactEvaluation(observation=second, eligible=True),
+        ImpactEvaluation(observation=first, eligible=True),
+    ))
+
+    with pytest.raises(ValueError, match="preserve strategy observation order"):
+        DefaultImpactAnalyzer(strategy, policy).analyze([event])

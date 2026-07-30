@@ -5,7 +5,7 @@ from typing import List, Tuple
 from app.analyzers.base import ImpactAnalyzer
 from app.analyzers.policy import ImpactPolicy
 from app.analyzers.strategy import ImpactStrategy
-from app.models.impact_analysis import ImpactAnalysis, ImpactFilterResult, ImpactObservation
+from app.models.impact_analysis import ImpactAnalysis, ImpactEvaluation, ImpactObservation
 from app.models.resolved_news_event import ResolvedNewsEvent
 
 
@@ -20,11 +20,18 @@ class DefaultImpactAnalyzer(ImpactAnalyzer):
         analyses: List[ImpactAnalysis] = []
         for event in events:
             observations: Tuple[ImpactObservation, ...] = self._strategy.analyze(event)
-            filters: Tuple[ImpactFilterResult, ...] = self._policy.filter(
+            evaluations: Tuple[ImpactEvaluation, ...] = self._policy.evaluate(
                 event,
                 observations,
             )
+            if len(evaluations) != len(observations) or any(
+                evaluation.observation is not observation
+                for evaluation, observation in zip(evaluations, observations)
+            ):
+                raise ValueError(
+                    "ImpactPolicy evaluations must preserve strategy observation order"
+                )
             analyses.append(
-                ImpactAnalysis(event=event, observations=observations, filters=filters)
+                ImpactAnalysis(event=event, evaluations=evaluations)
             )
         return analyses

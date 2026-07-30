@@ -7,8 +7,8 @@ from app.analyzers import DefaultImpactPolicy
 from app.models import (
     CompanyRelation, CompanyResolutionStatus, CrossValidationStatus, EventFact,
     EventType, ExtractedCompany, ImpactDirection, ImpactExclusionReason,
-    ImpactFilterResult, ImpactObservation, ImpactReasonCode, ImpactScope,
-    ImpactUncertainty, ImpactAnalysis, NewsEvent, ResolvedCompany, ResolvedDecisionType,
+    ImpactEvaluation, ImpactObservation, ImpactReasonCode, ImpactScope,
+    ImpactUncertainty, NewsEvent, ResolvedCompany, ResolvedDecisionType,
     ResolvedNewsEvent, ResolvedTicker,
 )
 
@@ -33,16 +33,35 @@ def test_policy_uses_fixed_priority_for_multiple_exclusion_conditions() -> None:
         "direction": ImpactDirection.UNKNOWN,
     })
 
-    result: ImpactFilterResult = DefaultImpactPolicy().filter(event, (unresolved,))[0]
+    result: ImpactEvaluation = DefaultImpactPolicy().evaluate(event, (unresolved,))[0]
 
-    assert result == ImpactFilterResult(eligible=False, exclusion_reason=ImpactExclusionReason.EVENT_REJECTED)
+    assert result == ImpactEvaluation(observation=unresolved, eligible=False, exclusion_reason=ImpactExclusionReason.EVENT_REJECTED)
 
 
 def test_policy_filters_review_not_verified_and_unknown_direction() -> None:
     review_event: ResolvedNewsEvent = build_event(ResolvedDecisionType.REVIEW)
-    assert DefaultImpactPolicy().filter(review_event, (build_observation(review_event),))[0].exclusion_reason is ImpactExclusionReason.EVENT_REVIEW_NOT_VERIFIED
+    assert DefaultImpactPolicy().evaluate(review_event, (build_observation(review_event),))[0].exclusion_reason is ImpactExclusionReason.EVENT_REVIEW_NOT_VERIFIED
     accepted_event: ResolvedNewsEvent = build_event()
-    assert DefaultImpactPolicy().filter(accepted_event, (build_observation(accepted_event, ImpactDirection.UNKNOWN),))[0].exclusion_reason is ImpactExclusionReason.UNKNOWN_DIRECTION
+    assert DefaultImpactPolicy().evaluate(accepted_event, (build_observation(accepted_event, ImpactDirection.UNKNOWN),))[0].exclusion_reason is ImpactExclusionReason.UNKNOWN_DIRECTION
+
+
+def test_policy_preserves_each_input_observation_identity_and_order() -> None:
+    event: ResolvedNewsEvent = build_event()
+    first: ImpactObservation = build_observation(event)
+    second: ImpactObservation = first.model_copy(update={
+        "event_fact": EventFact.MASS_LAYOFF,
+        "direction": ImpactDirection.NEGATIVE,
+        "reason_code": ImpactReasonCode.MASS_LAYOFF_NEGATIVE,
+    })
+
+    evaluations: tuple[ImpactEvaluation, ...] = DefaultImpactPolicy().evaluate(
+        event,
+        (first, second),
+    )
+
+    assert tuple(item.observation for item in evaluations) == (first, second)
+    assert evaluations[0].observation is first
+    assert evaluations[1].observation is second
 
 
 def test_policy_excludes_unsupported_scope_after_event_gates() -> None:
@@ -55,7 +74,7 @@ def test_policy_excludes_unsupported_scope_after_event_gates() -> None:
         reason_code=ImpactReasonCode.FACTORY_EXPANSION_POSITIVE,
     )
 
-    result: ImpactFilterResult = DefaultImpactPolicy().filter(event, (observation,))[0]
+    result: ImpactEvaluation = DefaultImpactPolicy().evaluate(event, (observation,))[0]
 
     assert result.exclusion_reason is ImpactExclusionReason.UNSUPPORTED_SCOPE
 
@@ -64,13 +83,6 @@ def test_policy_excludes_unsupported_scope_after_event_gates() -> None:
     ("eligible", "reason"),
     [(True, ImpactExclusionReason.UNKNOWN_DIRECTION), (False, None)],
 )
-def test_filter_result_rejects_inconsistent_eligibility(eligible: bool, reason: ImpactExclusionReason | None) -> None:
+def test_evaluation_rejects_inconsistent_eligibility(eligible: bool, reason: ImpactExclusionReason | None) -> None:
     with pytest.raises(ValidationError):
-        ImpactFilterResult(eligible=eligible, exclusion_reason=reason)
-
-
-def test_analysis_rejects_observation_filter_length_mismatch() -> None:
-    event: ResolvedNewsEvent = build_event()
-
-    with pytest.raises(ValidationError, match="equal length"):
-        ImpactAnalysis(event=event, observations=(build_observation(event),), filters=())
+        ImpactEvaluation(observation=build_observation(build_event()), eligible=eligible, exclusion_reason=reason)

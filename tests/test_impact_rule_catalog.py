@@ -12,6 +12,21 @@ def test_default_catalog_assigns_each_event_fact_once() -> None:
     assert len(DEFAULT_IMPACT_RULE_CATALOG.rules) == len(EventFact)
 
 
+def test_default_catalog_has_the_approved_direction_and_reason_mapping() -> None:
+    expected: dict[EventFact, tuple[ImpactDirection, ImpactReasonCode]] = {
+        EventFact.FACTORY_EXPANSION: (ImpactDirection.POSITIVE, ImpactReasonCode.FACTORY_EXPANSION_POSITIVE),
+        EventFact.MASS_LAYOFF: (ImpactDirection.NEGATIVE, ImpactReasonCode.MASS_LAYOFF_NEGATIVE),
+        EventFact.BANKRUPTCY: (ImpactDirection.NEGATIVE, ImpactReasonCode.BANKRUPTCY_NEGATIVE),
+        EventFact.PRODUCT_RELEASE: (ImpactDirection.UNKNOWN, ImpactReasonCode.PRODUCT_RELEASE_DIRECTION_UNKNOWN),
+        EventFact.CEO_INTERVIEW: (ImpactDirection.UNKNOWN, ImpactReasonCode.CEO_INTERVIEW_DIRECTION_UNKNOWN),
+    }
+
+    assert {
+        rule.event_fact: (rule.direction, rule.reason_code)
+        for rule in DEFAULT_IMPACT_RULE_CATALOG.rules
+    } == expected
+
+
 def test_catalog_rejects_duplicate_fact_rules() -> None:
     rules: tuple[ImpactRule, ...] = DEFAULT_IMPACT_RULE_CATALOG.rules + (
         ImpactRule(event_fact=EventFact.FACTORY_EXPANSION, direction=ImpactDirection.POSITIVE, reason_code=ImpactReasonCode.FACTORY_EXPANSION_POSITIVE),
