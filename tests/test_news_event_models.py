@@ -172,16 +172,40 @@ def test_compatibility_rejects_fact_assigned_to_multiple_event_types() -> None:
         )
 
 
-def test_compatibility_accepts_distinct_facts_for_distinct_event_types() -> None:
+def test_compatibility_rejects_table_with_missing_event_facts() -> None:
+    with pytest.raises(ValidationError, match="Missing facts: MASS_LAYOFF, BANKRUPTCY"):
+        EventTypeCompatibility(
+            entries=(
+                EventTypeCompatibilityEntry(
+                    event_type=EventType.CORPORATE_EVENT,
+                    event_facts=(EventFact.FACTORY_EXPANSION, EventFact.CEO_INTERVIEW),
+                ),
+                EventTypeCompatibilityEntry(
+                    event_type=EventType.PRODUCT_EVENT,
+                    event_facts=(EventFact.PRODUCT_RELEASE,),
+                ),
+            )
+        )
+
+
+def test_compatibility_accepts_all_distinct_facts_for_distinct_event_types() -> None:
     compatibility: EventTypeCompatibility = EventTypeCompatibility(
         entries=(
             EventTypeCompatibilityEntry(
                 event_type=EventType.CORPORATE_EVENT,
-                event_facts=(EventFact.FACTORY_EXPANSION,),
+                event_facts=(
+                    EventFact.FACTORY_EXPANSION,
+                    EventFact.MASS_LAYOFF,
+                    EventFact.CEO_INTERVIEW,
+                ),
             ),
             EventTypeCompatibilityEntry(
                 event_type=EventType.FINANCIAL_EVENT,
                 event_facts=(EventFact.BANKRUPTCY,),
+            ),
+            EventTypeCompatibilityEntry(
+                event_type=EventType.PRODUCT_EVENT,
+                event_facts=(EventFact.PRODUCT_RELEASE,),
             ),
         )
     )
@@ -193,6 +217,10 @@ def test_compatibility_accepts_distinct_facts_for_distinct_event_types() -> None
     assert compatibility.is_compatible(
         EventType.FINANCIAL_EVENT,
         EventFact.BANKRUPTCY,
+    )
+    assert compatibility.is_compatible(
+        EventType.PRODUCT_EVENT,
+        EventFact.PRODUCT_RELEASE,
     )
 
 

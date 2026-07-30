@@ -35,9 +35,30 @@ class EventTypeCompatibility(BaseModel):
             for entry in self.entries
             for event_fact in entry.event_facts
         )
-        if len(set(event_facts)) != len(event_facts):
+        fact_set: set[EventFact] = set(event_facts)
+        duplicate_facts: Tuple[EventFact, ...] = tuple(
+            event_fact
+            for event_fact in EventFact
+            if event_facts.count(event_fact) > 1
+        )
+        missing_facts: Tuple[EventFact, ...] = tuple(
+            event_fact for event_fact in EventFact if event_fact not in fact_set
+        )
+        if duplicate_facts or missing_facts:
+            details: list[str] = []
+            if duplicate_facts:
+                details.append(
+                    "Duplicate facts: "
+                    + ", ".join(event_fact.name for event_fact in duplicate_facts)
+                )
+            if missing_facts:
+                details.append(
+                    "Missing facts: "
+                    + ", ".join(event_fact.name for event_fact in missing_facts)
+                )
             raise ValueError(
-                "Compatibility entries must assign each event fact only once."
+                "Compatibility table must assign every event fact exactly once. "
+                + "; ".join(details)
             )
         return self
 

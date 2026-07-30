@@ -243,6 +243,21 @@ def test_parser_uses_injected_event_type_compatibility_table() -> None:
                 event_type=EventType.PRODUCT_EVENT,
                 event_facts=(EventFact.FACTORY_EXPANSION,),
             ),
+            EventTypeCompatibilityEntry(
+                event_type=EventType.CORPORATE_EVENT,
+                event_facts=(
+                    EventFact.MASS_LAYOFF,
+                    EventFact.CEO_INTERVIEW,
+                ),
+            ),
+            EventTypeCompatibilityEntry(
+                event_type=EventType.FINANCIAL_EVENT,
+                event_facts=(EventFact.BANKRUPTCY,),
+            ),
+            EventTypeCompatibilityEntry(
+                event_type=EventType.MACRO_EVENT,
+                event_facts=(EventFact.PRODUCT_RELEASE,),
+            ),
         )
     )
     response: NewsEventExtractionResponse = NewsEventExtractionResponse(
