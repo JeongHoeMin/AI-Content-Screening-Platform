@@ -15,7 +15,7 @@ from app.models.resolved_news_event import ResolvedDecisionType, ResolvedNewsEve
 
 
 class ImpactPolicy(Protocol):
-    """Determines downstream eligibility without changing observations."""
+    """Creates immutable evaluations without changing strategy observations."""
 
     def evaluate(
         self,

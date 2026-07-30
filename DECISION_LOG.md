@@ -344,7 +344,7 @@ aggregation이 observation을 합치면 감사 가능한 원인과 downstream �
 
 PR30은 모든 EventFact를 정확히 한 번씩 등록하는 immutable `ImpactRuleCatalog`를 사용한다.
 Strategy는 DIRECT company와 Fact마다 독립 observation을 만들고 상충 관측을 보존한다. Policy는
-observation과 eligibility를 원자적으로 묶는 `ImpactEvaluation`을 만들며 exclusion 우선순위를 고정하고 observation을 수정하지
+자신의 immutable 출력인 `ImpactEvaluation`으로 observation과 eligibility를 원자적으로 묶으며 exclusion 우선순위를 고정하고 observation을 수정하지
 않는다. Aggregation adapter는 eligible evaluation의 observation 하나를 legacy CompanyImpact 하나로 변환하고
 병합·상쇄·dedup하지 않는다.
 

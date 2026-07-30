@@ -159,8 +159,9 @@ v1의 최소 catalog는 다음과 같다. 이 목록의 확장은 별도 제품 
 - `ImpactReasonCode`: rule/transport가 공유하는 제한 enum
 - `ImpactObservation`: `scope`, 선택적 resolved company, `event_fact`, direction, uncertainty,
   Strategy 전용 reason code를 갖는 immutable Domain 값
-- `ImpactEvaluation`: 원본 `ImpactObservation`, `eligible`, Policy 전용 `exclusion_reason`을 하나로
-  묶는 immutable 값. eligible이면 reason은 null이고 ineligible이면 정확히 하나의 reason이 필수다.
+- `ImpactEvaluation`: `ImpactPolicy`가 Strategy의 원본 `ImpactObservation`, `eligible`, Policy 전용
+  `exclusion_reason`을 하나로 묶어 만드는 immutable 출력이다. eligible이면 reason은 null이고
+  ineligible이면 정확히 하나의 reason이 필수다.
 - `ImpactAnalysis`: 원본 `ResolvedNewsEvent` 동일 객체와 immutable evaluation tuple을 보관하는
   snapshot이다. `observations`는 evaluations에서 계산하는 read-only property이며 저장 필드를 중복하지 않는다.
 
@@ -319,3 +320,8 @@ feat: add evidence-aware impact analysis
   원자적으로 보관하도록 변경했다.
 - Analyzer는 Policy가 Strategy observation의 동일 객체와 순서를 보존하는지 검증하고, Aggregation은
   evaluation을 직접 순회한다. 이에 따라 zip 기반의 잘못된 filter 결합 경로를 제거했다.
+
+### 2026-07-30 — Evaluation ownership clarification
+
+- `ImpactEvaluation` 이름은 유지하되, Strategy가 `ImpactObservation`만 생성하고 `ImpactPolicy`가
+  immutable evaluation을 생성한다는 책임을 코드 docstring과 Domain·Workflow·ADR 계약에 명시했다.

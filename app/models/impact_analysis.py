@@ -79,7 +79,7 @@ class ImpactObservation(BaseModel):
 
 
 class ImpactEvaluation(BaseModel):
-    """Immutable policy decision permanently paired with one observation."""
+    """Immutable result created by ImpactPolicy for one strategy observation."""
 
     model_config = ConfigDict(frozen=True)
 

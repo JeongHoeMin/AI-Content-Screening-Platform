@@ -72,7 +72,7 @@ Directory는 normalized canonical name과 aliases의 name index에서 후보 사
 
 ## Impact Analysis 계약
 
-`ImpactAnalysis`는 원본 `ResolvedNewsEvent` 동일 객체와 immutable `ImpactEvaluation` tuple을 보관하는 snapshot이다. 각 evaluation은 하나의 `ImpactObservation`과 eligibility를 원자적으로 결합한다. `observations`는 evaluations에서 계산하는 read-only property이므로 별도 저장 tuple과 순서가 어긋날 수 없다. observation은 `scope`, `company`, `event_fact`, `direction`, `uncertainty`, Strategy 전용 `reason_code`를 가진다. `COMPANY` scope observation은 회사를 반드시 참조하고, `INDUSTRY`·`MARKET`·`MACRO` scope에는 회사를 넣지 않는다.
+`ImpactAnalysis`는 원본 `ResolvedNewsEvent` 동일 객체와 immutable `ImpactEvaluation` tuple을 보관하는 snapshot이다. `ImpactEvaluation`은 `ImpactPolicy`가 하나의 Strategy `ImpactObservation`에 대해 생성하는 결과이며, observation과 eligibility를 원자적으로 결합한다. `observations`는 evaluations에서 계산하는 read-only property이므로 별도 저장 tuple과 순서가 어긋날 수 없다. observation은 `scope`, `company`, `event_fact`, `direction`, `uncertainty`, Strategy 전용 `reason_code`를 가진다. `COMPANY` scope observation은 회사를 반드시 참조하고, `INDUSTRY`·`MARKET`·`MACRO` scope에는 회사를 넣지 않는다.
 
 `ImpactDirection`의 `UNKNOWN`은 근거 부족을, `NEUTRAL`은 영향 없다는 적극적 판단을 뜻한다. 둘은 동일시하지 않는다. 모든 observation은 방향이나 resolution 상태와 무관하게 analysis snapshot에 보존한다.
 
