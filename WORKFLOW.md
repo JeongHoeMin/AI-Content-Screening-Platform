@@ -346,4 +346,8 @@ Input → Output → Failure → Retry → Owner → Responsibility
 
 `ExecutionMode.MOCK`은 결정적 extractor/screener/cross validator를 사용하고, `ExecutionMode.OPENAI`는 같은 structured-output gateway를 사용하는 LLM 구현을 사용한다. 이후 downstream과 CLI JSON schema는 두 mode에서 동일하다.
 
-CLI는 `python -m app screening --input <articles.json> --mode mock|openai`로 실행한다. 표준 출력은 결과 JSON만 사용하고, 제한된 structlog 로그와 오류는 표준 오류로 분리한다.
+CLI는 `python -m app --input <articles.json> --mode mock|openai`로 실행한다. `--audit-log`는 safe terminal audit JSONL을, `--alert-log`는 audit 저장 이후 발생한 safe alert JSONL을 남긴다. `python -m app --audit-report <audit.jsonl>`는 workflow를 실행하지 않고 aggregate metrics만 출력한다. 표준 출력은 결과 또는 report JSON만 사용하고, 제한된 structlog 로그와 오류는 표준 오류로 분리한다.
+
+## 운영 실행 계약
+
+`ScreeningExecutionHarness`만 workflow terminal audit persistence와 provider request-budget scope를 소유한다. `DailyWorkflowScheduler`는 UTC daily schedule과 injected job lifecycle만 소유하며 실패한 job 뒤에도 다음 slot을 예약한다. `OperationalAlertPolicy`는 failed execution 및 configured duration threshold를 safe alert로 투영한다. JSONL retention은 atomic rotation과 prune candidate plan만 제공하며, 자동 파일 삭제를 수행하지 않는다.

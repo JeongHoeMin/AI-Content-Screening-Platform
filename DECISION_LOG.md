@@ -437,3 +437,25 @@ action별 candidate reason은 Domain helper가 단일 소유하고 Policy와 val
 
 후보 선택의 재현성과 감사 가능성이 생기며 scoring/recommendation 결과는 그대로 유지된다. portfolio allocation,
 risk weighting, market data 및 사용자별 후보 정책은 후속 policy로 분리된다.
+
+# ADR-019
+
+## Title
+
+운영 side effect는 Harness-owned safe execution records로 분리한다.
+
+## Status
+
+Accepted
+
+## Context
+
+daily execution에는 audit, metrics, alerting, retention, cost·latency·secret 관리가 필요하지만 이를 Workflow·Policy·LLM에 넣으면 판단과 side effect가 결합되고 민감 정보가 로그로 새기 쉽다.
+
+## Decision
+
+`ScreeningExecutionHarness`가 execution-scoped request budget 및 terminal audit를 소유한다. Scheduler는 injected Harness job만 호출하고, alerting은 persisted audit 이후의 best-effort adapter로 분리한다. JSONL retention은 archive rotation과 review-only prune plan만 제공한다. OpenAI budget은 token 가격이 아닌 execution당 provider request hard cap이며, CLI와 config repr는 raw exception/API key를 로그에 남기지 않는다.
+
+## Consequences
+
+운영 관측과 recoverable side effect는 안전하게 독립되지만 external notifier, scheduler deployment, distributed coordination, token accounting은 명시적 후속 통합으로 남는다.

@@ -134,7 +134,7 @@ explainable recommendation policy, threshold snapshot, result-level provenance, 
 
 # Phase 9 — 운영 안정성 및 자동화
 
-**Status:** Planned
+**Status:** Completed
 
 ## 목적
 
@@ -142,8 +142,12 @@ explainable recommendation policy, threshold snapshot, result-level provenance, 
 
 ## 완료 조건
 
-스케줄 실행, persistence, metrics, audit trail, alerting, 비용·latency·secret 관리가 Harness 중심으로 운영된다.
+UTC daily scheduler, JSONL persistence/audit·metrics·alerting, request-cap cost guard, latency threshold, secret-safe logging과 retention/recovery plan이 Harness 중심으로 운영된다.
 
 ## 산출물
 
 실행 scheduler, 보안 관측 체계, 품질 지표, 장애 대응 문서, 데이터 보존 정책.
+
+## v1 운영 범위 제한
+
+외부 notification provider, OS cron/service installation, distributed lock, token-price accounting, object storage, automatic deletion은 안정된 Harness 계약 위의 후속 운영 통합이다. v1은 안전한 JSONL adapter와 explicit configuration만 제공하며, 자동 삭제나 비밀값 전송을 하지 않는다.

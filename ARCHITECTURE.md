@@ -31,6 +31,8 @@ candidate audit trail만 만든다. Workflow는 이 internal result를 보존하
 reason code, policy version을 출력하지 않는다. v1 action eligibility는 Catalog가 명시·검증하는 고정 제품
 정책이고, priority만 교체 가능한 ranking policy 값이다.
 
+`app/harness/`는 Phase 9의 실행 상태와 운영 side effect를 소유한다. `ScreeningExecutionHarness`는 terminal audit를 만들고 optional JSONL sink에 저장한다. audit reader는 metrics report를 만들며, alert decorator는 durable audit 저장 뒤에만 best-effort delivery를 시도한다. daily scheduler는 주입된 Harness job을 UTC 기준으로 호출하고, retention은 archive rotation 및 review-only prune plan으로 로그 보존을 관리한다. 이 계층 밖의 Workflow·Policy·LLM은 파일 I/O, scheduler, alert delivery를 알지 않는다.
+
 ## 주요 구성 요소
 
 | 경계 | 책임 | 현재 구현 위치 |
@@ -52,6 +54,8 @@ reason code, policy version을 출력하지 않는다. v1 action eligibility는 
 LLM은 Extractor, Screener, Cross Validator에서만 구조화된 관측 결과를 만든다. 응답 DTO는 transport boundary이며 Parser가 타입·범위·index·중복·도메인 규칙을 검사한 뒤 Domain 객체로 만든다. Policy가 `ACCEPT/REVIEW/REJECT`, 검증 상태, 독립 출처 수를 결정한다.
 
 OpenAI mode에서는 하나의 `AsyncOpenAI`와 `OpenAIResponsesStructuredOutputClient`, 그리고 stateless `OpenAIResponsesStructuredOutputLLM` gateway를 Extractor·Screener·Cross Validator가 공유한다. 각 호출은 `response_model`을 인자로 전달하므로 현재 gateway는 작업별 상태를 보유하지 않는다. 이 전제가 바뀌면 client만 공유하고 작업별 gateway를 분리한다.
+
+OpenAI 실행은 `ProviderRequestBudget`을 통해 context-local request cap을 공유한다. `ScreeningExecutionHarness`가 scope를 열고 budgeted gateway가 SDK 호출 전에 slot을 claim하므로, 한 실행이 설정된 provider request 상한을 넘기지 않는다. 이 cap은 token-price accounting이 아닌 보수적 비용 상한이다.
 
 ```text
 AsyncOpenAI
