@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.web.app import create_web_app
+from app.web.app import RecommendationRunRequest, create_web_app
 
 
 def test_dashboard_page_exposes_recommendation_controls() -> None:
@@ -15,6 +15,14 @@ def test_dashboard_page_exposes_recommendation_controls() -> None:
     assert "실시간 작업" in response.text
     assert "선택된 뉴스" in response.text
     assert "매수 · 판매 추천" in response.text
+    assert "JSON.stringify({limit:3})" in response.text
+    assert "추천 실행 후 선택된 뉴스를 표시합니다." in response.text
+
+
+def test_dashboard_uses_small_default_collection_limit() -> None:
+    request: RecommendationRunRequest = RecommendationRunRequest()
+
+    assert request.limit == 3
 
 
 def test_dashboard_rejects_unknown_run() -> None:
