@@ -23,6 +23,14 @@ class OpenAIConfig:
     timeout_seconds: float
     max_retries: int
 
+    def __repr__(self) -> str:
+        """Render operational settings without exposing the provider credential."""
+        return (
+            "OpenAIConfig(api_key='[redacted]', "
+            f"model={self.model!r}, timeout_seconds={self.timeout_seconds!r}, "
+            f"max_retries={self.max_retries!r})"
+        )
+
 
 def load_openai_config() -> OpenAIConfig:
     """Load OpenAI settings after merging the optional repository dotenv file."""

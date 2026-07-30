@@ -224,14 +224,18 @@ def test_cli_openai_mode_requires_api_key(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     class CapturingLogger:
+        def __init__(self) -> None:
+            self.records: list[dict[str, object]] = []
+
         def error(self, event: str, **kwargs: object) -> None:
-            sys.stderr.write(f"{event}: {kwargs['error']}\n")
+            self.records.append({"event": event, **kwargs})
 
     def fail_workflow_factory(mode: ExecutionMode) -> object:
         raise ConfigurationError("OPENAI_API_KEY is required for openai mode.")
 
     monkeypatch.setattr(cli, "create_screening_workflow", fail_workflow_factory)
-    monkeypatch.setattr(cli, "logger", CapturingLogger())
+    logger = CapturingLogger()
+    monkeypatch.setattr(cli, "logger", logger)
 
     exit_code: int = asyncio.run(
         cli.run(("--input", str(SAMPLE_INPUT), "--mode", "openai"))
@@ -240,7 +244,8 @@ def test_cli_openai_mode_requires_api_key(
 
     assert exit_code == 2
     assert captured.out == ""
-    assert "OPENAI_API_KEY is required" in captured.err
+    assert captured.err == ""
+    assert logger.records == [{"event": "cli_input_failed", "error_type": "ConfigurationError"}]
 
 
 def test_cli_openai_mode_rejects_blank_model(
@@ -248,14 +253,18 @@ def test_cli_openai_mode_rejects_blank_model(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     class CapturingLogger:
+        def __init__(self) -> None:
+            self.records: list[dict[str, object]] = []
+
         def error(self, event: str, **kwargs: object) -> None:
-            sys.stderr.write(f"{event}: {kwargs['error']}\n")
+            self.records.append({"event": event, **kwargs})
 
     def fail_workflow_factory(mode: ExecutionMode) -> object:
         raise ConfigurationError("OPENAI_MODEL must not be empty.")
 
     monkeypatch.setattr(cli, "create_screening_workflow", fail_workflow_factory)
-    monkeypatch.setattr(cli, "logger", CapturingLogger())
+    logger = CapturingLogger()
+    monkeypatch.setattr(cli, "logger", logger)
 
     exit_code: int = asyncio.run(
         cli.run(("--input", str(SAMPLE_INPUT), "--mode", "openai"))
@@ -264,7 +273,8 @@ def test_cli_openai_mode_rejects_blank_model(
 
     assert exit_code == 2
     assert captured.out == ""
-    assert "OPENAI_MODEL must not be empty" in captured.err
+    assert captured.err == ""
+    assert logger.records == [{"event": "cli_input_failed", "error_type": "ConfigurationError"}]
 
 
 def test_mock_cli_ignores_invalid_openai_environment(

@@ -164,12 +164,12 @@ async def run(arguments: Sequence[str] | None = None) -> int:
         ):
             raise CliInputError("--alert-max-duration-seconds must be positive")
     except CliInputError as error:
-        logger.error("cli_input_failed", error_type=type(error).__name__, error=str(error))
+        logger.error("cli_input_failed", error_type=type(error).__name__)
         return int(ExitCode.INPUT_ERROR)
     try:
         workflow = create_screening_workflow(mode)
     except ConfigurationError as error:
-        logger.error("cli_input_failed", error_type=type(error).__name__, error=str(error))
+        logger.error("cli_input_failed", error_type=type(error).__name__)
         return int(ExitCode.INPUT_ERROR)
     try:
         audit_sink = (
@@ -193,7 +193,6 @@ async def run(arguments: Sequence[str] | None = None) -> int:
         logger.error(
             "cli_execution_failed",
             error_type=type(error).__name__,
-            error=str(error),
         )
         return int(ExitCode.EXECUTION_ERROR)
     sys.stdout.write(_serialize_result(result))
