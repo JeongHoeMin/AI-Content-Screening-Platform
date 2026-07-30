@@ -202,7 +202,7 @@ class DashboardRunManager:
                 ExecutionMode.OPENAI.value,
                 on_progress,
             )
-            state.result = self._build_result(run_id, posts, result)
+            state.result = self._build_result(run_id, posts, result, state.analyses)
             state.completed = True
             await self._emit(state, "completed", "추천 분석이 완료되었습니다.")
         except Exception as error:
@@ -220,6 +220,7 @@ class DashboardRunManager:
         run_id: str,
         posts: List[Post],
         result: ScreeningResult,
+        analyses: Dict[str, NewsAnalysisCard],
     ) -> DashboardRunResult:
         news_cards: List[NewsCard] = [
             NewsCard(
@@ -250,7 +251,7 @@ class DashboardRunManager:
         return DashboardRunResult(
             run_id=run_id,
             news_cards=news_cards,
-            analyses=list(state.analyses.values()),
+            analyses=list(analyses.values()),
             recommendations=recommendations,
             statistics=statistics,
         )
