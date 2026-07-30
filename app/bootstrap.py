@@ -24,7 +24,12 @@ from app.config import (
     load_openai_config,
 )
 from app.resolvers.directory import CompanyDirectory
-from app.extractors import DefaultNewsEventParser, LLMNewsEventExtractor
+from app.extractors import (
+    DartAugmentingNewsEventExtractor,
+    DartFilingEventAugmenter,
+    DefaultNewsEventParser,
+    LLMNewsEventExtractor,
+)
 from app.llms import (
     OpenAIResponsesStructuredOutputClient,
     OpenAIResponsesStructuredOutputLLM,
@@ -153,11 +158,14 @@ def _create_openai_workflow(
     )
     return ScreeningWorkflow(
         evaluator=RuleArticleEvaluator(evaluator_config),
-        extractor=LLMNewsEventExtractor(
-            structured_llm=structured_llm,
-            parser=DefaultNewsEventParser(),
-            prompt_builder=NewsEventPromptBuilder(),
-            config=BatchExtractionConfig(),
+        extractor=DartAugmentingNewsEventExtractor(
+            extractor=LLMNewsEventExtractor(
+                structured_llm=structured_llm,
+                parser=DefaultNewsEventParser(),
+                prompt_builder=NewsEventPromptBuilder(),
+                config=BatchExtractionConfig(),
+            ),
+            augmenter=DartFilingEventAugmenter(),
         ),
         screener=LLMEventScreener(
             structured_llm=structured_llm,
