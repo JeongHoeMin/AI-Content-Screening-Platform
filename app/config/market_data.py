@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from datetime import date
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
@@ -27,6 +28,16 @@ class DartConfig(BaseModel):
     timeout_seconds: float = Field(default=10.0, gt=0.0, le=60.0)
 
 
+class KrxConfig(BaseModel):
+    """Validated KRX OpenAPI configuration loaded from the environment."""
+
+    model_config = ConfigDict(frozen=True)
+
+    api_key: SecretStr
+    directory_date: date = Field(default_factory=date.today)
+    timeout_seconds: float = Field(default=15.0, gt=0.0, le=60.0)
+
+
 def load_naver_news_config() -> NaverNewsConfig:
     """Load Naver credentials without exposing their values in errors."""
     client_id: Optional[str] = os.getenv("NAVER_CLIENT_ID")
@@ -42,3 +53,15 @@ def load_dart_config() -> DartConfig:
     if not api_key:
         raise ConfigurationError("DART_API_KEY is required")
     return DartConfig(api_key=api_key)
+
+
+def load_krx_config() -> KrxConfig:
+    """Load KRX credentials and the optional immutable snapshot date."""
+    api_key: Optional[str] = os.getenv("KRX_API_KEY")
+    raw_date: Optional[str] = os.getenv("KRX_DIRECTORY_DATE")
+    if not api_key:
+        raise ConfigurationError("KRX_API_KEY is required")
+    try:
+        return KrxConfig(api_key=api_key, directory_date=raw_date or date.today())
+    except ValueError as error:
+        raise ConfigurationError("KRX_DIRECTORY_DATE must use YYYY-MM-DD") from error

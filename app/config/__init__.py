@@ -4,7 +4,14 @@ from typing import Any
 
 from app.config.errors import ConfigurationError
 from app.config.openai import OpenAIConfig, load_openai_config
-from app.config.market_data import DartConfig, NaverNewsConfig, load_dart_config, load_naver_news_config
+from app.config.market_data import (
+    DartConfig,
+    KrxConfig,
+    NaverNewsConfig,
+    load_dart_config,
+    load_krx_config,
+    load_naver_news_config,
+)
 
 __all__ = [
     "CompanyDirectoryConfig",
@@ -12,10 +19,12 @@ __all__ = [
     "ConfigurationError",
     "DartConfig",
     "NaverNewsConfig",
+    "KrxConfig",
     "OpenAIConfig",
     "create_company_directory",
     "load_company_directory_config",
     "load_dart_config",
+    "load_krx_config",
     "load_naver_news_config",
     "load_openai_config",
 ]
