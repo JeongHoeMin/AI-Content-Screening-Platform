@@ -25,6 +25,14 @@ def test_dashboard_rejects_unknown_run() -> None:
     assert response.status_code == 404
 
 
+def test_dashboard_rejects_unknown_event_stream_before_response_starts() -> None:
+    client: TestClient = TestClient(create_web_app())
+
+    response = client.get("/api/runs/not-found/events")
+
+    assert response.status_code == 404
+
+
 def test_dashboard_health_endpoint_is_ready_without_credentials() -> None:
     client: TestClient = TestClient(create_web_app())
 

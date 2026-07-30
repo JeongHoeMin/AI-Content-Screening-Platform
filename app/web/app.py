@@ -45,6 +45,7 @@ class DashboardEvent(BaseModel):
     message: str = Field(min_length=1)
     node: Optional[str] = None
     completed_node_count: Optional[int] = Field(default=None, ge=1)
+    error_type: Optional[str] = None
 
 
 class NewsCard(BaseModel):
@@ -113,6 +114,10 @@ class DashboardRunManager:
             if event.type in {"completed", "failed"}:
                 return
 
+    def ensure_exists(self, run_id: str) -> None:
+        """Fail before an SSE response starts for an unknown execution id."""
+        self._get_state(run_id)
+
     def result(self, run_id: str) -> DashboardRunResult:
         state: _RunState = self._get_state(run_id)
         if not state.completed:
@@ -171,7 +176,12 @@ class DashboardRunManager:
         except Exception as error:
             state.error_type = type(error).__name__
             state.completed = True
-            await self._emit(state, "failed", "추천 실행에 실패했습니다.")
+            await self._emit(
+                state,
+                "failed",
+                "추천 실행에 실패했습니다. 실행 환경 설정을 확인하세요.",
+                error_type=state.error_type,
+            )
 
     def _build_result(
         self,
@@ -219,6 +229,7 @@ class DashboardRunManager:
         message: str,
         node: Optional[str] = None,
         completed_node_count: Optional[int] = None,
+        error_type: Optional[str] = None,
     ) -> None:
         await state.queue.put(
             DashboardEvent(
@@ -226,6 +237,7 @@ class DashboardRunManager:
                 message=message,
                 node=node,
                 completed_node_count=completed_node_count,
+                error_type=error_type,
             )
         )
 
@@ -255,6 +267,8 @@ def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
 
     @app.get("/api/runs/{run_id}/events")
     async def stream_events(run_id: str) -> StreamingResponse:
+        run_manager.ensure_exists(run_id)
+
         async def stream() -> AsyncIterator[str]:
             async for event in run_manager.events(run_id):
                 payload: str = json.dumps(event.model_dump(mode="json"), ensure_ascii=False)
