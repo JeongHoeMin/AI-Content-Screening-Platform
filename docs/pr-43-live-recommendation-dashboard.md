@@ -29,3 +29,4 @@
 - 2026-07-30: 실제 DART 공시 제목에서 `단일판매·공급계약`을 event fact로 보존할 수 있도록, 해당 공시 사실만 `financial_event`의 보수적 긍정 영향 규칙으로 추가한다. LLM은 공시에 명시된 계약만 관측하고, 영향 방향과 추천은 기존 deterministic catalog·policy가 계속 결정한다.
 - 2026-07-30: 실제 실행에서 DART 공시 메타데이터가 일반 뉴스처럼 과도하게 보수 처리되어 event가 비어 있었다. DART source의 제목·요약은 공식 filing metadata임을 extraction prompt에 명시하고, 명시적 `단일판매·공급계약체결` 제목만 major_supply_contract로 관측하도록 범위를 제한한다.
 - 2026-07-30: 프롬프트 보완 후에도 provider가 준 DART 공식 메타데이터를 OpenAI가 빈 event로 반환했다. DART 공급계약 제목은 deterministic extractor가 LLM inference에 보충한다. 일반 기사·그 외 공시에는 적용하지 않으며, 이후 screening·cross validation·resolve·impact·recommendation은 기존 LLM/Policy workflow를 그대로 거친다.
+- 2026-07-30: 보충 event가 screening 단계에 도달하면서 OpenAI가 `BadRequestError`를 반환했다. 원인은 transport DTO의 `reasons: List[object]`가 OpenAI structured output에서 type 없는 JSON schema(`items: {}`)로 생성되는 것이므로, Parser가 허용하던 malformed primitive 범위는 유지하면서 명시적 primitive union schema로 바꾼다.

@@ -211,6 +211,20 @@ def test_response_dto_rejects_extra_properties() -> None:
         )
 
 
+def test_response_dto_uses_a_typed_schema_for_reason_items() -> None:
+    schema: dict[str, object] = ScreeningAssessmentResponse.model_json_schema()
+    definitions: dict[str, object] = schema["$defs"]  # type: ignore[assignment]
+    item_schema: dict[str, object] = definitions["ScreeningAssessmentResponseItem"]  # type: ignore[index,assignment]
+    properties: dict[str, object] = item_schema["properties"]  # type: ignore[index,assignment]
+    reasons_schema: dict[str, object] = properties["reasons"]  # type: ignore[index,assignment]
+    reason_items: dict[str, object] = reasons_schema["items"]  # type: ignore[index,assignment]
+
+    assert all(
+        "type" in primitive_schema
+        for primitive_schema in reason_items["anyOf"]  # type: ignore[index,union-attr]
+    )
+
+
 @pytest.mark.parametrize("score", [50.5, float("nan"), float("inf"), -1, 101])
 def test_parser_records_invalid_scores_without_discarding_siblings(
     score: int | float,
