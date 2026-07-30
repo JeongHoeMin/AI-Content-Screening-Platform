@@ -105,7 +105,6 @@ class ScreeningWorkflow:
                     validation_analyses,
                 ) = self._analysis_progress(
                     node,
-                    node_update,
                     state,
                     article_id_by_event_id,
                 )
@@ -124,7 +123,6 @@ class ScreeningWorkflow:
     @staticmethod
     def _analysis_progress(
         node: str,
-        node_update: Mapping[str, object],
         state: Mapping[str, object],
         article_id_by_event_id: dict[int, str],
     ) -> tuple[
@@ -136,7 +134,7 @@ class ScreeningWorkflow:
         if node == "extract":
             inferences = cast(
                 Tuple[LLMInferenceResult, ...],
-                node_update.get("inferences", ()),
+                state.get("inferences", ()),
             )
             article_analyses: list[WorkflowArticleAnalysisProgress] = []
             inference_article_ids: set[str] = set()
@@ -179,7 +177,7 @@ class ScreeningWorkflow:
         if node == "screen":
             decisions = cast(
                 Tuple[ScreeningDecision, ...],
-                node_update.get("decisions", ()),
+                state.get("decisions", ()),
             )
             screening_analyses: list[WorkflowScreeningAnalysisProgress] = []
             for item in decisions:
@@ -201,7 +199,7 @@ class ScreeningWorkflow:
         if node == "cross_validate":
             validations = cast(
                 Tuple[CrossValidationResult, ...],
-                node_update.get("cross_validation_results", ()),
+                state.get("cross_validation_results", ()),
             )
             validation_analyses: list[WorkflowValidationAnalysisProgress] = []
             for item in validations:
