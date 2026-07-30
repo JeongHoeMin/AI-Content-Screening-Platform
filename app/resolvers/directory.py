@@ -196,14 +196,21 @@ class KrxMasterCsvCompanyDirectory(StaticCompanyDirectory):
             raise ConfigurationError("KRX master CSV must contain at least one row")
         version: str = cls._version_from_path(path)
         entries: list[CompanyDirectoryEntry] = []
-        for row_index, row in enumerate(rows):
+        skipped_row_count: int = 0
+        for row in rows:
             entry: Optional[CompanyDirectoryEntry] = cls._parse_krx_row(row, version)
             if entry is None:
-                logger.info("krx_master_row_skipped", row_index=row_index)
+                skipped_row_count += 1
                 continue
             entries.append(entry)
         if not entries:
             raise ConfigurationError("KRX master CSV has no supported common shares")
+        if skipped_row_count:
+            logger.info(
+                "krx_master_rows_skipped",
+                skipped_row_count=skipped_row_count,
+                supported_row_count=len(entries),
+            )
         try:
             return cls(entries, version=version)
         except ValueError as error:
