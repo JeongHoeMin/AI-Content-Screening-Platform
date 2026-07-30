@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -45,7 +45,7 @@ class ScreeningResult(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     recommendation: RecommendationResult
-    candidate_selection: Optional[CandidateSelectionResult] = None
+    candidate_selection: CandidateSelectionResult
     decisions: Tuple[ScreeningDecision, ...]
     cross_validation_results: Tuple[CrossValidationResult, ...]
     resolved_events: Tuple[ResolvedNewsEvent, ...]

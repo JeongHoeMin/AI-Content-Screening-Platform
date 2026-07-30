@@ -10,9 +10,10 @@ from app.models.candidate_selection import (
     CandidateSelectionResult,
     CandidateStatus,
     RankingPolicyConfig,
+    not_eligible_reason_for,
+    selected_reason_for,
 )
 from app.models.recommendation import (
-    RecommendationAction,
     RecommendationDecision,
     RecommendationResult,
 )
@@ -72,7 +73,7 @@ class RuleCandidateSelectionPolicy(CandidateSelectionPolicy):
             return CandidateEvaluation(
                 decision=decision,
                 status=CandidateStatus.NOT_ELIGIBLE,
-                reason_code=_NOT_ELIGIBLE_REASONS[decision.action],
+                reason_code=not_eligible_reason_for(decision.action),
                 input_index=input_index,
             )
         rank: int | None = selected_ranks.get(input_index)
@@ -80,7 +81,7 @@ class RuleCandidateSelectionPolicy(CandidateSelectionPolicy):
             return CandidateEvaluation(
                 decision=decision,
                 status=CandidateStatus.SELECTED,
-                reason_code=_SELECTED_REASONS[decision.action],
+                reason_code=selected_reason_for(decision.action),
                 input_index=input_index,
                 rank=rank,
             )
@@ -90,15 +91,3 @@ class RuleCandidateSelectionPolicy(CandidateSelectionPolicy):
             reason_code=CandidateReasonCode.EXCLUDED_OUTSIDE_CANDIDATE_LIMIT,
             input_index=input_index,
         )
-
-
-_SELECTED_REASONS: dict[RecommendationAction, CandidateReasonCode] = {
-    RecommendationAction.STRONG_BUY: CandidateReasonCode.SELECTED_STRONG_BUY,
-    RecommendationAction.BUY: CandidateReasonCode.SELECTED_BUY,
-}
-
-_NOT_ELIGIBLE_REASONS: dict[RecommendationAction, CandidateReasonCode] = {
-    RecommendationAction.HOLD: CandidateReasonCode.EXCLUDED_HOLD,
-    RecommendationAction.SELL: CandidateReasonCode.EXCLUDED_SELL,
-    RecommendationAction.STRONG_SELL: CandidateReasonCode.EXCLUDED_STRONG_SELL,
-}

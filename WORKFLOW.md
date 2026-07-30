@@ -17,6 +17,8 @@ reason code, action을 포함한 final immutable `RecommendationResult`를 만�
 같은 객체 identity로 반환한다. 이어지는 `Select Candidates` 노드는 RecommendationDecision만 소비해 internal
 `CandidateSelectionResult`를 만들며 score/action을 수정하지 않는다. CLI는 workflow result 직렬화 경계에서만
 Decision을 기존 recommendation JSON schema로 투영하고 candidate provenance는 외부 schema에 추가하지 않는다.
+`ScreeningResult`는 internal `CandidateSelectionResult`를 필수로 보존한다. CLI JSON은 output projection이며
+internal workflow snapshot을 재구성하는 round-trip DTO가 아니다.
 
 ## 노드 계약 형식
 

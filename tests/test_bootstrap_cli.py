@@ -29,7 +29,7 @@ from app.models import (
     ResolvedDecisionType,
 )
 from app.scorers import EvidenceAwareScoringStrategy
-from app.candidates import RuleCandidateSelectionPolicy
+from app.candidates import DefaultCandidateSelectionEngine, RuleCandidateSelectionPolicy
 from app.workflows import ScreeningResult
 
 PROJECT_ROOT: Path = Path(__file__).resolve().parents[1]
@@ -130,8 +130,9 @@ def test_bootstrap_reuses_the_default_ranking_config_instance(
     monkeypatch.setattr(bootstrap, "ScreeningWorkflow", CapturingWorkflow)
     workflow = bootstrap.create_screening_workflow(ExecutionMode.MOCK)
     candidate_selection_engine = workflow.components["candidate_selection_engine"]
-    policy = candidate_selection_engine._policy
 
+    assert isinstance(candidate_selection_engine, DefaultCandidateSelectionEngine)
+    policy = candidate_selection_engine._policy
     assert isinstance(policy, RuleCandidateSelectionPolicy)
     assert policy.config is DEFAULT_RANKING_POLICY_CONFIG
 
@@ -198,7 +199,8 @@ def test_module_and_script_entrypoints_emit_identical_json() -> None:
     module_payload: object = json.loads(module_result.stdout)
     script_payload: object = json.loads(script_result.stdout)
     assert module_payload == script_payload
-    ScreeningResult.model_validate(module_payload)
+    assert "candidate_selection" not in module_payload
+    assert "companies" in module_payload["recommendation"]
 
 
 @pytest.mark.parametrize(
@@ -276,7 +278,9 @@ def test_mock_cli_ignores_invalid_openai_environment(
 
     assert exit_code == 0
     assert captured.err == ""
-    ScreeningResult.model_validate_json(captured.out)
+    payload: object = json.loads(captured.out)
+    assert "candidate_selection" not in payload
+    assert "companies" in payload["recommendation"]
 
 
 def test_cli_returns_execution_error_when_workflow_fails(

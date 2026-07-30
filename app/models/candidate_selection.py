@@ -80,6 +80,16 @@ class RecommendationRankCatalog(BaseModel):
                 "Recommendation Rank Catalog must assign every action exactly once. "
                 + "; ".join(details)
             )
+        invalid_eligibility: Tuple[RecommendationAction, ...] = tuple(
+            entry.action
+            for entry in self.entries
+            if entry.eligible is not _V1_ELIGIBILITY[entry.action]
+        )
+        if invalid_eligibility:
+            raise ValueError(
+                "Recommendation Rank Catalog must use v1 fixed eligibility. Actions: "
+                + ", ".join(action.name for action in invalid_eligibility)
+            )
         return self
 
     def entry_for(self, action: RecommendationAction) -> RecommendationRankEntry:
@@ -107,6 +117,22 @@ class RankingPolicyConfig(BaseModel):
         return value
 
 
+def selected_reason_for(action: RecommendationAction) -> CandidateReasonCode:
+    """Return the v1 selected reason for an eligible action."""
+    reason: Optional[CandidateReasonCode] = _SELECTED_REASONS.get(action)
+    if reason is None:
+        raise ValueError(f"{action.value} does not have a selected candidate reason")
+    return reason
+
+
+def not_eligible_reason_for(action: RecommendationAction) -> CandidateReasonCode:
+    """Return the v1 exclusion reason for a non-eligible action."""
+    reason: Optional[CandidateReasonCode] = _NOT_ELIGIBLE_REASONS.get(action)
+    if reason is None:
+        raise ValueError(f"{action.value} does not have a not-eligible candidate reason")
+    return reason
+
+
 class CandidateEvaluation(BaseModel):
     """Atomic immutable candidate-policy evaluation of one decision."""
 
@@ -122,16 +148,14 @@ class CandidateEvaluation(BaseModel):
     def _require_consistent_evaluation(self) -> "CandidateEvaluation":
         action: RecommendationAction = self.decision.action
         if self.status is CandidateStatus.SELECTED:
-            expected_reason: CandidateReasonCode | None = _SELECTED_REASONS.get(action)
-            if self.rank is None or self.reason_code is not expected_reason:
+            if self.rank is None or self.reason_code is not selected_reason_for(action):
                 raise ValueError("Selected candidate must have matching action reason and rank")
         elif self.status is CandidateStatus.NOT_ELIGIBLE:
-            expected_reason = _NOT_ELIGIBLE_REASONS.get(action)
-            if self.rank is not None or self.reason_code is not expected_reason:
+            if self.rank is not None or self.reason_code is not not_eligible_reason_for(action):
                 raise ValueError("Not eligible candidate must have matching action reason and no rank")
         else:
             if (
-                action not in _SELECTED_REASONS
+                not _V1_ELIGIBILITY[action]
                 or self.rank is not None
                 or self.reason_code is not CandidateReasonCode.EXCLUDED_OUTSIDE_CANDIDATE_LIMIT
             ):
@@ -203,6 +227,14 @@ _NOT_ELIGIBLE_REASONS: dict[RecommendationAction, CandidateReasonCode] = {
     RecommendationAction.HOLD: CandidateReasonCode.EXCLUDED_HOLD,
     RecommendationAction.SELL: CandidateReasonCode.EXCLUDED_SELL,
     RecommendationAction.STRONG_SELL: CandidateReasonCode.EXCLUDED_STRONG_SELL,
+}
+
+_V1_ELIGIBILITY: dict[RecommendationAction, bool] = {
+    RecommendationAction.STRONG_BUY: True,
+    RecommendationAction.BUY: True,
+    RecommendationAction.HOLD: False,
+    RecommendationAction.SELL: False,
+    RecommendationAction.STRONG_SELL: False,
 }
 
 DEFAULT_RECOMMENDATION_RANK_CATALOG = RecommendationRankCatalog(

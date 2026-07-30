@@ -217,3 +217,14 @@ feat: add deterministic candidate selection
   제외해 외부 JSON schema를 유지했다.
 - Python 3.9 환경에서 config package import order에 따라 발생하던 resolver/config cycle은 directory config의
   lazy export로 분리해 candidate package의 독립 import도 보장했다.
+
+### 2026-07-30 — Eligibility contract hardening
+
+- `eligible`은 v1 제품 정책을 명시·검증하는 Catalog 사실로 고정했다. STRONG_BUY/BUY 외 action의 eligibility
+  변경과 BUY/STRONG_BUY의 exclusion은 Catalog 생성 시 fail-fast한다.
+- priority만 교체 가능한 ranking 요소로 제한하고, action별 selected/not-eligible reason은 Domain helper로
+  단일화해 Policy와 Evaluation validator의 정책 중복을 제거했다.
+- `ScreeningResult.candidate_selection`을 internal workflow의 필수 snapshot으로 고정했다. CLI JSON은
+  candidate selection을 포함하지 않는 output projection이며 internal Result 역직렬화 DTO로 취급하지 않는다.
+- workflow selector 호출·input recommendation identity·output selection identity 및 bootstrap engine type을
+  회귀 테스트로 고정했다.

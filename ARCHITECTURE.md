@@ -28,7 +28,8 @@ result-level policy version을 생성한다. Engine은 Policy 결과를 재조�
 `app/candidates/`는 `RecommendationResult` 이후의 deterministic candidate-selection policy와 Engine을 둔다.
 `RankingPolicyConfig`와 exhaustive Catalog가 action eligibility, priority, candidate limit을 소유하며 Policy는
 candidate audit trail만 만든다. Workflow는 이 internal result를 보존하지만 CLI adapter는 candidate status, rank,
-reason code, policy version을 출력하지 않는다.
+reason code, policy version을 출력하지 않는다. v1 action eligibility는 Catalog가 명시·검증하는 고정 제품
+정책이고, priority만 교체 가능한 ranking policy 값이다.
 
 ## 주요 구성 요소
 

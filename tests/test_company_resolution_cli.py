@@ -20,6 +20,7 @@ from app.models import (
     ScreeningDecisionType,
     ScoringResult,
 )
+from app.candidates import RuleCandidateSelectionPolicy
 from app.recommenders import RuleRecommendationPolicy
 from app.workflows import ScreeningResult, WorkflowStatistics
 
@@ -57,6 +58,12 @@ def test_cli_serialization_excludes_internal_company_resolution_fields() -> None
         recommendation=RecommendationResult(
             policy_version=DEFAULT_RECOMMENDATION_POLICY_CONFIG.policy_version,
             decisions=(),
+        ),
+        candidate_selection=RuleCandidateSelectionPolicy().select(
+            RecommendationResult(
+                policy_version=DEFAULT_RECOMMENDATION_POLICY_CONFIG.policy_version,
+                decisions=(),
+            )
         ),
         decisions=(decision,),
         cross_validation_results=(),
@@ -101,6 +108,7 @@ def test_cli_serialization_preserves_legacy_recommendation_shape() -> None:
     )
     result = ScreeningResult(
         recommendation=recommendation,
+        candidate_selection=RuleCandidateSelectionPolicy().select(recommendation),
         decisions=(),
         cross_validation_results=(),
         resolved_events=(),

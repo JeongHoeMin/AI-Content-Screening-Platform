@@ -429,6 +429,10 @@ config로 eligible Decision을 priority, score, input index 순으로 결정적�
 evaluation audit trail을 저장하고 selected rank와 exclusion reason을 보존한다. Workflow는 internal result를
 보관하지만 CLI schema는 변경하지 않는다.
 
+v1 Catalog의 eligibility는 STRONG_BUY/BUY eligible 및 나머지 not eligible이라는 고정 제품 정책을 명시한다.
+Catalog는 이 값의 교체를 허용하지 않고 fail-fast하며, priority만 ranking 순서를 위한 교체 가능한 값이다.
+action별 candidate reason은 Domain helper가 단일 소유하고 Policy와 validator가 함께 사용한다.
+
 ## Consequences
 
 후보 선택의 재현성과 감사 가능성이 생기며 scoring/recommendation 결과는 그대로 유지된다. portfolio allocation,

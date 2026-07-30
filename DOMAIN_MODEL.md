@@ -114,8 +114,9 @@ CLI는 이 내부 Decision을 기존 `companies[].score`/`companies[].recommenda
 ## Candidate Selection 계약
 
 `RecommendationRankCatalog`은 모든 `RecommendationAction`을 정확히 한 번씩 등록하고, action 중복·누락,
-negative/duplicate priority를 fail-fast한다. priority는 Catalog 전체의 결정적 순서이며 v1 ranking에는 eligible
-entry만 사용한다. 비eligible priority는 catalog completeness와 향후 policy 확장을 위한 값이다.
+negative/duplicate priority를 fail-fast한다. `eligible`은 교체 가능한 설정이 아니라 v1 제품 정책을 명시하는
+Catalog 사실이다. STRONG_BUY/BUY만 eligible이고 나머지는 not eligible이며, 이 조합을 바꾸는 Catalog는
+fail-fast한다. priority만 교체 가능한 ranking 요소이고 v1 ranking에는 eligible entry priority만 사용한다.
 `RankingPolicyConfig`는 nonblank version, `max_candidates >= 1`, Catalog를 단일 immutable policy input으로
 소유한다.
 
@@ -124,6 +125,9 @@ entry만 사용한다. 비eligible priority는 catalog completeness와 향후 po
 `CandidateSelectionResult.evaluations`는 input index ascending의 canonical audit trail이며, candidates는 rank
 ascending, excluded와 decisions는 input order로 계산한다. OUTSIDE_LIMIT reason은 action-independent하며 원래
 action은 Decision에 보존된다.
+
+action별 selected/not-eligible reason은 Candidate Domain helper가 유일하게 소유한다. helper는 해당 status를
+가질 수 없는 action에 대해 명시적 ValueError를 내며, Policy와 Evaluation validator는 같은 helper를 사용한다.
 
 ## Policy 경계
 

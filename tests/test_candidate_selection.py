@@ -33,6 +33,7 @@ from app.models import (
     ScoreReasonCode,
     ScoringResult,
 )
+from app.models.candidate_selection import not_eligible_reason_for, selected_reason_for
 from app.recommenders import RuleRecommendationPolicy
 
 
@@ -104,6 +105,57 @@ def test_default_catalog_and_config_define_v1_ranking_policy() -> None:
         (RecommendationAction.STRONG_SELL, False, 4),
     )
     assert DEFAULT_RANKING_POLICY_CONFIG.max_candidates == 10
+
+
+@pytest.mark.parametrize(
+    ("action", "eligible"),
+    (
+        (RecommendationAction.STRONG_BUY, False),
+        (RecommendationAction.BUY, False),
+        (RecommendationAction.HOLD, True),
+        (RecommendationAction.SELL, True),
+        (RecommendationAction.STRONG_SELL, True),
+    ),
+)
+def test_catalog_rejects_eligibility_that_differs_from_v1_policy(
+    action: RecommendationAction,
+    eligible: bool,
+) -> None:
+    entries = tuple(
+        RecommendationRankEntry(
+            action=item.action,
+            eligible=eligible if item.action is action else item.eligible,
+            priority=item.priority,
+        )
+        for item in DEFAULT_RECOMMENDATION_RANK_CATALOG.entries
+    )
+
+    with pytest.raises(ValidationError):
+        RecommendationRankCatalog(entries=entries)
+
+
+def test_catalog_allows_priority_replacement_without_eligibility_change() -> None:
+    catalog = RecommendationRankCatalog(
+        entries=tuple(
+            RecommendationRankEntry(
+                action=item.action,
+                eligible=item.eligible,
+                priority=4 - item.priority,
+            )
+            for item in DEFAULT_RECOMMENDATION_RANK_CATALOG.entries
+        )
+    )
+
+    assert catalog.entry_for(RecommendationAction.STRONG_BUY).priority == 4
+
+
+def test_reason_helpers_are_action_specific_and_fail_fast() -> None:
+    assert selected_reason_for(RecommendationAction.STRONG_BUY) is CandidateReasonCode.SELECTED_STRONG_BUY
+    assert not_eligible_reason_for(RecommendationAction.HOLD) is CandidateReasonCode.EXCLUDED_HOLD
+    with pytest.raises(ValueError, match="selected candidate reason"):
+        selected_reason_for(RecommendationAction.HOLD)
+    with pytest.raises(ValueError, match="not-eligible candidate reason"):
+        not_eligible_reason_for(RecommendationAction.BUY)
 
 
 def test_config_rejects_blank_version_and_invalid_limit() -> None:
