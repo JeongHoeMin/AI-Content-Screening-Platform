@@ -10,3 +10,5 @@ class CommunityType(str, Enum):
     DCINSIDE = "dcinside"
     RULIWEB = "ruliweb"
     MOCK = "mock"
+    NAVER_NEWS = "naver_news"
+    DART = "dart"

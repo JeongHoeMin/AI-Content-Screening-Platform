@@ -82,7 +82,13 @@ from app.models.resolved_news_event import (
     TickerResolvedEvent,
 )
 from app.models.resolve import ResolveDecision
-from app.models.raw_post import RawDcInsidePost, RawPost, RawRedditPost
+from app.models.raw_post import (
+    RawDartDisclosurePost,
+    RawDcInsidePost,
+    RawNaverNewsPost,
+    RawPost,
+    RawRedditPost,
+)
 from app.models.recommendation import (
     CompanyRecommendation,
     DEFAULT_RECOMMENDATION_POLICY_CONFIG,
@@ -208,6 +214,8 @@ __all__ = [
     "PostEvaluationResult",
     "ProviderResultMetadata",
     "RawDcInsidePost",
+    "RawDartDisclosurePost",
+    "RawNaverNewsPost",
     "RawPost",
     "RawRedditPost",
     "ResolvedCompany",
