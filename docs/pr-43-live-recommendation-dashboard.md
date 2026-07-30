@@ -24,3 +24,4 @@
 - 2026-07-30: 사용자 요청으로 실제 추천 UI와 LangGraph 진행 관측을 위한 구현 계획을 작성했다.
 - 2026-07-30: LangGraph node completion을 Harness audit와 함께 streaming하고, FastAPI/SSE dashboard 및 Docker 실행 정의를 추가했다.
 - 2026-07-30: 실제 Compose 버튼 실행에서 Naver/DART 100건 수집과 KRX snapshot 준비까지 확인했다. KRX external failure는 고정된 safe transport detail만 추가 관측하도록 보완 중이다.
+- 2026-07-30: KRX API가 HTTP 401을 반환해 사용자가 제공한 CP949 KRX master CSV를 runtime directory로 사용하는 fallback을 추가한다. 원본 CSV는 수정하지 않고 표준코드·단축코드·종목약명·시장구분만 canonical snapshot으로 변환한다.

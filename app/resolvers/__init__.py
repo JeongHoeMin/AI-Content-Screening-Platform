@@ -5,6 +5,7 @@ from app.resolvers.company_policy import CompanyResolutionPolicy
 from app.resolvers.company_resolver import DefaultCompanyResolver
 from app.resolvers.directory import (
     CompanyDirectory,
+    KrxMasterCsvCompanyDirectory,
     LocalCsvCompanyDirectory,
     StaticCompanyDirectory,
     normalize_company_name,
@@ -19,6 +20,7 @@ __all__ = [
     "DefaultResolvePolicy",
     "LocalCsvCompanyDirectory",
     "KrxCompanyDirectoryLoader",
+    "KrxMasterCsvCompanyDirectory",
     "ResolvePolicy",
     "StaticCompanyDirectory",
     "TickerResolver",

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import csv
 import json
+import re
+from datetime import date
+from io import StringIO
 from pathlib import Path
 from types import MappingProxyType
 from typing import Dict, Iterable, Mapping, Protocol, Sequence, Tuple
@@ -10,6 +13,7 @@ from app.config.errors import ConfigurationError
 from app.models.company_resolution import (
     CanonicalCompany,
     CompanyDirectoryEntry,
+    KRXExchange,
 )
 
 _CSV_COLUMNS: Tuple[str, ...] = (
@@ -19,6 +23,15 @@ _CSV_COLUMNS: Tuple[str, ...] = (
     "exchange",
     "aliases",
     "directory_version",
+)
+
+_KRX_MASTER_COLUMNS: Tuple[str, ...] = (
+    "표준코드",
+    "단축코드",
+    "한글 종목명",
+    "한글 종목약명",
+    "영문 종목명",
+    "시장구분",
 )
 
 
@@ -157,3 +170,68 @@ class LocalCsvCompanyDirectory(StaticCompanyDirectory):
             return CompanyDirectoryEntry(company=company, aliases=aliases)
         except ValueError as error:
             raise ConfigurationError("Company directory row is invalid") from error
+
+
+class KrxMasterCsvCompanyDirectory(StaticCompanyDirectory):
+    """Read a KRX master CSV without changing the user-provided source file."""
+
+    @classmethod
+    def from_csv(cls, path: Path) -> "KrxMasterCsvCompanyDirectory":
+        try:
+            payload: bytes = path.read_bytes()
+            text: str = payload.decode("cp949")
+            reader: csv.DictReader = csv.DictReader(StringIO(text))
+            if reader.fieldnames is None or not set(_KRX_MASTER_COLUMNS).issubset(
+                reader.fieldnames
+            ):
+                raise ConfigurationError("KRX master CSV is missing required columns")
+            rows: list[dict[str, str | None]] = list(reader)
+        except (OSError, UnicodeDecodeError) as error:
+            raise ConfigurationError("Unable to read KRX master CSV") from error
+        if not rows:
+            raise ConfigurationError("KRX master CSV must contain at least one row")
+        version: str = cls._version_from_path(path)
+        entries: list[CompanyDirectoryEntry] = []
+        for row in rows:
+            entry: CompanyDirectoryEntry = cls._parse_krx_row(row, version)
+            entries.append(entry)
+        try:
+            return cls(entries, version=version)
+        except ValueError as error:
+            raise ConfigurationError("KRX master CSV contains invalid rows") from error
+
+    @staticmethod
+    def _version_from_path(path: Path) -> str:
+        match: re.Match[str] | None = re.search(r"(\d{8})", path.stem)
+        if match is None:
+            return date.today().isoformat()
+        return date.fromisoformat(
+            f"{match.group(1)[:4]}-{match.group(1)[4:6]}-{match.group(1)[6:]}"
+        ).isoformat()
+
+    @staticmethod
+    def _parse_krx_row(
+        row: Mapping[str, str | None],
+        version: str,
+    ) -> CompanyDirectoryEntry:
+        try:
+            exchange: KRXExchange = KRXExchange((row.get("시장구분") or "").strip())
+            canonical_name: str = (row.get("한글 종목약명") or "").strip()
+            aliases: Tuple[str, ...] = tuple(
+                value
+                for value in (
+                    (row.get("한글 종목명") or "").strip(),
+                    (row.get("영문 종목명") or "").strip(),
+                )
+                if value and value != canonical_name
+            )
+            company: CanonicalCompany = CanonicalCompany(
+                company_id=(row.get("표준코드") or "").strip(),
+                canonical_name=canonical_name,
+                ticker=(row.get("단축코드") or "").strip().zfill(6),
+                exchange=exchange,
+                directory_version=version,
+            )
+            return CompanyDirectoryEntry(company=company, aliases=aliases)
+        except ValueError as error:
+            raise ConfigurationError("KRX master CSV row is invalid") from error
