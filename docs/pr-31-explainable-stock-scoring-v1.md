@@ -137,6 +137,9 @@ ScoreContribution
 score-sum 불변식은 `CompanyScore` Domain validator에서 fail-fast한다. 기존 consumer가 필요로 하는
 `CompanyScore.score`와 `evidences` read-only contract는 유지한다.
 
+`ScoringResult`는 `policy_version`과 company score tuple을 저장한다. 하나의 result는 하나의
+`ScoringPolicyConfig`로 생성되므로 policy version은 result에 한 번만 보존한다.
+
 ### 5. Policy와 configuration 경계
 
 - `ScoringPolicyConfig`는 `policy_version`, `min_weight`, `max_weight`, `catalog`를 Pydantic으로 검증하는
@@ -147,8 +150,10 @@ score-sum 불변식은 `CompanyScore` Domain validator에서 fail-fast한다. �
   해당 범위 안에 있는지 검증한다.
 - Strategy는 mapping이나 범위를 hard-code하지 않고 주입된 `config.catalog`를 조회한다.
 - Catalog 교체는 product policy 변경이며 Domain enum이나 Aggregation을 변경하지 않는다.
-- `policy_version`은 `ScoringResult`와 각 `CompanyScore`에 보존되어 score provenance를 제공한다.
-  v1 config는 방향 weight의 부호를 강제하지 않는다. 정책적 positive/negative 의미는 Catalog entry와
+- `policy_version`은 하나의 scoring 실행의 정책이므로 `ScoringResult`만 보존하여 score provenance를
+  제공한다. `CompanyScore`는 `company`, `score`, `contributions`만 보관하며, 자신이 계산된 policy는
+  상위 `ScoringResult`를 통해 확인한다. v1 config는 방향 weight의 부호를 강제하지 않는다. 정책적
+  positive/negative 의미는 Catalog entry와
   test로 명시한다.
 
 ## Proposed Interfaces
@@ -177,7 +182,8 @@ existing RecommendationPolicy
 
 - Default Catalog의 weight가 현재 rule policy와 같으므로 기존 score 값과 recommendation boundary
   결과는 변하지 않아야 한다.
-- `CompanyScore`의 새 `contributions`와 `policy_version`은 score provenance를 보강하는 additive Domain 확장이다.
+- `CompanyScore`의 새 `contributions`와 `ScoringResult`의 `policy_version`은 score provenance를 보강하는
+  additive Domain 확장이다.
   CLI JSON schema는 이번 PR에서 변경하지 않는다. serialization 영향이 발견되면 versioned CLI schema
   결정은 별도 PR로 분리한다.
 - PR31은 `CompanyImpact`를 확장하지 않는다. validation/uncertainty/event fact weight가 필요해지면
@@ -207,7 +213,7 @@ existing RecommendationPolicy
 ### Regression
 
 - default Config에서 기존 `RuleScoringStrategy`의 score와 새 strategy의 score가 동일하고,
-  `CompanyScore`와 `ScoringResult`가 configured policy version을 보존하는지 검증한다.
+  `ScoringResult`가 configured policy version을 보존하는지 검증한다.
 - existing `RecommendationPolicy`의 모든 threshold 경계 결과가 동일 score에서 바뀌지 않는지 검증한다.
 - Resolve → Analyze → Aggregate → Score → Recommend workflow의 event/company ordering과 current public
   result contract를 회귀 검증한다.
@@ -217,7 +223,7 @@ existing RecommendationPolicy
 
 - `ROADMAP.md`: Phase 7을 PR31 implementation 완료 시 Completed로 갱신한다.
 - `DOMAIN_MODEL.md`: ScoreContribution 원자화, DirectionScoreCatalog/ScoringPolicyConfig 소유 관계,
-  CompanyScore evidence property와 policy version 계약을 추가한다.
+  CompanyScore evidence property와 ScoringResult policy version 계약을 추가한다.
 - `WORKFLOW.md`: Score 단계의 input/output과 provenance 보존 책임을 갱신한다.
 - `ARCHITECTURE.md`: scoring policy/catalog과 기존 recommendation 경계를 기록한다.
 - `DECISION_LOG.md`: score direction mapping의 exhaustive registry와 breakdown 보존을 ADR로 기록한다.
@@ -245,3 +251,8 @@ feat: add explainable stock scoring
 - ScoringPolicyConfig를 policy version, weight range, Catalog를 포함하는 단일 주입 경계로 고정했고,
   Strategy는 config 하나만 받아 catalog를 조회하도록 통일했다.
 - v1 `ScoreContribution.value == weight`와 score provenance를 위한 policy version 보존을 추가했다.
+
+### 2026-07-30 — Policy version ownership hardening
+
+- policy version은 회사별 속성이 아니라 하나의 scoring 실행 정책이므로 `ScoringResult`만 소유하도록
+  계약을 수정했다. CompanyScore와 ScoringResult 사이의 중복·불일치 불변식은 만들지 않는다.
