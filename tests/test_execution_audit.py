@@ -10,8 +10,11 @@ import pytest
 from app.harness.execution_audit import (
     ExecutionAuditStatus,
     JsonLinesWorkflowExecutionAuditSink,
+    JsonLinesWorkflowExecutionAuditReader,
     ScreeningExecutionHarness,
+    WorkflowAuditReadError,
     WorkflowExecutionAudit,
+    calculate_workflow_execution_metrics,
 )
 from app.models import Article
 from app.workflows import ScreeningResult, WorkflowContext, WorkflowStatistics
@@ -173,3 +176,49 @@ async def test_json_lines_audit_sink_appends_one_safe_json_object_per_execution(
     assert payload["status"] == "succeeded"
     assert "title" not in payload
     assert "content" not in payload
+
+
+@pytest.mark.anyio
+async def test_json_lines_audit_reader_rejects_malformed_record_without_skipping_it(
+    tmp_path: Path,
+) -> None:
+    audit_path: Path = tmp_path / "invalid-audit.jsonl"
+    audit_path.write_text("{not-json}\n", encoding="utf-8")
+
+    with pytest.raises(WorkflowAuditReadError, match="line 1"):
+        await JsonLinesWorkflowExecutionAuditReader(audit_path).read()
+
+
+def test_execution_metrics_aggregate_safe_success_and_failure_observations() -> None:
+    timestamp: datetime = datetime(2026, 7, 30, tzinfo=timezone.utc)
+    success: WorkflowExecutionAudit = WorkflowExecutionAudit(
+        execution_id="success",
+        execution_mode="mock",
+        status=ExecutionAuditStatus.SUCCEEDED,
+        started_at=timestamp,
+        finished_at=timestamp + timedelta(seconds=2),
+        duration_seconds=2.0,
+        input_article_count=3,
+        statistics=build_statistics(),
+    )
+    failure: WorkflowExecutionAudit = WorkflowExecutionAudit(
+        execution_id="failure",
+        execution_mode="openai",
+        status=ExecutionAuditStatus.FAILED,
+        started_at=timestamp,
+        finished_at=timestamp + timedelta(seconds=4),
+        duration_seconds=4.0,
+        input_article_count=2,
+        error_type="RuntimeError",
+    )
+
+    metrics = calculate_workflow_execution_metrics((success, failure))
+
+    assert metrics.total_executions == 2
+    assert metrics.succeeded_executions == 1
+    assert metrics.failed_executions == 1
+    assert metrics.total_duration_seconds == 6.0
+    assert metrics.average_duration_seconds == 3.0
+    assert metrics.total_input_articles == 5
+    assert metrics.total_accepted_events == 1
+    assert metrics.total_resolved_accepts == 1

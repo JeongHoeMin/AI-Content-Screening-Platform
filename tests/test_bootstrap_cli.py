@@ -305,6 +305,45 @@ def test_mock_cli_writes_opt_in_safe_execution_audit(
     assert "Samsung" not in lines[0]
 
 
+def test_cli_audit_report_reads_metrics_without_running_workflow(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    audit_path: Path = tmp_path / "workflow-audit.jsonl"
+    audit_path.write_text(
+        json.dumps(
+            {
+                "execution_id": "execution-1",
+                "execution_mode": "mock",
+                "status": "failed",
+                "started_at": "2026-07-30T00:00:00Z",
+                "finished_at": "2026-07-30T00:00:02Z",
+                "duration_seconds": 2.0,
+                "input_article_count": 4,
+                "error_type": "RuntimeError",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    def fail_workflow_factory(mode: ExecutionMode) -> object:
+        raise AssertionError("audit report must not create a workflow")
+
+    monkeypatch.setattr(cli, "create_screening_workflow", fail_workflow_factory)
+    exit_code: int = asyncio.run(cli.run(("--audit-report", str(audit_path))))
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    payload: dict[str, object] = json.loads(captured.out)
+    assert payload["audit_log"] == str(audit_path)
+    metrics: dict[str, object] = payload["metrics"]
+    assert metrics["total_executions"] == 1
+    assert metrics["failed_executions"] == 1
+    assert metrics["total_input_articles"] == 4
+
+
 def test_cli_returns_execution_error_when_workflow_fails(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

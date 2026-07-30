@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Optional, Protocol, Tuple
+from typing import Optional, Protocol, Sequence, Tuple
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -49,6 +49,35 @@ class WorkflowExecutionAudit(BaseModel):
         return self
 
 
+class WorkflowAuditReadError(ValueError):
+    """Raised when persisted workflow audit data is absent or invalid."""
+
+
+class WorkflowExecutionMetrics(BaseModel):
+    """Immutable aggregate of safe terminal workflow execution observations."""
+
+    model_config = ConfigDict(frozen=True)
+
+    total_executions: int = Field(ge=0)
+    succeeded_executions: int = Field(ge=0)
+    failed_executions: int = Field(ge=0)
+    total_duration_seconds: float = Field(ge=0.0)
+    average_duration_seconds: float = Field(ge=0.0)
+    total_input_articles: int = Field(ge=0)
+    total_accepted_events: int = Field(ge=0)
+    total_review_events: int = Field(ge=0)
+    total_rejected_events: int = Field(ge=0)
+    total_resolved_accepts: int = Field(ge=0)
+    total_resolved_reviews: int = Field(ge=0)
+    total_resolved_rejects: int = Field(ge=0)
+
+    @model_validator(mode="after")
+    def _validate_execution_totals(self) -> "WorkflowExecutionMetrics":
+        if self.succeeded_executions + self.failed_executions != self.total_executions:
+            raise ValueError("execution status counts must equal total executions")
+        return self
+
+
 class WorkflowExecutionAuditSink(Protocol):
     """Persistence boundary for safe workflow execution observations."""
 
@@ -70,6 +99,82 @@ class JsonLinesWorkflowExecutionAuditSink:
         with self._path.open("a", encoding="utf-8") as audit_file:
             audit_file.write(serialized)
             audit_file.write("\n")
+
+
+class JsonLinesWorkflowExecutionAuditReader:
+    """Load validated execution audit records from one JSON Lines file."""
+
+    def __init__(self, path: Path) -> None:
+        self._path: Path = path
+
+    async def read(self) -> Tuple[WorkflowExecutionAudit, ...]:
+        return await asyncio.to_thread(self._read_sync)
+
+    def _read_sync(self) -> Tuple[WorkflowExecutionAudit, ...]:
+        try:
+            lines: list[str] = self._path.read_text(encoding="utf-8").splitlines()
+        except OSError as error:
+            raise WorkflowAuditReadError("Unable to read workflow audit log") from error
+        audits: list[WorkflowExecutionAudit] = []
+        for line_number, line in enumerate(lines, start=1):
+            if not line.strip():
+                raise WorkflowAuditReadError(
+                    f"Workflow audit log contains an empty record at line {line_number}"
+                )
+            try:
+                payload: object = json.loads(line)
+                audit: WorkflowExecutionAudit = WorkflowExecutionAudit.model_validate(payload)
+            except (json.JSONDecodeError, ValueError) as error:
+                raise WorkflowAuditReadError(
+                    f"Workflow audit log contains an invalid record at line {line_number}"
+                ) from error
+            audits.append(audit)
+        return tuple(audits)
+
+
+def calculate_workflow_execution_metrics(
+    audits: Sequence[WorkflowExecutionAudit],
+) -> WorkflowExecutionMetrics:
+    """Calculate deterministic operational metrics without changing workflow decisions."""
+    total_executions: int = len(audits)
+    succeeded_executions: int = sum(
+        audit.status is ExecutionAuditStatus.SUCCEEDED for audit in audits
+    )
+    total_duration_seconds: float = sum(audit.duration_seconds for audit in audits)
+    total_input_articles: int = sum(audit.input_article_count for audit in audits)
+    successful_statistics: list[WorkflowStatistics] = [
+        audit.statistics
+        for audit in audits
+        if audit.statistics is not None
+    ]
+    return WorkflowExecutionMetrics(
+        total_executions=total_executions,
+        succeeded_executions=succeeded_executions,
+        failed_executions=total_executions - succeeded_executions,
+        total_duration_seconds=total_duration_seconds,
+        average_duration_seconds=(
+            total_duration_seconds / total_executions if total_executions else 0.0
+        ),
+        total_input_articles=total_input_articles,
+        total_accepted_events=sum(
+            statistics.accepted_events for statistics in successful_statistics
+        ),
+        total_review_events=sum(
+            statistics.review_events for statistics in successful_statistics
+        ),
+        total_rejected_events=sum(
+            statistics.rejected_events for statistics in successful_statistics
+        ),
+        total_resolved_accepts=sum(
+            statistics.resolved_accept_count for statistics in successful_statistics
+        ),
+        total_resolved_reviews=sum(
+            statistics.resolved_review_count for statistics in successful_statistics
+        ),
+        total_resolved_rejects=sum(
+            statistics.resolved_reject_count for statistics in successful_statistics
+        ),
+    )
 
 
 Clock = Callable[[], datetime]

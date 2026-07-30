@@ -15,7 +15,10 @@ from app.bootstrap import ExecutionMode, create_screening_workflow
 from app.config import ConfigurationError
 from app.harness.execution_audit import (
     JsonLinesWorkflowExecutionAuditSink,
+    JsonLinesWorkflowExecutionAuditReader,
     ScreeningExecutionHarness,
+    WorkflowAuditReadError,
+    calculate_workflow_execution_metrics,
 )
 from app.models.article import Article
 from app.workflows import ScreeningResult
@@ -49,11 +52,16 @@ class CliInputError(ValueError):
 
 def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the AI screening workflow.")
-    parser.add_argument(
+    input_group = parser.add_mutually_exclusive_group(required=True)
+    input_group.add_argument(
         "--input",
-        required=True,
         type=Path,
         help="Path to an Article JSON array.",
+    )
+    input_group.add_argument(
+        "--audit-report",
+        type=Path,
+        help="Read a workflow audit JSON Lines file and emit aggregate metrics.",
     )
     parser.add_argument("--mode", default=ExecutionMode.MOCK.value)
     parser.add_argument(
@@ -109,8 +117,26 @@ def _serialize_result(result: ScreeningResult) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
+def _serialize_audit_metrics(path: Path, metrics: object) -> str:
+    payload: dict[str, object] = {
+        "audit_log": str(path),
+        "metrics": metrics,
+    }
+    return json.dumps(payload, ensure_ascii=False, indent=2, default=lambda value: value.model_dump(mode="json"))
+
+
 async def run(arguments: Sequence[str] | None = None) -> int:
     args: argparse.Namespace = parse_args(arguments)
+    if args.audit_report is not None:
+        try:
+            audits = await JsonLinesWorkflowExecutionAuditReader(args.audit_report).read()
+            metrics = calculate_workflow_execution_metrics(audits)
+        except WorkflowAuditReadError as error:
+            logger.error("cli_input_failed", error_type=type(error).__name__)
+            return int(ExitCode.INPUT_ERROR)
+        sys.stdout.write(_serialize_audit_metrics(args.audit_report, metrics))
+        sys.stdout.write("\n")
+        return int(ExitCode.SUCCESS)
     try:
         mode: ExecutionMode = _parse_mode(args.mode)
         articles: Tuple[Article, ...] = _load_articles(args.input)
