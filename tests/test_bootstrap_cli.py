@@ -12,7 +12,7 @@ import app.bootstrap as bootstrap
 from app import cli
 from app.bootstrap import ExecutionMode, create_screening_workflow
 from app.config import ConfigurationError, OpenAIConfig
-from app.extractors import LLMNewsEventExtractor
+from app.extractors import DartAugmentingNewsEventExtractor, LLMNewsEventExtractor
 from app.mock_grouping import build_mock_grouping_key, normalize_mock_title
 from app.mock_screening import (
     DeterministicMockCrossValidator,
@@ -173,11 +173,12 @@ def test_openai_bootstrap_assembles_llm_pipeline_components(
     second = bootstrap.create_screening_workflow(ExecutionMode.OPENAI)
 
     assert ExecutionMode.OPENAI in bootstrap._WORKFLOW_FACTORIES
-    assert isinstance(first.components["extractor"], LLMNewsEventExtractor)
+    assert isinstance(first.components["extractor"], DartAugmentingNewsEventExtractor)
+    assert isinstance(first.components["extractor"]._extractor, LLMNewsEventExtractor)
     assert isinstance(first.components["screener"], LLMEventScreener)
     assert isinstance(first.components["cross_validator"], LLMEventCrossValidator)
     assert (
-        first.components["extractor"]._structured_llm
+        first.components["extractor"]._extractor._structured_llm
         is first.components["screener"]._structured_llm
     )
     assert first.components["screener"]._structured_llm is first.components["cross_validator"]._structured_llm
