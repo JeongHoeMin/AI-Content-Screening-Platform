@@ -11,7 +11,7 @@ from app.analyzers.base import ImpactAnalyzer
 from app.evaluators.article_evaluator import ArticleEvaluator
 from app.extractors.base import NewsEventExtractor
 from app.llms.budget import ProviderRequestBudget
-from app.models.article import Article
+from app.models.article import Article, ArticleEvaluationResult
 from app.models.candidate_selection import CandidateSelectionResult
 from app.models.cross_validation import CrossValidationResult
 from app.models.llm_inference import LLMInferenceResult
@@ -106,6 +106,7 @@ class ScreeningWorkflow:
                 ) = self._analysis_progress(
                     node,
                     node_update,
+                    state,
                     article_id_by_event_id,
                 )
                 await progress_callback(
@@ -124,6 +125,7 @@ class ScreeningWorkflow:
     def _analysis_progress(
         node: str,
         node_update: Mapping[str, object],
+        state: Mapping[str, object],
         article_id_by_event_id: dict[int, str],
     ) -> tuple[
         Tuple[WorkflowArticleAnalysisProgress, ...],
@@ -134,9 +136,11 @@ class ScreeningWorkflow:
         if node == "extract":
             inferences = cast(Tuple[object, ...], node_update.get("inferences", ()))
             article_analyses: list[WorkflowArticleAnalysisProgress] = []
+            inference_article_ids: set[str] = set()
             for item in inferences:
                 if not isinstance(item, LLMInferenceResult):
                     continue
+                inference_article_ids.add(item.article.id)
                 for event in item.events:
                     article_id_by_event_id[id(event)] = item.article.id
                 article_analyses.append(
@@ -147,6 +151,26 @@ class ScreeningWorkflow:
                         summary=item.summary,
                         reasoning=item.reasoning,
                         event_titles=tuple(event.title for event in item.events),
+                    )
+                )
+            evaluations = cast(Tuple[object, ...], state.get("evaluations", ()))
+            for item in evaluations:
+                if not isinstance(item, ArticleEvaluationResult):
+                    continue
+                if item.article.id in inference_article_ids:
+                    continue
+                status_reason: str = (
+                    "The preflight evaluator rejected this article."
+                    if not item.accepted
+                    else "The extraction stage returned no valid inference for this article."
+                )
+                article_analyses.append(
+                    WorkflowArticleAnalysisProgress(
+                        article_id=item.article.id,
+                        title=item.article.title,
+                        source=item.article.source,
+                        summary="No investment event was extracted from this article.",
+                        reasoning=status_reason,
                     )
                 )
             return tuple(article_analyses), (), ()
