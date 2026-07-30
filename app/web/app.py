@@ -12,10 +12,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.bootstrap import ExecutionMode, create_screening_workflow_async
+from app.bootstrap import ExecutionMode
 from app.harness import Harness
 from app.harness.execution_audit import ScreeningExecutionHarness
-from app.market_data import create_market_collect_posts_skill, posts_to_articles
+from app.market_data import (
+    create_market_collect_posts_skill,
+    create_market_screening_workflow,
+    posts_to_articles,
+)
 from app.models.collect_posts import CollectPostsRequest
 from app.models.community import CommunityType
 from app.models.post import Post
@@ -144,7 +148,7 @@ class DashboardRunManager:
                 f"{len(posts)}건을 수집하고 {len(articles)}건을 분석 대상으로 선택했습니다.",
             )
             await self._emit(state, "directory", "KRX 종목 스냅샷을 준비하고 있습니다.")
-            workflow = await create_screening_workflow_async(ExecutionMode.OPENAI)
+            workflow = await create_market_screening_workflow(ExecutionMode.OPENAI)
 
             async def on_progress(event: WorkflowProgressEvent) -> None:
                 await self._emit(

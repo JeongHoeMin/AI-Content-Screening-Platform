@@ -34,7 +34,11 @@ from app.harness.execution_audit import (
 from app.models.article import Article
 from app.models.collect_posts import CollectPostsRequest
 from app.models.community import CommunityType
-from app.market_data import create_market_collect_posts_skill, posts_to_articles
+from app.market_data import (
+    create_market_collect_posts_skill,
+    create_market_screening_workflow,
+    posts_to_articles,
+)
 from app.harness import Harness
 from app.skills import CollectPostsSkill
 from app.workflows import ScreeningResult
@@ -237,7 +241,7 @@ async def run(arguments: Sequence[str] | None = None) -> int:
                 "article_count": len(articles),
                 "error_codes": [error.code for error in collect_result.errors],
             }
-            workflow = await create_screening_workflow_async(mode)
+            workflow = await create_market_screening_workflow(mode)
         else:
             workflow = create_screening_workflow(mode)
     except (CliInputError, ConfigurationError) as error:

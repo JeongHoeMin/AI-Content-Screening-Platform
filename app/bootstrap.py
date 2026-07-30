@@ -64,31 +64,34 @@ class ExecutionMode(str, Enum):
     OPENAI = "openai"
 
 
-WorkflowFactory = Callable[[Optional[CompanyDirectory]], ScreeningWorkflow]
+WorkflowFactory = Callable[[Optional[CompanyDirectory], RuleArticleEvaluatorConfig], ScreeningWorkflow]
 
 
 def create_screening_workflow(
     mode: ExecutionMode = ExecutionMode.MOCK,
     company_directory: Optional[CompanyDirectory] = None,
+    evaluator_config: Optional[RuleArticleEvaluatorConfig] = None,
 ) -> ScreeningWorkflow:
     factory: WorkflowFactory | None = _WORKFLOW_FACTORIES.get(mode)
     if factory is None:
         mode_name: str = mode.value if isinstance(mode, ExecutionMode) else repr(mode)
         raise ValueError(f"Unsupported execution mode: {mode_name}")
-    return factory(company_directory)
+    return factory(company_directory, evaluator_config or RuleArticleEvaluatorConfig())
 
 
 async def create_screening_workflow_async(
     mode: ExecutionMode = ExecutionMode.MOCK,
+    evaluator_config: Optional[RuleArticleEvaluatorConfig] = None,
 ) -> ScreeningWorkflow:
     """Create a workflow after loading any configured remote directory snapshot."""
     directory_config: CompanyDirectoryConfig = load_company_directory_config()
     company_directory: CompanyDirectory = await create_company_directory_async(directory_config)
-    return create_screening_workflow(mode, company_directory)
+    return create_screening_workflow(mode, company_directory, evaluator_config)
 
 
 def _create_mock_workflow(
     company_directory: Optional[CompanyDirectory] = None,
+    evaluator_config: RuleArticleEvaluatorConfig = RuleArticleEvaluatorConfig(),
 ) -> ScreeningWorkflow:
     screening_policy: DefaultScreeningPolicy = DefaultScreeningPolicy()
     cross_validation_policy: DefaultCrossValidationPolicy = (
@@ -96,7 +99,7 @@ def _create_mock_workflow(
     )
     directory_config: CompanyDirectoryConfig = load_company_directory_config()
     return ScreeningWorkflow(
-        evaluator=RuleArticleEvaluator(RuleArticleEvaluatorConfig()),
+        evaluator=RuleArticleEvaluator(evaluator_config),
         extractor=DeterministicMockExtractor(),
         screener=DeterministicMockScreener(screening_policy),
         cross_validator=DeterministicMockCrossValidator(cross_validation_policy),
@@ -124,6 +127,7 @@ def _create_mock_workflow(
 
 def _create_openai_workflow(
     company_directory: Optional[CompanyDirectory] = None,
+    evaluator_config: RuleArticleEvaluatorConfig = RuleArticleEvaluatorConfig(),
 ) -> ScreeningWorkflow:
     """Assemble the OpenAI extractor with deterministic downstream stages."""
     config: OpenAIConfig = load_openai_config()
@@ -148,7 +152,7 @@ def _create_openai_workflow(
         DefaultCrossValidationPolicy()
     )
     return ScreeningWorkflow(
-        evaluator=RuleArticleEvaluator(RuleArticleEvaluatorConfig()),
+        evaluator=RuleArticleEvaluator(evaluator_config),
         extractor=LLMNewsEventExtractor(
             structured_llm=structured_llm,
             parser=DefaultNewsEventParser(),
