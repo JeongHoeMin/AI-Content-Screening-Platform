@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Mapping, Optional, Tuple, cast
 
 from langgraph.graph.state import CompiledStateGraph
@@ -24,6 +25,7 @@ from app.workflows.screening.graph import _build_screening_graph
 from app.workflows.screening.result import (
     ScreeningResult,
     WorkflowContext,
+    WorkflowProgressEvent,
     WorkflowStatistics,
 )
 from app.workflows.screening.state import ScreeningState
@@ -72,6 +74,38 @@ class ScreeningWorkflow:
             context = WorkflowContext()
         initial_state: ScreeningState = {"articles": articles, "context": context}
         final_state: Mapping[str, object] = await self._graph.ainvoke(initial_state)
+        return self._result_from_final_state(final_state)
+
+    async def run_with_progress(
+        self,
+        articles: Tuple[Article, ...],
+        progress_callback: Callable[[WorkflowProgressEvent], Awaitable[None]],
+        context: Optional[WorkflowContext] = None,
+    ) -> ScreeningResult:
+        """Run once and emit one safe event after each completed LangGraph node."""
+        if context is None:
+            context = WorkflowContext()
+        state: dict[str, object] = {"articles": articles, "context": context}
+        completed_node_count: int = 0
+        async for update in self._graph.astream(state, stream_mode="updates"):
+            for node, node_update in update.items():
+                if not isinstance(node_update, Mapping):
+                    raise ValueError("LangGraph node update must be a mapping")
+                state.update(node_update)
+                completed_node_count += 1
+                await progress_callback(
+                    WorkflowProgressEvent(
+                        node=node,
+                        completed_node_count=completed_node_count,
+                        output_keys=tuple(sorted(str(key) for key in node_update)),
+                    )
+                )
+        return self._result_from_final_state(state)
+
+    def _result_from_final_state(
+        self,
+        final_state: Mapping[str, object],
+    ) -> ScreeningResult:
         recommendation: RecommendationResult = cast(
             RecommendationResult,
             final_state["recommendation"],

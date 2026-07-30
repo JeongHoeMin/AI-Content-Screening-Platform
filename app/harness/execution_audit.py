@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -12,7 +12,13 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.article import Article
-from app.workflows import ScreeningResult, ScreeningWorkflow, WorkflowContext, WorkflowStatistics
+from app.workflows import (
+    ScreeningResult,
+    ScreeningWorkflow,
+    WorkflowContext,
+    WorkflowProgressEvent,
+    WorkflowStatistics,
+)
 
 
 class ExecutionAuditStatus(str, Enum):
@@ -244,6 +250,58 @@ class ScreeningExecutionHarness:
             statistics=result.statistics,
         )
         await self._append(success)
+        return result
+
+    async def run_with_progress(
+        self,
+        workflow: ScreeningWorkflow,
+        articles: Tuple[Article, ...],
+        execution_mode: str,
+        progress_callback: Callable[[WorkflowProgressEvent], Awaitable[None]],
+        context: Optional[WorkflowContext] = None,
+    ) -> ScreeningResult:
+        """Run a workflow with safe node events and the same terminal audit contract."""
+        execution_id: str = self._execution_id_factory()
+        started_at: datetime = self._clock()
+        try:
+            request_budget = getattr(workflow, "request_budget", None)
+            if request_budget is None:
+                result: ScreeningResult = await workflow.run_with_progress(
+                    articles, progress_callback, context
+                )
+            else:
+                with request_budget.execution_scope():
+                    result = await workflow.run_with_progress(
+                        articles, progress_callback, context
+                    )
+        except Exception as error:
+            finished_at: datetime = self._clock()
+            await self._append(
+                WorkflowExecutionAudit(
+                    execution_id=execution_id,
+                    execution_mode=execution_mode,
+                    status=ExecutionAuditStatus.FAILED,
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    duration_seconds=max(0.0, (finished_at - started_at).total_seconds()),
+                    input_article_count=len(articles),
+                    error_type=type(error).__name__,
+                )
+            )
+            raise
+        finished_at = self._clock()
+        await self._append(
+            WorkflowExecutionAudit(
+                execution_id=execution_id,
+                execution_mode=execution_mode,
+                status=ExecutionAuditStatus.SUCCEEDED,
+                started_at=started_at,
+                finished_at=finished_at,
+                duration_seconds=max(0.0, (finished_at - started_at).total_seconds()),
+                input_article_count=len(articles),
+                statistics=result.statistics,
+            )
+        )
         return result
 
     async def _append(self, audit: WorkflowExecutionAudit) -> None:

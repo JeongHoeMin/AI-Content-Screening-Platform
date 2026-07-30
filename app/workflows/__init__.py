@@ -6,6 +6,7 @@ from app.workflows.screening import (
     ScreeningResult,
     ScreeningWorkflow,
     WorkflowContext,
+    WorkflowProgressEvent,
     WorkflowStatistics,
 )
 
@@ -15,5 +16,6 @@ __all__ = [
     "ScreeningWorkflow",
     "Workflow",
     "WorkflowContext",
+    "WorkflowProgressEvent",
     "WorkflowStatistics",
 ]

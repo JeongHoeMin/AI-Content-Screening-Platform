@@ -17,6 +17,16 @@ class WorkflowContext(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
+class WorkflowProgressEvent(BaseModel):
+    """Safe LangGraph node completion observation for a live consumer."""
+
+    model_config = ConfigDict(frozen=True)
+
+    node: str = Field(min_length=1)
+    completed_node_count: int = Field(ge=1)
+    output_keys: Tuple[str, ...]
+
+
 class WorkflowStatistics(BaseModel):
     """Immutable observability metadata for one workflow execution."""
 
