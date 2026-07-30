@@ -24,6 +24,7 @@ from app.models.collect_posts import CollectPostsRequest
 from app.models.community import CommunityType
 from app.models.post import Post
 from app.workflows import ScreeningResult, WorkflowProgressEvent
+from app.web.dashboard_html import DASHBOARD_HTML
 
 
 class RecommendationRunRequest(BaseModel):
@@ -46,6 +47,7 @@ class DashboardEvent(BaseModel):
     node: Optional[str] = None
     completed_node_count: Optional[int] = Field(default=None, ge=1)
     error_type: Optional[str] = None
+    analyses: List["NewsAnalysisCard"] = Field(default_factory=list)
 
 
 class NewsCard(BaseModel):
@@ -74,6 +76,26 @@ class RecommendationCard(BaseModel):
     reason_code: str
 
 
+class NewsAnalysisCard(BaseModel):
+    """Display-safe live analysis projection for one collected news item."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    title: str
+    source: str
+    status: str
+    summary: Optional[str] = None
+    reasoning: Optional[str] = None
+    event_titles: List[str] = Field(default_factory=list)
+    decision: Optional[str] = None
+    relevance: Optional[int] = Field(default=None, ge=0, le=100)
+    importance: Optional[int] = Field(default=None, ge=0, le=100)
+    credibility: Optional[int] = Field(default=None, ge=0, le=100)
+    reasons: List[str] = Field(default_factory=list)
+    validation_status: Optional[str] = None
+
+
 class DashboardRunResult(BaseModel):
     """Terminal dashboard result without raw provider responses or prompts."""
 
@@ -81,6 +103,7 @@ class DashboardRunResult(BaseModel):
 
     run_id: str
     news_cards: List[NewsCard]
+    analyses: List[NewsAnalysisCard]
     recommendations: List[RecommendationCard]
     statistics: Dict[str, int]
 
@@ -91,6 +114,7 @@ class _RunState:
     result: Optional[DashboardRunResult] = None
     error_type: Optional[str] = None
     completed: bool = False
+    analyses: Dict[str, NewsAnalysisCard] = field(default_factory=dict)
 
 
 class DashboardRunManager:
@@ -147,21 +171,29 @@ class DashboardRunManager:
             )
             posts: List[Post] = collect_result.data.posts
             articles = posts_to_articles(posts)
+            initial_analyses: List[NewsAnalysisCard] = self._initial_analyses(posts)
+            state.analyses = {analysis.id: analysis for analysis in initial_analyses}
             await self._emit(
                 state,
                 "collected",
                 f"{len(posts)}건을 수집하고 {len(articles)}건을 분석 대상으로 선택했습니다.",
+                analyses=initial_analyses,
             )
             await self._emit(state, "directory", "KRX 종목 스냅샷을 준비하고 있습니다.")
             workflow = await create_market_screening_workflow(ExecutionMode.OPENAI)
 
             async def on_progress(event: WorkflowProgressEvent) -> None:
+                changed_analyses: List[NewsAnalysisCard] = self._apply_progress_analyses(
+                    state,
+                    event,
+                )
                 await self._emit(
                     state,
                     "workflow",
                     f"LangGraph 단계 완료: {event.node}",
                     node=event.node,
                     completed_node_count=event.completed_node_count,
+                    analyses=changed_analyses,
                 )
 
             result: ScreeningResult = await ScreeningExecutionHarness().run_with_progress(
@@ -218,9 +250,74 @@ class DashboardRunManager:
         return DashboardRunResult(
             run_id=run_id,
             news_cards=news_cards,
+            analyses=list(state.analyses.values()),
             recommendations=recommendations,
             statistics=statistics,
         )
+
+    @staticmethod
+    def _initial_analyses(posts: List[Post]) -> List[NewsAnalysisCard]:
+        """Project all collected posts before workflow analysis begins."""
+        return [
+            NewsAnalysisCard(
+                id=post.id,
+                title=post.title,
+                source=post.source.value,
+                status="수집 완료 · 분석 대기",
+            )
+            for post in posts
+        ]
+
+    @staticmethod
+    def _apply_progress_analyses(
+        state: _RunState,
+        event: WorkflowProgressEvent,
+    ) -> List[NewsAnalysisCard]:
+        """Merge safe node observations into the harness-owned card state."""
+        changed: List[NewsAnalysisCard] = []
+        for analysis in event.article_analyses:
+            current: Optional[NewsAnalysisCard] = state.analyses.get(analysis.article_id)
+            if current is None:
+                continue
+            updated: NewsAnalysisCard = current.model_copy(
+                update={
+                    "status": "이벤트 추출 완료" if analysis.event_titles else "투자 이벤트 미추출",
+                    "summary": analysis.summary,
+                    "reasoning": analysis.reasoning,
+                    "event_titles": list(analysis.event_titles),
+                }
+            )
+            state.analyses[updated.id] = updated
+            changed.append(updated)
+        for analysis in event.screening_analyses:
+            current = state.analyses.get(analysis.article_id)
+            if current is None:
+                continue
+            updated = current.model_copy(
+                update={
+                    "status": f"스크리닝 완료 · {analysis.decision}",
+                    "decision": analysis.decision,
+                    "relevance": analysis.relevance,
+                    "importance": analysis.importance,
+                    "credibility": analysis.credibility,
+                    "reasons": list(analysis.reasons),
+                }
+            )
+            state.analyses[updated.id] = updated
+            changed.append(updated)
+        for analysis in event.validation_analyses:
+            current = state.analyses.get(analysis.article_id)
+            if current is None:
+                continue
+            updated = current.model_copy(
+                update={
+                    "status": f"교차검증 완료 · {analysis.status}",
+                    "validation_status": analysis.status,
+                }
+            )
+            state.analyses[updated.id] = updated
+            changed.append(updated)
+        return changed
 
     async def _emit(
         self,
@@ -230,6 +327,7 @@ class DashboardRunManager:
         node: Optional[str] = None,
         completed_node_count: Optional[int] = None,
         error_type: Optional[str] = None,
+        analyses: Optional[List[NewsAnalysisCard]] = None,
     ) -> None:
         await state.queue.put(
             DashboardEvent(
@@ -238,6 +336,7 @@ class DashboardRunManager:
                 node=node,
                 completed_node_count=completed_node_count,
                 error_type=error_type,
+                analyses=analyses or [],
             )
         )
 
@@ -255,7 +354,7 @@ def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
 
     @app.get("/", response_class=HTMLResponse)
     async def dashboard() -> str:
-        return _DASHBOARD_HTML
+        return DASHBOARD_HTML
 
     @app.get("/api/health")
     async def health() -> Dict[str, str]:

@@ -15,6 +15,8 @@ def test_dashboard_page_exposes_recommendation_controls() -> None:
     assert "실시간 작업" in response.text
     assert "선택된 뉴스" in response.text
     assert "매수 · 판매 추천" in response.text
+    assert "전체 수집 뉴스 분석" in response.text
+    assert "analysisById" in response.text
     assert "JSON.stringify({limit:3})" in response.text
     assert "추천 실행 후 선택된 뉴스를 표시합니다." in response.text
 
