@@ -14,7 +14,7 @@ from app.models.cross_validation import (
     EvidenceRelation,
 )
 from app.models.llm_inference import LLMExtractionResult, LLMInferenceResult
-from app.models.news_event import NewsEvent
+from app.models.news_event import EventType, NewsEvent
 from app.models.screening import (
     ScreeningAssessment,
     ScreeningDecision,
@@ -40,6 +40,8 @@ class DeterministicMockExtractor(NewsEventExtractor):
         event: NewsEvent = NewsEvent(
             title=article.title,
             summary=summary,
+            event_type=EventType.CORPORATE_EVENT,
+            event_facts=(),
             companies=[],
             industries=[],
             keywords=[build_mock_grouping_key(article)],

@@ -31,7 +31,13 @@ from app.models.llm_inference import (
     NewsEventParseResult,
 )
 from app.models.normalize import NormalizeResult
-from app.models.news_event import CompanyRelation, ExtractedCompany, NewsEvent
+from app.models.news_event import (
+    CompanyRelation,
+    EventFact,
+    EventType,
+    ExtractedCompany,
+    NewsEvent,
+)
 from app.models.company_resolution import (
     CanonicalCompany,
     CompanyDirectoryEntry,
@@ -115,6 +121,8 @@ __all__ = [
     "EvaluationResponse",
     "EvaluationResponseItem",
     "EvidenceAggregation",
+    "EventFact",
+    "EventType",
     "ExtractedCompany",
     "ExtractedCompanyResponseItem",
     "GeneratedScript",

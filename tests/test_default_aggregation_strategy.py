@@ -18,6 +18,7 @@ from app.models import (
     ResolvedNewsEvent,
     ResolvedTicker,
     CompanyResolutionStatus,
+    EventType,
 )
 
 
@@ -53,6 +54,7 @@ def build_analysis(
     event: NewsEvent = NewsEvent(
         title=title,
         summary=f"Summary for {title}",
+        event_type=EventType.CORPORATE_EVENT,
         companies=[
             ExtractedCompany(
                 name=company.name,

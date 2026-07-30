@@ -14,6 +14,7 @@ from app.models import (
     CompanyImpact,
     CompanyRelation,
     EvidenceAggregation,
+    EventType,
     ExtractedCompany,
     ImpactAnalysis,
     ImpactDirection,
@@ -53,6 +54,7 @@ def build_analysis(title: str) -> ImpactAnalysis:
     event: NewsEvent = NewsEvent(
         title=title,
         summary=f"Summary for {title}",
+        event_type=EventType.CORPORATE_EVENT,
         companies=[
             ExtractedCompany(
                 name=company.name,

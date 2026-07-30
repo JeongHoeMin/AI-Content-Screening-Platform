@@ -22,6 +22,10 @@ CrossValidationCandidate → CrossValidationAssessment → CrossValidationResult
 
 `Article`은 외부 기사 표준화 결과로서 id, 제목, 본문, source, 발행 시각, URL을 가진다. `NewsEvent`는 기사에서 추출한 투자 분석 대상 사실이며 제목, 요약, 기업·산업·키워드·근거를 보관한다. event는 기사 원문이나 provider 응답을 대체하지 않으며, 원본 article과의 연결은 workflow inference가 보존한다.
 
+`NewsEvent.event_type`은 필수 상위 Domain Category이며 `CORPORATE_EVENT`, `LEGAL_EVENT`, `FINANCIAL_EVENT`, `PRODUCT_EVENT`, `MACRO_EVENT`만 허용한다. EventType은 Impact 전용 값이 아니며 새 EventFact가 기존 Category에 수용되면 추가하지 않는다. `event_facts`는 선택적 immutable tuple의 독립 Fact다. 순서는 extraction 관측 순서로 보존하고 동일 Fact는 첫 값만 남긴다. Fact는 event의 주된 Type과 호환되어야 하며, Type을 결정하지 못한 event는 Parser가 recoverable event 오류로 제외한다.
+
+EventFact가 없는 EventType-only event는 유효한 Domain Event다. 다만 Fact를 요구하는 후속 Rule Catalog의 입력은 아니다. Fact 오류는 유효 event와 sibling Fact를 버리지 않으며 Parser가 fact-local 오류로 기록한다. 여러 Fact를 복합 Fact로 합치거나 새로운 의미를 추론하지 않는다.
+
 ## Screening 계약
 
 `ScreeningAssessment`는 `relevance`, `importance`, `credibility`의 0–100 실제 Python `int`, `requires_cross_validation`, 최대 3개의 정규화된 reasons로 구성된다. `ScreeningDecision`은 assessment와 원본 `NewsEvent`를 묶고 `ScreeningPolicy`가 낸 `ACCEPT`, `REVIEW`, `REJECT` 상태를 갖는다.
@@ -65,6 +69,16 @@ Company Resolution v1은 KRX 상장사만 다루며 versioned local CSV의 `Cano
 Directory는 normalized canonical name과 aliases의 name index에서 후보 사실만 반환한다. Policy는 distinct `company_id` 수가 1개면 `RESOLVED`, 2개 이상이면 `AMBIGUOUS`, 0개면 `UNRESOLVED`를 결정한다. alias collision은 다중 후보로 보존하며, 같은 company ID master row의 중복은 configuration error다.
 
 모든 resolution observation과 `ResolvedCompany` snapshot은 directory version을 보관한다. local CSV version은 `YYYY-MM-DD`, empty directory version은 `empty`다. 모호·미해결 회사는 원본 name/relation/status를 보존하지만 canonical ID와 ticker는 갖지 않으며, 종목 evidence aggregation·score·recommendation에서는 제외한다.
+
+## Impact Analysis 계약
+
+`ImpactAnalysis`는 원본 `ResolvedNewsEvent` 동일 객체와 immutable `ImpactObservation` tuple을 보관하는 snapshot이다. observation은 `scope`, `direction`, `uncertainty`, `reason_code`, 제한된 provenance reference 및 선택적 원본 `ResolvedCompany` reference를 가진다. `COMPANY` scope observation은 입력 event의 회사만 참조하고, `INDUSTRY`·`MARKET`·`MACRO` scope에는 회사를 넣지 않는다.
+
+`ImpactDirection`의 `UNKNOWN`은 근거 부족을, `NEUTRAL`은 영향 없다는 적극적 판단을 뜻한다. 둘은 동일시하지 않는다. 모든 observation은 방향이나 resolution 상태와 무관하게 analysis snapshot에 보존한다.
+
+Direction은 versioned Impact Rule Catalog의 등록된 Rule ID, Direction, Reason Code 조합으로만 생성한다. 등록되지 않은 rule은 direction을 생성할 수 없다. v1에서 `CompanyRelation.DIRECT`만 direction 생성 대상이며 `INDIRECT`는 자동 전파 대상이 아니다. Supplier, Customer, Competitor, Parent, Subsidiary 같은 향후 세분 relation도 별도 정책 전에는 자동 전파하지 않는다.
+
+`ImpactPolicy`는 observation의 허용·제외와 downstream 전달 여부만 결정하는 filtering 계층이다. Policy는 `direction`, `scope`, `reason_code`, `uncertainty`, company reference, provenance를 수정·교체·삭제하지 않는다. `EvidenceAggregation`은 snapshot의 observation을 삭제하지 않고, eligible한 canonical `COMPANY` observation만 downstream evidence로 선택한다. 따라서 `UNKNOWN`, `AMBIGUOUS`, `UNRESOLVED` observation은 snapshot에는 남고 aggregation에서만 제외된다.
 
 ## Policy 경계
 

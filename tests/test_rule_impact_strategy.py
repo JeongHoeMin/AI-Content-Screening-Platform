@@ -9,6 +9,7 @@ from app.analyzers import ImpactStrategy, RuleImpactStrategy
 from app.models import (
     CompanyImpact,
     CompanyRelation,
+    EventType,
     ExtractedCompany,
     ImpactDirection,
     NewsEvent,
@@ -34,6 +35,7 @@ def build_resolved_event(
     event: NewsEvent = NewsEvent(
         title=title,
         summary=summary,
+        event_type=EventType.CORPORATE_EVENT,
         companies=[
             ExtractedCompany(
                 name=company.name,

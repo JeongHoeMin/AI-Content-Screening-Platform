@@ -14,6 +14,9 @@ from app.models import (
     Article,
     ArticleInferenceResponseItem,
     CompanyRelation,
+    EventFact,
+    EventType,
+    ExtractionErrorKind,
     ExtractedCompanyResponseItem,
     NewsEventExtractionResponse,
     NewsEventResponseItem,
@@ -41,6 +44,7 @@ def build_item(article_id: str, title: str) -> ArticleInferenceResponseItem:
             NewsEventResponseItem(
                 title=title,
                 summary=f"Event summary for {title}",
+                event_type=EventType.CORPORATE_EVENT.value,
                 companies=[
                     ExtractedCompanyResponseItem(
                         name="Samsung Electronics",
@@ -128,6 +132,7 @@ def test_parser_keeps_valid_events_when_a_sibling_event_is_invalid() -> None:
                     NewsEventResponseItem(
                         title="  Valid event  ",
                         summary="  Valid summary  ",
+                        event_type=EventType.CORPORATE_EVENT.value,
                         companies=[
                             ExtractedCompanyResponseItem(
                                 name=" Example Corp ",
@@ -145,6 +150,7 @@ def test_parser_keeps_valid_events_when_a_sibling_event_is_invalid() -> None:
                     NewsEventResponseItem(
                         title=" ",
                         summary="Invalid event",
+                        event_type=EventType.CORPORATE_EVENT.value,
                     ),
                 ],
             )
@@ -161,6 +167,70 @@ def test_parser_keeps_valid_events_when_a_sibling_event_is_invalid() -> None:
     assert event.keywords == ["Chips"]
     assert event.reasons == ["Stated in article"]
     assert len(result.errors) == 1
+
+
+def test_parser_keeps_valid_facts_and_records_fact_local_errors() -> None:
+    article: Article = build_article(1)
+    response: NewsEventExtractionResponse = NewsEventExtractionResponse(
+        articles=[
+            ArticleInferenceResponseItem(
+                article_id=article.id,
+                summary="Article summary",
+                reasoning="Article reasoning",
+                confidence=0.8,
+                events=[
+                    NewsEventResponseItem(
+                        title="Expansion",
+                        summary="An expansion is announced.",
+                        event_type=EventType.CORPORATE_EVENT.value,
+                        event_facts=[
+                            EventFact.FACTORY_EXPANSION.value,
+                            "not_a_fact",
+                            EventFact.PRODUCT_RELEASE.value,
+                            EventFact.FACTORY_EXPANSION.value,
+                        ],
+                    )
+                ],
+            )
+        ]
+    )
+
+    result = DefaultNewsEventParser().parse(response, (article,))
+
+    assert result.inferences[0].events[0].event_facts == (
+        EventFact.FACTORY_EXPANSION,
+    )
+    assert [error.kind for error in result.errors] == [
+        ExtractionErrorKind.FACT_VALIDATION,
+        ExtractionErrorKind.FACT_VALIDATION,
+    ]
+    assert [error.fact_index for error in result.errors] == [1, 2]
+
+
+def test_parser_excludes_event_with_invalid_event_type() -> None:
+    article: Article = build_article(1)
+    response: NewsEventExtractionResponse = NewsEventExtractionResponse(
+        articles=[
+            ArticleInferenceResponseItem(
+                article_id=article.id,
+                summary="Article summary",
+                reasoning="Article reasoning",
+                confidence=0.8,
+                events=[
+                    NewsEventResponseItem(
+                        title="Unknown category",
+                        summary="Event summary.",
+                        event_type="unknown_event_type",
+                    )
+                ],
+            )
+        ]
+    )
+
+    result = DefaultNewsEventParser().parse(response, (article,))
+
+    assert result.inferences[0].events == ()
+    assert result.errors[0].kind is ExtractionErrorKind.EVENT_VALIDATION
 
 
 def test_parser_normalizes_article_level_summary_and_reasoning() -> None:

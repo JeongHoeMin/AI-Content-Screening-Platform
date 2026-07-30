@@ -18,6 +18,7 @@ from app.models import (
     Article,
     BatchScreeningConfig,
     CompanyRelation,
+    EventType,
     ExtractedCompany,
     LLMInferenceResult,
     NewsEvent,
@@ -92,6 +93,7 @@ def build_inferences(event_count: int = 2) -> Tuple[LLMInferenceResult, ...]:
         NewsEvent(
             title=f"Event {index}",
             summary="Event summary",
+            event_type=EventType.CORPORATE_EVENT,
             companies=[
                 ExtractedCompany(
                     name="Samsung Electronics",

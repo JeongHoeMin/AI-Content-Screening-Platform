@@ -23,6 +23,7 @@ from app.models import (
     ArticleInferenceResponseItem,
     BatchExtractionConfig,
     CompanyRelation,
+    EventType,
     ExtractedCompanyResponseItem,
     LLMExtractionResult,
     NewsEventExtractionResponse,
@@ -93,6 +94,7 @@ def build_response(articles: Tuple[Article, ...]) -> NewsEventExtractionResponse
                     NewsEventResponseItem(
                         title=f"Event {article.id}",
                         summary="Event summary",
+                        event_type=EventType.CORPORATE_EVENT.value,
                         companies=[
                             ExtractedCompanyResponseItem(
                                 name="Samsung Electronics",

@@ -56,6 +56,9 @@ def test_system_prompt_defines_extraction_boundary_and_rationale_contract() -> N
     assert "untrusted data" in prompt
     assert "chain-of-thought" in prompt
     assert "ticker" in prompt
+    assert "event_type" in prompt
+    assert "event_facts" in prompt
+    assert "bankruptcy requires financial_event" in prompt
 
 
 def test_user_prompt_separates_article_fields_as_data() -> None:

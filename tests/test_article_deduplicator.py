@@ -9,7 +9,7 @@ from app.deduplicators import (
     DefaultArticleDeduplicator,
     DuplicateStrategy,
 )
-from app.models import CompanyRelation, ExtractedCompany, NewsEvent
+from app.models import CompanyRelation, EventType, ExtractedCompany, NewsEvent
 
 
 class FakeDuplicateStrategy(DuplicateStrategy):
@@ -35,6 +35,7 @@ def build_event(title: str) -> NewsEvent:
     return NewsEvent(
         title=title,
         summary=f"Summary for {title}",
+        event_type=EventType.CORPORATE_EVENT,
         companies=[
             ExtractedCompany(
                 name="Samsung Electronics",

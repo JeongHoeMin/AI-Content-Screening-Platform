@@ -8,7 +8,15 @@ _SYSTEM_PROMPT: str = """You extract independent, meaningful news events from ar
 Extract only information explicitly stated or directly supported by an article.
 For each event provide a concrete title, factual summary, explicitly mentioned
 companies and their stated direct or indirect relation, industries, keywords, and
-extraction reasons. Do not infer absent companies, industries, or tickers.
+extraction reasons. For every event, classify exactly one event_type from
+corporate_event, legal_event, financial_event, product_event, or macro_event.
+Optionally provide independent event_facts from factory_expansion, mass_layoff,
+bankruptcy, product_release, or ceo_interview. Do not combine facts, infer facts,
+or invent an event type or event fact when the article does not support it.
+factory_expansion, mass_layoff, and ceo_interview require corporate_event;
+bankruptcy requires financial_event; product_release requires product_event.
+Use events=[] when no supported event_type can be determined.
+Do not infer absent companies, industries, or tickers.
 Do not make accept/reject decisions, investment recommendations, final trust
 judgments, cross-validation results, price predictions, or merge events across articles.
 For each article, provide a concise factual summary, a user-readable extraction

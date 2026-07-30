@@ -13,7 +13,13 @@ from app.models.llm_inference import (
     LLMInferenceResult,
     NewsEventParseResult,
 )
-from app.models.news_event import CompanyRelation, ExtractedCompany, NewsEvent
+from app.models.news_event import (
+    CompanyRelation,
+    EventFact,
+    EventType,
+    ExtractedCompany,
+    NewsEvent,
+)
 from app.models.news_event_response import (
     ArticleInferenceResponseItem,
     ExtractedCompanyResponseItem,
@@ -99,7 +105,13 @@ class DefaultNewsEventParser(NewsEventParser):
         errors: List[ExtractionError] = []
         for event_index, event in enumerate(response_item.events):
             try:
-                events.append(DefaultNewsEventParser._map_event(event))
+                mapped_event, fact_errors = DefaultNewsEventParser._map_event(
+                    event,
+                    article_id=article.id,
+                    event_index=event_index,
+                )
+                events.append(mapped_event)
+                errors.extend(fact_errors)
             except (ValueError, ValidationError) as error:
                 errors.append(
                     ExtractionError(
@@ -119,7 +131,12 @@ class DefaultNewsEventParser(NewsEventParser):
         return inference, tuple(errors)
 
     @staticmethod
-    def _map_event(response_item: NewsEventResponseItem) -> NewsEvent:
+    def _map_event(
+        response_item: NewsEventResponseItem,
+        *,
+        article_id: str,
+        event_index: int,
+    ) -> tuple[NewsEvent, Tuple[ExtractionError, ...]]:
         companies: List[ExtractedCompany] = []
         company_names: Set[str] = set()
         for company in response_item.companies:
@@ -128,7 +145,14 @@ class DefaultNewsEventParser(NewsEventParser):
             if company_key not in company_names:
                 company_names.add(company_key)
                 companies.append(extracted)
-        return NewsEvent(
+        event_type: EventType = EventType(response_item.event_type)
+        event_facts, fact_errors = DefaultNewsEventParser._map_event_facts(
+            response_item.event_facts,
+            event_type=event_type,
+            article_id=article_id,
+            event_index=event_index,
+        )
+        event: NewsEvent = NewsEvent(
             title=DefaultNewsEventParser._normalize_required(
                 response_item.title,
                 "Event title",
@@ -137,11 +161,46 @@ class DefaultNewsEventParser(NewsEventParser):
                 response_item.summary,
                 "Event summary",
             ),
+            event_type=event_type,
+            event_facts=event_facts,
             companies=companies,
             industries=DefaultNewsEventParser._normalize_unique(response_item.industries, True),
             keywords=DefaultNewsEventParser._normalize_unique(response_item.keywords, True),
             reasons=DefaultNewsEventParser._normalize_unique(response_item.reasons, False),
         )
+        return event, tuple(fact_errors)
+
+    @staticmethod
+    def _map_event_facts(
+        response_facts: List[str],
+        *,
+        event_type: EventType,
+        article_id: str,
+        event_index: int,
+    ) -> tuple[Tuple[EventFact, ...], List[ExtractionError]]:
+        event_facts: List[EventFact] = []
+        errors: List[ExtractionError] = []
+        seen_facts: Set[EventFact] = set()
+        for fact_index, response_fact in enumerate(response_facts):
+            try:
+                event_fact: EventFact = EventFact(response_fact)
+                if not event_fact.is_compatible_with(event_type):
+                    raise ValueError("Event fact is incompatible with event type")
+            except (TypeError, ValueError) as error:
+                errors.append(
+                    ExtractionError(
+                        kind=ExtractionErrorKind.FACT_VALIDATION,
+                        message=str(error),
+                        article_ids=(article_id,),
+                        event_index=event_index,
+                        fact_index=fact_index,
+                    )
+                )
+                continue
+            if event_fact not in seen_facts:
+                seen_facts.add(event_fact)
+                event_facts.append(event_fact)
+        return tuple(event_facts), errors
 
     @staticmethod
     def _map_company(

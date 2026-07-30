@@ -78,13 +78,15 @@ Input → Output → Failure → Retry → Owner → Responsibility
 ### Output
 
 - `LLMInferenceResult[]`
-- 원본 identity를 유지한 `NewsEvent[]`
+- 원본 identity를 유지한 `NewsEvent[]` (`event_type` 필수, `event_facts` 선택)
 - 성공 batch 수
 
 ### Failure
 
 - 빈 입력은 LLM 호출 없이 빈 결과다.
 - event 단위 parser 오류는 정상 sibling event를 보존한다.
+- EventType 오류는 해당 event만 제외하고, EventFact 오류는 해당 Fact만 제외해 유효 event와
+  sibling Fact를 보존한다.
 - provider, structured-response, root-validation 오류는 해당 batch를 건너뛰고 다음 batch를 계속 처리한다.
 - 처리 대상이 있었지만 유효 inference가 0개면 단계 예외를 발생시킨다.
 
@@ -101,6 +103,8 @@ Input → Output → Failure → Retry → Owner → Responsibility
 ### Responsibility
 
 - Article에서 구조화된 event 관측을 만든다.
+- EventType은 상위 Domain Category이며 EventFact는 독립적이고 선택적인 구체 사건이다. Extractor는
+  서로 다른 Category의 복합 사건을 별도 event로 분리한다.
 - Parser는 transport를 Domain으로 검증한다.
 - 최종 event 정책이나 투자 추천을 결정하지 않는다.
 
@@ -231,10 +235,13 @@ Input → Output → Failure → Retry → Owner → Responsibility
 
 - `ImpactAnalyzer`
 - impact strategy
+- impact policy
 
 ### Responsibility
 
-- resolved event가 기업·산업·시장·거시에 미치는 영향을 분석한다.
+- Strategy는 등록된 Impact Rule Catalog와 `DIRECT` company relation으로 observation을 생성한다. `INDIRECT` 및 향후 Supplier/Customer/Competitor/Parent/Subsidiary relation은 별도 정책 전에는 direction을 자동 전파하지 않는다.
+- Policy는 observation을 변경하지 않는 filtering만 수행하고, 허용·제외·downstream 전달 여부만 결정한다.
+- 모든 observation은 `ImpactAnalysis` snapshot에 보존한다.
 - 최종 stock score와 recommendation을 결정하지 않는다.
 
 ## Aggregate
@@ -263,7 +270,7 @@ Input → Output → Failure → Retry → Owner → Responsibility
 
 ### Responsibility
 
-- 분석 결과를 scoring에 사용할 증거 집계로 변환한다.
+- snapshot을 변경하거나 observation을 삭제하지 않고, policy가 eligible로 표시한 canonical `COMPANY` observation만 scoring에 사용할 downstream evidence로 선택한다. `UNKNOWN` 및 `AMBIGUOUS`/`UNRESOLVED` company observation은 snapshot에는 보존하고 aggregation에서만 제외한다.
 - 새 기사 사실을 생성하거나 recommendation을 결정하지 않는다.
 
 ## Score

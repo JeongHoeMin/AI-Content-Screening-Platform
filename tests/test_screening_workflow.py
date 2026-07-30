@@ -14,6 +14,7 @@ from app.models import (
     Article,
     ArticleEvaluationResult,
     CompanyRelation,
+    EventType,
     EvidenceAggregation,
     ExtractedCompany,
     ImpactAnalysis,
@@ -82,6 +83,7 @@ class FakeExtractor(NewsEventExtractor):
             event: NewsEvent = NewsEvent(
                 title=f"Event {article.id}",
                 summary="Event summary",
+                event_type=EventType.CORPORATE_EVENT,
                 companies=[
                     ExtractedCompany(
                         name="Samsung Electronics",

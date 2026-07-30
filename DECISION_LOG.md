@@ -236,3 +236,69 @@ Company Resolution은 Workflow에서 정확히 한 번 수행되며 이후 단�
 ## Consequences
 
 같은 version의 local master data와 같은 입력은 결정적으로 같은 결과를 낸다. ticker lifecycle 변화에도 company identity의 의미를 보존할 수 있고, 모호성을 임의의 ticker 선택으로 숨기지 않는다. `AMBIGUOUS`·`UNRESOLVED`는 snapshot에는 보존하지만 종목 evidence aggregation에는 포함하지 않는다. 반면 KRX 외 시장은 지원하지 않으며 master data 갱신은 운영 절차가 책임져야 한다.
+
+# ADR-011
+
+## Title
+
+Impact direction은 versioned Rule Catalog로만 생성한다.
+
+## Status
+
+Accepted
+
+## Context
+
+자유로운 keyword 또는 관계 해석으로 direction을 생성하면 구현마다 positive/negative 기준이 달라지고, 근거 없는 관계 전파가 종목 evidence에 들어갈 수 있다.
+
+## Decision
+
+Impact Strategy는 등록된 Impact Rule Catalog의 Rule ID, Direction, Reason Code 조합으로만 observation을 생성한다. 등록되지 않은 rule은 direction을 생성할 수 없다. v1은 `CompanyRelation.DIRECT`만 direction 생성 대상으로 하며 `INDIRECT`는 자동 전파하지 않는다. Supplier, Customer, Competitor, Parent, Subsidiary 등 향후 세분 relation도 별도 propagation 정책 없이는 자동 전파 대상이 아니다.
+
+## Consequences
+
+Direction 생성 기준이 제품 계약으로 고정되고 Rule 확장은 명시적 review 대상이 된다. v1은 간접 영향의 일부를 보수적으로 `UNKNOWN` 또는 observation 없음으로 남기며, 관계 전파의 정교화는 후속 결정으로 분리한다.
+
+# ADR-012
+
+## Title
+
+Impact Policy는 filtering만 수행하고 observation은 snapshot에 보존한다.
+
+## Status
+
+Accepted
+
+## Context
+
+Policy가 direction이나 근거를 고치면 Strategy의 관측과 Policy의 결정을 구분할 수 없고, aggregation에서 제외된 관측을 삭제하면 감사와 후속 정책 변경이 어려워진다.
+
+## Decision
+
+ImpactPolicy는 observation 허용, 제외, downstream 전달 여부만 결정한다. Policy는 direction, scope, reason code, uncertainty, company reference, provenance를 수정·교체·삭제하지 않는다. 모든 observation은 `ImpactAnalysis` snapshot에 보존하며, Aggregation만 policy가 eligible로 표시한 observation을 downstream evidence로 선택한다. `UNKNOWN` 및 `AMBIGUOUS`/`UNRESOLVED` company observation은 snapshot에는 남고 aggregation에서만 제외된다.
+
+## Consequences
+
+Strategy는 observation 생성, Policy는 filtering, Aggregation은 evidence 선택이라는 경계가 고정된다. 모든 관측을 유지하므로 provenance와 감사 가능성이 높아지지만, downstream consumer는 snapshot 전체와 eligible evidence를 구분해야 한다.
+
+# ADR-013
+
+## Title
+
+EventType과 EventFact를 분리한다.
+
+## Status
+
+Accepted
+
+## Context
+
+개별 사건을 상위 Category enum에 직접 넣으면 Domain 분류와 Fact가 섞이고, Impact Analysis가 제목·요약을 다시 해석하면 Extractor와 책임이 중복된다.
+
+## Decision
+
+NewsEvent은 필수 EventType과 선택적 복수 EventFact를 가진다. EventType은 안정적인 상위 Domain Category이며 EventFact는 독립적인 구체 사건이다. EventFact의 순서는 보존하고 중복은 첫 값만 남긴다. Type을 결정하지 못한 event는 recoverable parser 오류로 제외하고, Fact를 결정하지 못한 유효 event는 빈 Fact 목록으로 보존한다. PR30 Impact Rule Catalog는 EventFact만 소비한다.
+
+## Consequences
+
+새 사건은 가능한 한 EventFact만 추가해 확장할 수 있고, EventType의 churn을 줄인다. Fact 없는 event도 Screening·Resolve 등 공통 흐름에서 유효하지만 Fact 기반 Impact observation은 만들지 않는다.

@@ -6,6 +6,7 @@ from app.cli import _serialize_result
 from app.models import (
     CompanyRelation,
     CompanyResolutionStatus,
+    EventType,
     ExtractedCompany,
     KRXExchange,
     NewsEvent,
@@ -23,6 +24,7 @@ def test_cli_serialization_excludes_internal_company_resolution_fields() -> None
     event = NewsEvent(
         title="Samsung event",
         summary="Samsung event summary",
+        event_type=EventType.CORPORATE_EVENT,
         companies=[
             ExtractedCompany(name="Samsung Electronics", relation=CompanyRelation.DIRECT)
         ],

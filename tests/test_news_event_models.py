@@ -11,6 +11,8 @@ from app.models import (
     Article,
     ArticleRejectReason,
     CompanyRelation,
+    EventFact,
+    EventType,
     ExtractedCompany,
     LLMInferenceResult,
     LLMExtractionResult,
@@ -52,6 +54,7 @@ def test_llm_inference_confidence_is_bounded() -> None:
     event: NewsEvent = NewsEvent(
         title="HBM production expansion",
         summary="Samsung Electronics expands HBM production.",
+        event_type=EventType.CORPORATE_EVENT,
         companies=[],
         industries=["Semiconductors"],
         keywords=["HBM"],
@@ -73,6 +76,7 @@ def test_news_event_rejects_empty_collection_items(field_name: str) -> None:
     values: Dict[str, Any] = {
         "title": "HBM production expansion",
         "summary": "Samsung Electronics expands HBM production.",
+        "event_type": EventType.CORPORATE_EVENT,
         "companies": [
             ExtractedCompany(
                 name="Samsung Electronics",
@@ -87,3 +91,53 @@ def test_news_event_rejects_empty_collection_items(field_name: str) -> None:
 
     with pytest.raises(ValidationError):
         NewsEvent.model_validate(values)
+
+
+def test_news_event_requires_event_type() -> None:
+    values: Dict[str, Any] = {
+        "title": "Event",
+        "summary": "Summary",
+        "companies": [],
+        "industries": [],
+        "keywords": [],
+        "reasons": [],
+    }
+
+    with pytest.raises(ValidationError):
+        NewsEvent.model_validate(values)
+
+
+def test_news_event_preserves_fact_order_and_deduplicates_facts() -> None:
+    event: NewsEvent = NewsEvent(
+        title="Expansion",
+        summary="Factory expansion and layoffs are announced.",
+        event_type=EventType.CORPORATE_EVENT,
+        event_facts=(
+            EventFact.FACTORY_EXPANSION,
+            EventFact.MASS_LAYOFF,
+            EventFact.FACTORY_EXPANSION,
+        ),
+        companies=[],
+        industries=[],
+        keywords=[],
+        reasons=[],
+    )
+
+    assert event.event_facts == (
+        EventFact.FACTORY_EXPANSION,
+        EventFact.MASS_LAYOFF,
+    )
+
+
+def test_news_event_rejects_incompatible_fact_type_pair() -> None:
+    with pytest.raises(ValidationError):
+        NewsEvent(
+            title="Product launch",
+            summary="A product is released.",
+            event_type=EventType.PRODUCT_EVENT,
+            event_facts=(EventFact.FACTORY_EXPANSION,),
+            companies=[],
+            industries=[],
+            keywords=[],
+            reasons=[],
+        )
