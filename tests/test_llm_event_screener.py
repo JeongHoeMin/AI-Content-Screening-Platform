@@ -447,6 +447,8 @@ async def test_screener_continues_after_batch_call_failure(
         "batch_index": 0,
         "candidate_count": 1,
         "error_kind": "structured_output_call",
+        "provider": "test",
+        "provider_error_type": "APIError",
     }
     assert "secret-openai-test-key" not in repr(records)
 

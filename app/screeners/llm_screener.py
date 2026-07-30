@@ -57,12 +57,14 @@ class LLMEventScreener(EventScreener):
         for batch_index, batch in enumerate(self._batches(candidates)):
             try:
                 parsed: ScreeningParseResult = await self._assess_batch(batch)
-            except StructuredOutputCallError:
+            except StructuredOutputCallError as error:
                 logger.warning(
                     "screening_batch_failed",
                     batch_index=batch_index,
                     candidate_count=len(batch),
                     error_kind="structured_output_call",
+                    provider=error.provider,
+                    provider_error_type=error.error_type,
                 )
                 continue
             except (StructuredOutputResponseError, ValidationError):
