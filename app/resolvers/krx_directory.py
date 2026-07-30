@@ -82,6 +82,7 @@ class KrxCompanyDirectoryLoader:
                 "krx_market_load_failed",
                 exchange=exchange.value,
                 error_kind=type(exc).__name__,
+                error_detail=str(exc),
             )
             return None
 
