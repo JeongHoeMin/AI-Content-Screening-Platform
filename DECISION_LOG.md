@@ -459,3 +459,25 @@ daily execution에는 audit, metrics, alerting, retention, cost·latency·secret
 ## Consequences
 
 운영 관측과 recoverable side effect는 안전하게 독립되지만 external notifier, scheduler deployment, distributed coordination, token accounting은 명시적 후속 통합으로 남는다.
+
+# ADR-020
+
+## Title
+
+실시간 시장 입력은 실행 단위의 immutable snapshot으로 전환한다.
+
+## Status
+
+Accepted
+
+## Context
+
+뉴스·공시 API와 KRX 종목 마스터는 외부에서 변하며, resolver가 각 이름 해석마다 네트워크를 호출하면 동일 실행 안에서도 후보 집합이 달라지고 외부 장애가 분석 흐름에 전파된다.
+
+## Decision
+
+Naver News와 OpenDART는 source-specific `RawPost`를 반환하고 normalizer가 공통 `Post`로 변환한다. CLI의 collect boundary가 텍스트가 있는 Post만 Article로 투영한다. KRX API mode는 KOSPI·KOSDAQ·KONEX을 실행 시작 시 병렬 조회해 date-versioned `StaticCompanyDirectory` snapshot을 만든 뒤, resolver에는 그 immutable snapshot만 주입한다. 각 market의 recoverable API 실패는 다른 market snapshot을 보존하되, 유효 entry가 전혀 없으면 실행을 시작하지 않는다.
+
+## Consequences
+
+한 실행의 company mapping은 재현 가능하며 directory version으로 추적된다. API key와 raw response는 로그나 결과에 남지 않는다. API snapshot refresh는 다음 실행에서만 일어나며, 뉴스 전문 추출과 외부 community provider 확대는 별도 수집 단위로 유지한다.
