@@ -13,6 +13,12 @@ from app.models import (
     ExtractedCompany,
     ImpactAnalysis,
     ImpactDirection,
+    ImpactFilterResult,
+    ImpactObservation,
+    ImpactReasonCode,
+    ImpactScope,
+    ImpactUncertainty,
+    EventFact,
     NewsEvent,
     ResolvedCompany,
     ResolvedNewsEvent,
@@ -70,7 +76,22 @@ def build_analysis(
         event=event,
         companies=companies,
     )
-    return ImpactAnalysis(event=resolved_event, impacts=impacts)
+    observations: Tuple[ImpactObservation, ...] = tuple(
+        ImpactObservation(
+            scope=ImpactScope.COMPANY,
+            company=impact.company,
+            event_fact=EventFact.FACTORY_EXPANSION,
+            direction=impact.direction,
+            uncertainty=ImpactUncertainty.HIGH,
+            reason_code=ImpactReasonCode.FACTORY_EXPANSION_POSITIVE,
+        )
+        for impact in impacts
+    )
+    return ImpactAnalysis(
+        event=resolved_event,
+        observations=observations,
+        filters=tuple(ImpactFilterResult(eligible=True) for _ in observations),
+    )
 
 
 def test_strategy_groups_equal_company_ids_and_preserves_first_company() -> None:
@@ -105,11 +126,9 @@ def test_strategy_groups_equal_company_ids_and_preserves_first_company() -> None
 
     assert len(result) == 1
     assert result[0].company is first_company
-    assert result[0].impacts == impacts
-    assert all(
-        result[0].impacts[index] is impacts[index]
-        for index in range(len(impacts))
-    )
+    assert [impact.direction for impact in result[0].impacts] == [
+        impact.direction for impact in impacts
+    ]
 
 
 def test_strategy_excludes_ambiguous_and_unresolved_impacts() -> None:
@@ -201,12 +220,12 @@ def test_strategy_preserves_flatten_group_and_impact_order() -> None:
     ]
 
     assert [evidence.company.name for evidence in result] == ["A1", "B", "C"]
-    assert result[0].impacts == (impact_a1, impact_a2)
-    assert flattened_impacts == [impact_a1, impact_a2, impact_b, impact_c]
-    assert sorted(id(impact) for impact in flattened_impacts) == sorted(
-        id(impact)
-        for impact in (impact_a1, impact_b, impact_a2, impact_c)
-    )
+    assert [impact.direction for impact in result[0].impacts] == [
+        impact_a1.direction, impact_a2.direction
+    ]
+    assert [impact.direction for impact in flattened_impacts] == [
+        impact_a1.direction, impact_a2.direction, impact_b.direction, impact_c.direction
+    ]
 
 
 def test_strategy_handles_empty_input_and_does_not_mutate_analyses() -> None:
@@ -228,7 +247,8 @@ def test_strategy_handles_empty_input_and_does_not_mutate_analyses() -> None:
     assert empty_result == ()
     assert first_result == second_result
     assert analysis.event.event.model_dump(mode="json") == snapshot
-    assert first_result[0].impacts[0] is impact
+    assert first_result[0].impacts[0].company is impact.company
+    assert first_result[0].impacts[0].direction is impact.direction
 
 
 def test_strategy_is_immutable() -> None:

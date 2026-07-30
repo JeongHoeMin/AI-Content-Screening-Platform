@@ -18,6 +18,12 @@ from app.models import (
     ExtractedCompany,
     ImpactAnalysis,
     ImpactDirection,
+    ImpactFilterResult,
+    ImpactObservation,
+    ImpactReasonCode,
+    ImpactScope,
+    ImpactUncertainty,
+    EventFact,
     NewsEvent,
     ResolvedCompany,
     ResolvedNewsEvent,
@@ -69,11 +75,19 @@ def build_analysis(title: str) -> ImpactAnalysis:
         event=event,
         companies=(company,),
     )
-    impact: CompanyImpact = CompanyImpact(
+    observation: ImpactObservation = ImpactObservation(
+        scope=ImpactScope.COMPANY,
         company=company,
+        event_fact=EventFact.FACTORY_EXPANSION,
         direction=ImpactDirection.POSITIVE,
+        uncertainty=ImpactUncertainty.HIGH,
+        reason_code=ImpactReasonCode.FACTORY_EXPANSION_POSITIVE,
     )
-    return ImpactAnalysis(event=resolved_event, impacts=(impact,))
+    return ImpactAnalysis(
+        event=resolved_event,
+        observations=(observation,),
+        filters=(ImpactFilterResult(eligible=True),),
+    )
 
 
 def build_companies(
@@ -81,8 +95,11 @@ def build_companies(
 ) -> Tuple[CompanyEvidence, ...]:
     return (
         CompanyEvidence(
-            company=analysis.impacts[0].company,
-            impacts=analysis.impacts,
+            company=analysis.observations[0].company,
+            impacts=(CompanyImpact(
+                company=analysis.observations[0].company,
+                direction=analysis.observations[0].direction,
+            ),),
         ),
     )
 

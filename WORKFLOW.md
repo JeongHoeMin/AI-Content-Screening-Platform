@@ -242,6 +242,7 @@ Input → Output → Failure → Retry → Owner → Responsibility
 - Strategy는 등록된 Impact Rule Catalog와 `DIRECT` company relation으로 observation을 생성한다. `INDIRECT` 및 향후 Supplier/Customer/Competitor/Parent/Subsidiary relation은 별도 정책 전에는 direction을 자동 전파하지 않는다.
 - Policy는 observation을 변경하지 않는 filtering만 수행하고, 허용·제외·downstream 전달 여부만 결정한다.
 - 모든 observation은 `ImpactAnalysis` snapshot에 보존한다.
+- `ImpactAnalysis.filters`는 observations와 같은 길이·순서를 가지며 Policy의 eligibility만 보관한다.
 - 최종 stock score와 recommendation을 결정하지 않는다.
 
 ## Aggregate
@@ -270,7 +271,7 @@ Input → Output → Failure → Retry → Owner → Responsibility
 
 ### Responsibility
 
-- snapshot을 변경하거나 observation을 삭제하지 않고, policy가 eligible로 표시한 canonical `COMPANY` observation만 scoring에 사용할 downstream evidence로 선택한다. `UNKNOWN` 및 `AMBIGUOUS`/`UNRESOLVED` company observation은 snapshot에는 보존하고 aggregation에서만 제외한다.
+- snapshot을 변경하거나 observation을 삭제하지 않고, policy가 eligible로 표시한 canonical `COMPANY` observation만 scoring에 사용할 downstream evidence로 선택한다. adapter는 eligible observation 하나를 `CompanyImpact` 하나로 변환하며 같은 company/event observation을 병합·상쇄·dedup하지 않는다. `UNKNOWN` 및 `AMBIGUOUS`/`UNRESOLVED` company observation은 snapshot에는 보존하고 aggregation에서만 제외한다.
 - 새 기사 사실을 생성하거나 recommendation을 결정하지 않는다.
 
 ## Score

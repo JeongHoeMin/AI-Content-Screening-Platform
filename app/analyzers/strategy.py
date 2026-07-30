@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Protocol, Tuple
 
-from app.models.impact_analysis import CompanyImpact
+from app.models.impact_analysis import ImpactObservation
 from app.models.resolved_news_event import ResolvedNewsEvent
 
 
@@ -14,6 +14,6 @@ class ImpactStrategy(Protocol):
     propagate exceptions without wrapping.
     """
 
-    def analyze(self, event: ResolvedNewsEvent) -> Tuple[CompanyImpact, ...]:
-        """Return one CompanyImpact per input company in source order."""
+    def analyze(self, event: ResolvedNewsEvent) -> Tuple[ImpactObservation, ...]:
+        """Return fact-level observations in source fact and company order."""
         ...

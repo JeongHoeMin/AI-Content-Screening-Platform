@@ -6,7 +6,12 @@ from enum import Enum
 from openai import AsyncOpenAI
 
 from app.aggregators import DefaultAggregationStrategy, DefaultEvidenceAggregator
-from app.analyzers import DefaultImpactAnalyzer, RuleImpactStrategy
+from app.analyzers import (
+    DEFAULT_IMPACT_RULE_CATALOG,
+    DefaultImpactAnalyzer,
+    DefaultImpactPolicy,
+    RuleImpactStrategy,
+)
 from app.cross_validators import CrossValidationPolicyConfig, DefaultCrossValidationAssessmentParser, DefaultCrossValidationPolicy, LLMEventCrossValidator
 from app.config import (
     CompanyDirectoryConfig,
@@ -76,7 +81,10 @@ def _create_mock_workflow() -> ScreeningWorkflow:
             CompanyResolutionPolicy(),
         ),
         resolve_policy=DefaultResolvePolicy(),
-        impact_analyzer=DefaultImpactAnalyzer(RuleImpactStrategy()),
+        impact_analyzer=DefaultImpactAnalyzer(
+            RuleImpactStrategy(DEFAULT_IMPACT_RULE_CATALOG),
+            DefaultImpactPolicy(),
+        ),
         evidence_aggregator=DefaultEvidenceAggregator(DefaultAggregationStrategy()),
         scoring_engine=DefaultScoringEngine(RuleScoringStrategy()),
         recommendation_engine=DefaultRecommendationEngine(RuleRecommendationPolicy()),
@@ -124,7 +132,10 @@ def _create_openai_workflow() -> ScreeningWorkflow:
             CompanyResolutionPolicy(),
         ),
         resolve_policy=DefaultResolvePolicy(),
-        impact_analyzer=DefaultImpactAnalyzer(RuleImpactStrategy()),
+        impact_analyzer=DefaultImpactAnalyzer(
+            RuleImpactStrategy(DEFAULT_IMPACT_RULE_CATALOG),
+            DefaultImpactPolicy(),
+        ),
         evidence_aggregator=DefaultEvidenceAggregator(DefaultAggregationStrategy()),
         scoring_engine=DefaultScoringEngine(RuleScoringStrategy()),
         recommendation_engine=DefaultRecommendationEngine(RuleRecommendationPolicy()),

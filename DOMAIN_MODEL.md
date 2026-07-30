@@ -72,13 +72,13 @@ Directory는 normalized canonical name과 aliases의 name index에서 후보 사
 
 ## Impact Analysis 계약
 
-`ImpactAnalysis`는 원본 `ResolvedNewsEvent` 동일 객체와 immutable `ImpactObservation` tuple을 보관하는 snapshot이다. observation은 `scope`, `direction`, `uncertainty`, `reason_code`, 제한된 provenance reference 및 선택적 원본 `ResolvedCompany` reference를 가진다. `COMPANY` scope observation은 입력 event의 회사만 참조하고, `INDUSTRY`·`MARKET`·`MACRO` scope에는 회사를 넣지 않는다.
+`ImpactAnalysis`는 원본 `ResolvedNewsEvent` 동일 객체, immutable `ImpactObservation` tuple, 그리고 같은 길이·순서의 `ImpactFilterResult` tuple을 보관하는 snapshot이다. observation은 `scope`, `company`, `event_fact`, `direction`, `uncertainty`, Strategy 전용 `reason_code`를 가진다. `COMPANY` scope observation은 회사를 반드시 참조하고, `INDUSTRY`·`MARKET`·`MACRO` scope에는 회사를 넣지 않는다.
 
 `ImpactDirection`의 `UNKNOWN`은 근거 부족을, `NEUTRAL`은 영향 없다는 적극적 판단을 뜻한다. 둘은 동일시하지 않는다. 모든 observation은 방향이나 resolution 상태와 무관하게 analysis snapshot에 보존한다.
 
-Direction은 versioned Impact Rule Catalog의 등록된 Rule ID, Direction, Reason Code 조합으로만 생성한다. 등록되지 않은 rule은 direction을 생성할 수 없다. v1에서 `CompanyRelation.DIRECT`만 direction 생성 대상이며 `INDIRECT`는 자동 전파 대상이 아니다. Supplier, Customer, Competitor, Parent, Subsidiary 같은 향후 세분 relation도 별도 정책 전에는 자동 전파하지 않는다.
+Direction은 versioned Impact Rule Catalog의 등록된 Fact, Direction, Reason Code 조합으로만 생성한다. Catalog는 모든 `EventFact`를 정확히 한 번씩 등록해야 하며 중복·누락은 fail-fast한다. v1에서 `CompanyRelation.DIRECT`만 direction 생성 대상이며 `INDIRECT`는 자동 전파 대상이 아니다. 각 Fact는 독립 observation을 만들고 상충 direction은 보존한다.
 
-`ImpactPolicy`는 observation의 허용·제외와 downstream 전달 여부만 결정하는 filtering 계층이다. Policy는 `direction`, `scope`, `reason_code`, `uncertainty`, company reference, provenance를 수정·교체·삭제하지 않는다. `EvidenceAggregation`은 snapshot의 observation을 삭제하지 않고, eligible한 canonical `COMPANY` observation만 downstream evidence로 선택한다. 따라서 `UNKNOWN`, `AMBIGUOUS`, `UNRESOLVED` observation은 snapshot에는 남고 aggregation에서만 제외된다.
+`ImpactPolicy`는 observation의 허용·제외와 downstream 전달 여부만 결정하는 filtering 계층이다. `ImpactFilterResult`는 eligible이면 reason이 null, ineligible이면 하나의 Policy 전용 `exclusion_reason`을 가진다. 우선순위는 `EVENT_REJECTED` → `EVENT_REVIEW_NOT_VERIFIED` → `COMPANY_NOT_RESOLVED` → `COMPANY_IDENTITY_MISSING` → `UNSUPPORTED_SCOPE` → `UNKNOWN_DIRECTION`이다. Policy는 `direction`, `scope`, `reason_code`, `uncertainty`, company reference를 수정·교체·삭제하지 않는다. Aggregation adapter는 eligible observation 하나를 CompanyImpact 하나로 변환하며 병합·상쇄하지 않는다.
 
 ## Policy 경계
 

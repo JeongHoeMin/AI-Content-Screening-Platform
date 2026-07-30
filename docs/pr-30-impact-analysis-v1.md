@@ -109,14 +109,16 @@ v1의 최소 catalog는 다음과 같다. 이 목록의 확장은 별도 제품 
 
 | Rule ID | Direction | Reason Code |
 | --- | --- | --- |
-| `FACTORY_EXPANSION` | `POSITIVE` | `FACTORY_EXPANSION` |
-| `MASS_LAYOFF` | `NEGATIVE` | `MASS_LAYOFF` |
-| `BANKRUPTCY` | `NEGATIVE` | `BANKRUPTCY` |
-| `PRODUCT_RELEASE` | `UNKNOWN` | `PRODUCT_RELEASE` |
-| `CEO_INTERVIEW` | `UNKNOWN` | `CEO_INTERVIEW` |
+| `FACTORY_EXPANSION` | `POSITIVE` | `FACTORY_EXPANSION_POSITIVE` |
+| `MASS_LAYOFF` | `NEGATIVE` | `MASS_LAYOFF_NEGATIVE` |
+| `BANKRUPTCY` | `NEGATIVE` | `BANKRUPTCY_NEGATIVE` |
+| `PRODUCT_RELEASE` | `UNKNOWN` | `PRODUCT_RELEASE_DIRECTION_UNKNOWN` |
+| `CEO_INTERVIEW` | `UNKNOWN` | `CEO_INTERVIEW_DIRECTION_UNKNOWN` |
 
-`UNKNOWN` catalog entry는 사건을 분류할 수는 있으나, 긍정·부정 direction이나 stock evidence를
-만들지 않는다. catalog는 구현 세부 사항이 아니라 versioned 제품 계약이다.
+`UNKNOWN` catalog entry도 감사 가능한 observation은 생성하지만 Policy가 stock evidence에서
+제외한다. Catalog는 현재 `EventFact` Enum의 모든 값을 정확히 한 번씩 등록해야 한다. 중복 또는
+누락 Fact는 Catalog 생성과 bootstrap에서 fail-fast하며, 유효 Fact가 런타임에 조용히 무시되는
+상태는 허용하지 않는다. catalog는 구현 세부 사항이 아니라 versioned 제품 계약이다.
 
 ### 5. Company Relation Policy
 
@@ -138,7 +140,8 @@ v1의 최소 catalog는 다음과 같다. 이 목록의 확장은 별도 제품 
 
 - 등록된 Rule Catalog entry와 `DIRECT` company relation의 조합이 있을 때만 Fact별 회사 direction을
   관측한다.
-- 같은 event에 상충하는 catalog entry가 있거나 direct relation이 없으면 `UNKNOWN`이다.
+- 상충 Fact는 positive/negative observation을 각각 원본 Fact 순서대로 보존하며 서로 상쇄하거나
+  `UNKNOWN`으로 축약하지 않는다. direct relation이 없거나 Fact가 없으면 observation이 없다.
 - pattern/rule은 Policy와 분리된 versioned Rule Catalog로 관리하며, 테스트에서 catalog version과
   결정 이유를 확인한다.
 - Rule은 사건에 없는 회사, ticker, 산업 효과, 거시 효과를 추론하지 않는다.
@@ -154,8 +157,10 @@ v1의 최소 catalog는 다음과 같다. 이 목록의 확장은 별도 제품 
 - `ImpactDirection`: 기존 네 값 유지
 - `ImpactUncertainty`: 제한 enum (`LOW`, `MEDIUM`, `HIGH`)
 - `ImpactReasonCode`: rule/transport가 공유하는 제한 enum
-- `ImpactObservation`: scope, 선택적 resolved company, direction, uncertainty, reason code,
-  제한된 evidence reference를 갖는 immutable Domain 값
+- `ImpactObservation`: `scope`, 선택적 resolved company, `event_fact`, direction, uncertainty,
+  Strategy 전용 reason code를 갖는 immutable Domain 값
+- `ImpactFilterResult`: `eligible`와 Policy 전용 `exclusion_reason`을 갖는 immutable 값. eligible이면
+  reason은 null이고 ineligible이면 정확히 하나의 reason이 필수다.
 - `ImpactAnalysis`: 원본 `ResolvedNewsEvent` 동일 객체, immutable observation tuple, policy
   outcome/제외 사유를 갖는 snapshot
 
@@ -181,6 +186,9 @@ ImpactAnalysis
 - `ImpactPolicy`는 filtering만 수행한다. `Direction`, `Scope`, `ReasonCode`, `Uncertainty`,
   observation의 company reference와 provenance를 수정·교체·삭제해서는 안 된다. 예를 들어
   `POSITIVE` observation을 `NEGATIVE`로 바꿀 수 없다.
+- 단일 exclusion reason의 우선순위는 `EVENT_REJECTED` → `EVENT_REVIEW_NOT_VERIFIED` →
+  `COMPANY_NOT_RESOLVED` → `COMPANY_IDENTITY_MISSING` → `UNSUPPORTED_SCOPE` →
+  `UNKNOWN_DIRECTION`으로 고정한다.
 - `DefaultImpactAnalyzer`는 주입된 Strategy와 Policy를 조립할 뿐 상태를 변경하지 않는다.
 - recover 가능한 item 오류가 도입되면 공통 `SkillError`와 제한된 error kind로 관측한다.
   v1 deterministic strategy의 programming/configuration 오류는 숨기지 않고 전파한다.
@@ -197,9 +205,10 @@ ImpactAnalysis
 - Aggregator는 policy가 eligible로 표시한 canonical `COMPANY` observation만 같은 `company_id`로
   묶어 downstream evidence를 선택한다. ambiguous/unresolved company 및 `UNKNOWN` direction은
   snapshot에는 남지만 stock evidence를 만들지 않는다.
-- 기존 scoring/recommendation consumer가 단순 `CompanyImpact`를 요구한다면, 명시적인 adapter를
-  한 경계에 두고 provenance를 버리지 않거나 다음 PR에서 consumer를 함께 migration한다. 조용한
-  정보 손실은 허용하지 않는다.
+- Aggregation adapter는 eligible observation 하나를 기존 `CompanyImpact` evidence 하나로 변환한다.
+  동일 company/event의 observation을 adapter에서 병합·상쇄·dedup하거나 `UNKNOWN`으로 축약하지
+  않는다. 기존 Aggregation이 company ID 기준으로 묶고 scoring/recommendation public contract는
+  그대로 유지한다.
 - Mock/OpenAI execution mode는 같은 rule baseline/Policy/Workflow 경로를 사용한다. PR30은
   OpenAI 호출을 추가하지 않는다.
 
@@ -296,3 +305,10 @@ feat: add evidence-aware impact analysis
 - `DIRECT`만 direction 생성 대상이며 `INDIRECT`와 향후 세분 relation은 자동 전파하지 않는 Company Relation Policy를 추가했다.
 - ImpactPolicy가 observation을 바꾸지 않는 filtering 계층임을 명시했다.
 - 모든 observation은 snapshot에 보존하고, Aggregation만 downstream evidence를 선택·제외하도록 확정했다.
+
+### 2026-07-30 — Implemented v1 contract
+
+- Immutable exhaustive `ImpactRuleCatalog`, fact-level `ImpactObservation`, one-to-one
+  `ImpactFilterResult`, deterministic `DefaultImpactPolicy`, and observation-to-evidence adapter를 구현했다.
+- `reason_code`는 Strategy의 direction 근거, `exclusion_reason`은 Policy의 downstream 제외 근거로
+  분리했다. filter alignment와 eligible/reason 상호 제약은 Domain validator로 강제한다.

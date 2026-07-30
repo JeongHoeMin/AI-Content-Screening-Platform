@@ -324,3 +324,31 @@ EventFact와 EventType은 서로 직접 참조하지 않는 순수 Domain Enum�
 ## Consequences
 
 v1 호환성은 명시적이고 테스트 가능하며, 정책 교체가 Domain 값의 의미를 바꾸지 않는다. Domain 모델을 직접 구성할 때는 compatibility를 강제하지 않으므로 외부 transport 검증은 반드시 Parser 경계를 통해 수행해야 한다.
+
+# ADR-015
+
+## Title
+
+Impact observation은 exhaustive Fact Catalog와 filtering 결과를 분리한다.
+
+## Status
+
+Accepted
+
+## Context
+
+제목·요약 키워드 기반 impact는 EventFact 계약을 우회하고, Policy가 direction을 수정하거나
+aggregation이 observation을 합치면 감사 가능한 원인과 downstream 선택 근거가 섞인다.
+
+## Decision
+
+PR30은 모든 EventFact를 정확히 한 번씩 등록하는 immutable `ImpactRuleCatalog`를 사용한다.
+Strategy는 DIRECT company와 Fact마다 독립 observation을 만들고 상충 관측을 보존한다. Policy는
+one-to-one `ImpactFilterResult`만 만들며 exclusion 우선순위를 고정하고 observation을 수정하지
+않는다. Aggregation adapter는 eligible observation 하나를 legacy CompanyImpact 하나로 변환하고
+병합·상쇄·dedup하지 않는다.
+
+## Consequences
+
+방향 생성, downstream 선택, 기존 scoring 호환의 책임이 분리된다. 기존 scoring 계약은 유지되지만
+전체 provenance는 ImpactAnalysis snapshot에 남으므로 후속 consumer migration이 가능하다.

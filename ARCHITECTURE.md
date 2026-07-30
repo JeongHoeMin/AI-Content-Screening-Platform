@@ -18,7 +18,7 @@ Policy · Resolver · Analyzer · Aggregator · Scorer · Recommender
 LangGraph ScreeningWorkflow / Harness / CLI Bootstrap
 ```
 
-`app/models/`는 외부 계층을 모르는 immutable Pydantic Domain 모델을 둔다. `NewsEvent`는 필수 상위 EventType과 선택적 독립 EventFact tuple을 보존하며, Parser가 LLM transport를 검증한다. `app/core/`는 Skill request/result/error/metadata와 공통 예외 계약을 둔다. 상위 계층은 하위의 추상 인터페이스에 의존하며, Domain 모델은 OpenAI SDK, LangGraph, CLI를 import하지 않는다.
+`app/models/`는 외부 계층을 모르는 immutable Pydantic Domain 모델을 둔다. `NewsEvent`는 필수 상위 EventType과 선택적 독립 EventFact tuple을 보존하며, Parser가 LLM transport를 검증한다. `app/analyzers/`의 exhaustive Rule Catalog는 Fact별 direction/reason을 소유하고, Policy는 eligibility만 소유한다. `app/aggregators/`의 adapter가 eligible observation을 하나씩 기존 scoring evidence로 변환한다. `app/core/`는 Skill request/result/error/metadata와 공통 예외 계약을 둔다. 상위 계층은 하위의 추상 인터페이스에 의존하며, Domain 모델은 OpenAI SDK, LangGraph, CLI를 import하지 않는다.
 
 ## 주요 구성 요소
 
