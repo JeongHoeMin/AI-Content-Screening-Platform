@@ -40,3 +40,4 @@ Naver 뉴스 검색과 OpenDART 공시 목록을 실제 `Provider → RawPost �
 
 - 2026-07-30: 사용자 제공 environment-variable 계약 및 공식 API 문서를 기준으로 최초 계획 작성.
 - 2026-07-30: 사용자가 KOSPI·KOSDAQ·KONEX 종목기본정보 명세를 제공했다. CSV는 입력 검증용으로만 보존하고 runtime canonical directory는 KRX API를 사용하도록 범위를 확정했다.
+- 2026-07-30: Naver와 DART Provider를 injected JSON transport와 source-specific RawPost/Normalizer로 구현했다. KRX는 세 market endpoint를 병렬 조회하고 성공 market만으로 immutable snapshot을 만든다. `--collect` CLI는 수집 Post를 Article로 투영해 기존 screening harness로 전달하며, `COMPANY_DIRECTORY_MODE=krx_api`이면 API snapshot을 사용한다.

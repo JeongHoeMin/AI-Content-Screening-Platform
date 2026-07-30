@@ -64,11 +64,11 @@ domain 정규화는 소문자화, port 제거, 선행 `www.` 제거만 수행한
 
 ## Company Resolution 계약
 
-Company Resolution v1은 KRX 상장사만 다루며 versioned local CSV의 `CanonicalCompany`를 사용한다. `company_id`는 ticker·exchange·회사명과 독립적인 영구 identity이며 회사 동일성 비교의 기준이다. KRX ticker는 leading zero를 보존하는 6자리 문자열이고 exchange는 `KOSPI`, `KOSDAQ`, `KONEX` 중 하나다.
+Company Resolution v1은 KRX 상장사만 다루며 versioned `CanonicalCompany` snapshot을 사용한다. snapshot은 local CSV 또는 KRX OpenAPI에서 만들 수 있다. `company_id`는 ticker·exchange·회사명과 독립적인 영구 identity이며 회사 동일성 비교의 기준이다. KRX ticker는 leading zero를 보존하는 6자리 문자열이고 exchange는 `KOSPI`, `KOSDAQ`, `KONEX` 중 하나다.
 
 Directory는 normalized canonical name과 aliases의 name index에서 후보 사실만 반환한다. Policy는 distinct `company_id` 수가 1개면 `RESOLVED`, 2개 이상이면 `AMBIGUOUS`, 0개면 `UNRESOLVED`를 결정한다. alias collision은 다중 후보로 보존하며, 같은 company ID master row의 중복은 configuration error다.
 
-모든 resolution observation과 `ResolvedCompany` snapshot은 directory version을 보관한다. local CSV version은 `YYYY-MM-DD`, empty directory version은 `empty`다. 모호·미해결 회사는 원본 name/relation/status를 보존하지만 canonical ID와 ticker는 갖지 않으며, 종목 evidence aggregation·score·recommendation에서는 제외한다.
+모든 resolution observation과 `ResolvedCompany` snapshot은 directory version을 보관한다. local CSV와 KRX API snapshot version은 `YYYY-MM-DD`, empty directory version은 `empty`다. 모호·미해결 회사는 원본 name/relation/status를 보존하지만 canonical ID와 ticker는 갖지 않으며, 종목 evidence aggregation·score·recommendation에서는 제외한다.
 
 ## Impact Analysis 계약
 

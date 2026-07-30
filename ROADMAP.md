@@ -78,11 +78,11 @@ Cross-validation Parser/Policy, 연결 요소 기반 출처 계산, Resolve poli
 
 ## 완료 조건
 
-동명이인, ticker 변경, 미해결 회사를 명시적으로 다루고 가짜 ticker를 만들지 않는다. v1은 승인된 KRX 기반 versioned local CSV를 사용하며 다중 시장과 실시간 동기화는 후속 ADR의 범위다.
+동명이인, ticker 변경, 미해결 회사를 명시적으로 다루고 가짜 ticker를 만들지 않는다. v1은 approved KRX 기반 versioned local CSV와 KRX OpenAPI snapshot을 모두 지원하며, API mode는 KOSPI·KOSDAQ·KONEX을 실행 시작 시 동기화한다.
 
 ## 산출물
 
-KRX local master-data directory, 영구 company identity, resolution 관측 모델, provenance, 보수적 aggregation 정책 및 결정성 테스트.
+KRX local/API master-data directory, 영구 company identity, resolution 관측 모델, provenance, 보수적 aggregation 정책 및 결정성 테스트.
 
 # Phase 6 — Impact Analysis
 

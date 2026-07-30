@@ -22,6 +22,7 @@ __all__ = [
     "KrxConfig",
     "OpenAIConfig",
     "create_company_directory",
+    "create_company_directory_async",
     "load_company_directory_config",
     "load_dart_config",
     "load_krx_config",
@@ -36,6 +37,7 @@ def __getattr__(name: str) -> Any:
         "CompanyDirectoryConfig",
         "CompanyDirectoryMode",
         "create_company_directory",
+        "create_company_directory_async",
         "load_company_directory_config",
     }:
         from app.config import company_directory

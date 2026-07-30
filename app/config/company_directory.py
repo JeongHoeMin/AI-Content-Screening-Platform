@@ -8,6 +8,7 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.config.errors import ConfigurationError
+from app.config.market_data import KrxConfig, load_krx_config
 from app.resolvers.directory import CompanyDirectory, LocalCsvCompanyDirectory, StaticCompanyDirectory
 
 
@@ -16,6 +17,7 @@ class CompanyDirectoryMode(str, Enum):
 
     EMPTY = "empty"
     LOCAL_CSV = "local_csv"
+    KRX_API = "krx_api"
 
 
 class CompanyDirectoryConfig(BaseModel):
@@ -30,7 +32,7 @@ class CompanyDirectoryConfig(BaseModel):
     def _validate_path(self) -> "CompanyDirectoryConfig":
         if self.mode is CompanyDirectoryMode.LOCAL_CSV and self.csv_path is None:
             raise ValueError("COMPANY_DIRECTORY_CSV_PATH is required for local_csv")
-        if self.mode is CompanyDirectoryMode.EMPTY and self.csv_path is not None:
+        if self.mode in {CompanyDirectoryMode.EMPTY, CompanyDirectoryMode.KRX_API} and self.csv_path is not None:
             raise ValueError("COMPANY_DIRECTORY_CSV_PATH is not allowed for empty")
         return self
 
@@ -56,6 +58,18 @@ def create_company_directory(config: CompanyDirectoryConfig) -> CompanyDirectory
     """Create one immutable directory snapshot from validated runtime config."""
     if config.mode is CompanyDirectoryMode.EMPTY:
         return StaticCompanyDirectory()
+    if config.mode is CompanyDirectoryMode.KRX_API:
+        raise ConfigurationError("KRX API directory must be created asynchronously")
     if config.csv_path is None:
         raise ConfigurationError("COMPANY_DIRECTORY_CSV_PATH is required for local_csv")
     return LocalCsvCompanyDirectory.from_csv(config.csv_path)
+
+
+async def create_company_directory_async(config: CompanyDirectoryConfig) -> CompanyDirectory:
+    """Create a directory snapshot, querying KRX only when explicitly configured."""
+    if config.mode is not CompanyDirectoryMode.KRX_API:
+        return create_company_directory(config)
+    from app.resolvers.krx_directory import KrxCompanyDirectoryLoader
+
+    krx_config: KrxConfig = load_krx_config()
+    return await KrxCompanyDirectoryLoader(krx_config).load()

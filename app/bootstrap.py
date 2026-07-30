@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Optional
 from enum import Enum
 
 from openai import AsyncOpenAI
@@ -16,11 +17,13 @@ from app.analyzers import (
 from app.cross_validators import CrossValidationPolicyConfig, DefaultCrossValidationAssessmentParser, DefaultCrossValidationPolicy, LLMEventCrossValidator
 from app.config import (
     CompanyDirectoryConfig,
+    create_company_directory_async,
     OpenAIConfig,
     create_company_directory,
     load_company_directory_config,
     load_openai_config,
 )
+from app.resolvers.directory import CompanyDirectory
 from app.extractors import DefaultNewsEventParser, LLMNewsEventExtractor
 from app.llms import (
     OpenAIResponsesStructuredOutputClient,
@@ -61,20 +64,32 @@ class ExecutionMode(str, Enum):
     OPENAI = "openai"
 
 
-WorkflowFactory = Callable[[], ScreeningWorkflow]
+WorkflowFactory = Callable[[Optional[CompanyDirectory]], ScreeningWorkflow]
 
 
 def create_screening_workflow(
     mode: ExecutionMode = ExecutionMode.MOCK,
+    company_directory: Optional[CompanyDirectory] = None,
 ) -> ScreeningWorkflow:
     factory: WorkflowFactory | None = _WORKFLOW_FACTORIES.get(mode)
     if factory is None:
         mode_name: str = mode.value if isinstance(mode, ExecutionMode) else repr(mode)
         raise ValueError(f"Unsupported execution mode: {mode_name}")
-    return factory()
+    return factory(company_directory)
 
 
-def _create_mock_workflow() -> ScreeningWorkflow:
+async def create_screening_workflow_async(
+    mode: ExecutionMode = ExecutionMode.MOCK,
+) -> ScreeningWorkflow:
+    """Create a workflow after loading any configured remote directory snapshot."""
+    directory_config: CompanyDirectoryConfig = load_company_directory_config()
+    company_directory: CompanyDirectory = await create_company_directory_async(directory_config)
+    return create_screening_workflow(mode, company_directory)
+
+
+def _create_mock_workflow(
+    company_directory: Optional[CompanyDirectory] = None,
+) -> ScreeningWorkflow:
     screening_policy: DefaultScreeningPolicy = DefaultScreeningPolicy()
     cross_validation_policy: DefaultCrossValidationPolicy = (
         DefaultCrossValidationPolicy(CrossValidationPolicyConfig(use_url_domain_identity=False))
@@ -86,7 +101,7 @@ def _create_mock_workflow() -> ScreeningWorkflow:
         screener=DeterministicMockScreener(screening_policy),
         cross_validator=DeterministicMockCrossValidator(cross_validation_policy),
         resolver=DefaultCompanyResolver(
-            create_company_directory(directory_config),
+            company_directory or create_company_directory(directory_config),
             CompanyResolutionPolicy(),
         ),
         resolve_policy=DefaultResolvePolicy(),
@@ -107,7 +122,9 @@ def _create_mock_workflow() -> ScreeningWorkflow:
     )
 
 
-def _create_openai_workflow() -> ScreeningWorkflow:
+def _create_openai_workflow(
+    company_directory: Optional[CompanyDirectory] = None,
+) -> ScreeningWorkflow:
     """Assemble the OpenAI extractor with deterministic downstream stages."""
     config: OpenAIConfig = load_openai_config()
     directory_config: CompanyDirectoryConfig = load_company_directory_config()
@@ -147,7 +164,7 @@ def _create_openai_workflow() -> ScreeningWorkflow:
         ),
         cross_validator=LLMEventCrossValidator(structured_llm=structured_llm, parser=DefaultCrossValidationAssessmentParser(), prompt_builder=CrossValidationPromptBuilder(), policy=cross_validation_policy, config=BatchCrossValidationConfig()),
         resolver=DefaultCompanyResolver(
-            create_company_directory(directory_config),
+            company_directory or create_company_directory(directory_config),
             CompanyResolutionPolicy(),
         ),
         resolve_policy=DefaultResolvePolicy(),

@@ -6,12 +6,17 @@ import json
 import sys
 from enum import IntEnum
 from pathlib import Path
-from typing import Any, Sequence, Tuple
+from datetime import timedelta
+from typing import Any, List, Sequence, Tuple
 
 import structlog
 from pydantic import ValidationError
 
-from app.bootstrap import ExecutionMode, create_screening_workflow
+from app.bootstrap import (
+    ExecutionMode,
+    create_screening_workflow,
+    create_screening_workflow_async,
+)
 from app.config import ConfigurationError
 from app.harness.alerts import (
     AlertingWorkflowExecutionAuditSink,
@@ -27,6 +32,11 @@ from app.harness.execution_audit import (
     calculate_workflow_execution_metrics,
 )
 from app.models.article import Article
+from app.models.collect_posts import CollectPostsRequest
+from app.models.community import CommunityType
+from app.market_data import create_market_collect_posts_skill, posts_to_articles
+from app.harness import Harness
+from app.skills import CollectPostsSkill
 from app.workflows import ScreeningResult
 
 logger = structlog.get_logger(__name__)
@@ -69,7 +79,30 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         type=Path,
         help="Read a workflow audit JSON Lines file and emit aggregate metrics.",
     )
+    input_group.add_argument(
+        "--collect",
+        action="store_true",
+        help="Collect real Naver News and OpenDART data before screening.",
+    )
     parser.add_argument("--mode", default=ExecutionMode.MOCK.value)
+    parser.add_argument(
+        "--sources",
+        default="naver_news,dart",
+        help="Comma-separated real collection sources for --collect.",
+    )
+    parser.add_argument("--category", help="Naver News search query for --collect.")
+    parser.add_argument(
+        "--period-hours",
+        type=int,
+        default=24,
+        help="Positive collection lookback period in hours for --collect.",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=50,
+        help="Positive per-source collection limit for --collect (maximum 100).",
+    )
     parser.add_argument(
         "--audit-log",
         type=Path,
@@ -115,6 +148,20 @@ def _load_articles(path: Path) -> Tuple[Article, ...]:
         raise CliInputError("Input JSON contains an invalid Article") from error
 
 
+def _parse_sources(value: str) -> List[CommunityType]:
+    values: List[str] = [item.strip() for item in value.split(",") if item.strip()]
+    if not values:
+        raise CliInputError("--sources must contain at least one source")
+    try:
+        sources: List[CommunityType] = [CommunityType(item) for item in values]
+    except ValueError as error:
+        raise CliInputError("--sources contains an unsupported source") from error
+    supported_sources: set[CommunityType] = {CommunityType.NAVER_NEWS, CommunityType.DART}
+    if any(source not in supported_sources for source in sources):
+        raise CliInputError("--collect supports only naver_news and dart")
+    return sources
+
+
 def _serialize_result(result: ScreeningResult) -> str:
     """Keep internal metadata and explainability fields out of the CLI schema."""
     payload: dict[str, Any] = result.model_dump(
@@ -155,7 +202,7 @@ async def run(arguments: Sequence[str] | None = None) -> int:
         return int(ExitCode.SUCCESS)
     try:
         mode: ExecutionMode = _parse_mode(args.mode)
-        articles: Tuple[Article, ...] = _load_articles(args.input)
+        articles: Tuple[Article, ...] = ()
         if args.alert_log is not None and args.audit_log is None:
             raise CliInputError("--alert-log requires --audit-log")
         if (
@@ -163,12 +210,37 @@ async def run(arguments: Sequence[str] | None = None) -> int:
             and args.alert_max_duration_seconds <= 0.0
         ):
             raise CliInputError("--alert-max-duration-seconds must be positive")
+        if args.collect:
+            if args.period_hours <= 0 or args.limit <= 0 or args.limit > 100:
+                raise CliInputError("--period-hours and --limit must be positive; limit is at most 100")
+        else:
+            articles = _load_articles(args.input)
     except CliInputError as error:
         logger.error("cli_input_failed", error_type=type(error).__name__)
         return int(ExitCode.INPUT_ERROR)
+    collection_metadata: object = None
     try:
-        workflow = create_screening_workflow(mode)
-    except ConfigurationError as error:
+        if args.collect:
+            collect_skill: CollectPostsSkill = create_market_collect_posts_skill()
+            collect_result = await Harness().run(
+                collect_skill,
+                CollectPostsRequest(
+                    sources=_parse_sources(args.sources),
+                    limit=args.limit,
+                    period=timedelta(hours=args.period_hours),
+                    category=args.category,
+                ),
+            )
+            articles = posts_to_articles(collect_result.data.posts)
+            collection_metadata = {
+                "collected_post_count": collect_result.metadata.collected_count,
+                "article_count": len(articles),
+                "error_codes": [error.code for error in collect_result.errors],
+            }
+            workflow = await create_screening_workflow_async(mode)
+        else:
+            workflow = create_screening_workflow(mode)
+    except (CliInputError, ConfigurationError) as error:
         logger.error("cli_input_failed", error_type=type(error).__name__)
         return int(ExitCode.INPUT_ERROR)
     try:
@@ -195,7 +267,12 @@ async def run(arguments: Sequence[str] | None = None) -> int:
             error_type=type(error).__name__,
         )
         return int(ExitCode.EXECUTION_ERROR)
-    sys.stdout.write(_serialize_result(result))
+    serialized_result: str = _serialize_result(result)
+    if collection_metadata is not None:
+        serialized_payload: dict[str, Any] = json.loads(serialized_result)
+        serialized_payload["collection"] = collection_metadata
+        serialized_result = json.dumps(serialized_payload, ensure_ascii=False, indent=2)
+    sys.stdout.write(serialized_result)
     sys.stdout.write("\n")
     return int(ExitCode.SUCCESS)
 

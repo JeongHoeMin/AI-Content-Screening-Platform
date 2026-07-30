@@ -70,7 +70,7 @@ OpenAIResponsesStructuredOutputLLM
 
 Mock mode는 같은 Workflow·Policy·후속 단계를 사용하고 LLM 관측 부분만 결정적 구현으로 교체한다. 따라서 Mock은 단순한 별도 제품이 아니라 빠르고 재현 가능한 계약 검증 경로다.
 
-Company Directory mode는 LLM execution mode와 독립적이다. `empty` mode는 version `empty`의 후보 없는 immutable directory를 사용하며, `local_csv` mode는 versioned KRX CSV를 한 번 읽어 immutable name index를 만든다. Directory는 후보만 제공하고 Company Resolution Policy가 canonical ID 기반 status를 결정한다.
+Company Directory mode는 LLM execution mode와 독립적이다. `empty` mode는 version `empty`의 후보 없는 immutable directory를 사용하며, `local_csv` mode는 versioned KRX CSV를 한 번 읽어 immutable name index를 만든다. `krx_api` mode는 실행 시작 시 KOSPI·KOSDAQ·KONEX KRX OpenAPI를 병렬 조회해 하나의 날짜 기반 immutable snapshot을 만든다. 이후 Directory는 네트워크를 호출하지 않고 후보만 제공하며 Company Resolution Policy가 canonical ID 기반 status를 결정한다.
 
 ## 실패와 관측성
 
