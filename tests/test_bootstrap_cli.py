@@ -305,6 +305,54 @@ def test_mock_cli_writes_opt_in_safe_execution_audit(
     assert "Samsung" not in lines[0]
 
 
+def test_mock_cli_writes_duration_alert_to_opt_in_alert_log(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    audit_path: Path = tmp_path / "workflow-audit.jsonl"
+    alert_path: Path = tmp_path / "workflow-alert.jsonl"
+
+    exit_code: int = asyncio.run(
+        cli.run(
+            (
+                "--input", str(SAMPLE_INPUT), "--audit-log", str(audit_path),
+                "--alert-log", str(alert_path), "--alert-max-duration-seconds", "0.000001",
+            )
+        )
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert json.loads(captured.out)["recommendation"]
+    alert: dict[str, object] = json.loads(alert_path.read_text(encoding="utf-8"))
+    assert alert["alert_type"] == "duration_exceeded"
+    assert alert["severity"] == "warning"
+    assert "Samsung" not in alert_path.read_text(encoding="utf-8")
+
+
+def test_cli_rejects_alert_log_without_audit_log(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    alert_path: Path = tmp_path / "workflow-alert.jsonl"
+
+    class CapturingLogger:
+        def error(self, event: str, **kwargs: object) -> None:
+            return None
+
+    monkeypatch.setattr(cli, "logger", CapturingLogger())
+
+    exit_code: int = asyncio.run(
+        cli.run(("--input", str(SAMPLE_INPUT), "--alert-log", str(alert_path)))
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 2
+    assert captured.out == ""
+    assert not alert_path.exists()
+
+
 def test_cli_audit_report_reads_metrics_without_running_workflow(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

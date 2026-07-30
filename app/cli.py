@@ -13,6 +13,12 @@ from pydantic import ValidationError
 
 from app.bootstrap import ExecutionMode, create_screening_workflow
 from app.config import ConfigurationError
+from app.harness.alerts import (
+    AlertingWorkflowExecutionAuditSink,
+    JsonLinesOperationalAlertSink,
+    OperationalAlertPolicy,
+    OperationalAlertPolicyConfig,
+)
 from app.harness.execution_audit import (
     JsonLinesWorkflowExecutionAuditSink,
     JsonLinesWorkflowExecutionAuditReader,
@@ -68,6 +74,16 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         "--audit-log",
         type=Path,
         help="Optional JSON Lines path for safe workflow execution audit records.",
+    )
+    parser.add_argument(
+        "--alert-log",
+        type=Path,
+        help="Optional JSON Lines path for safe operational alerts; requires --audit-log.",
+    )
+    parser.add_argument(
+        "--alert-max-duration-seconds",
+        type=float,
+        help="Optional positive duration threshold for warning alerts.",
     )
     return parser.parse_args(arguments)
 
@@ -140,6 +156,13 @@ async def run(arguments: Sequence[str] | None = None) -> int:
     try:
         mode: ExecutionMode = _parse_mode(args.mode)
         articles: Tuple[Article, ...] = _load_articles(args.input)
+        if args.alert_log is not None and args.audit_log is None:
+            raise CliInputError("--alert-log requires --audit-log")
+        if (
+            args.alert_max_duration_seconds is not None
+            and args.alert_max_duration_seconds <= 0.0
+        ):
+            raise CliInputError("--alert-max-duration-seconds must be positive")
     except CliInputError as error:
         logger.error("cli_input_failed", error_type=type(error).__name__, error=str(error))
         return int(ExitCode.INPUT_ERROR)
@@ -154,6 +177,16 @@ async def run(arguments: Sequence[str] | None = None) -> int:
             if args.audit_log is not None
             else None
         )
+        if args.alert_log is not None and audit_sink is not None:
+            audit_sink = AlertingWorkflowExecutionAuditSink(
+                audit_sink=audit_sink,
+                policy=OperationalAlertPolicy(
+                    OperationalAlertPolicyConfig(
+                        max_duration_seconds=args.alert_max_duration_seconds,
+                    )
+                ),
+                alert_sink=JsonLinesOperationalAlertSink(args.alert_log),
+            )
         harness = ScreeningExecutionHarness(audit_sink=audit_sink)
         result = await harness.run(workflow, articles, execution_mode=mode.value)
     except Exception as error:
