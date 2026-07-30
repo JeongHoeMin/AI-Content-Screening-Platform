@@ -22,7 +22,7 @@ CrossValidationCandidate → CrossValidationAssessment → CrossValidationResult
 
 `Article`은 외부 기사 표준화 결과로서 id, 제목, 본문, source, 발행 시각, URL을 가진다. `NewsEvent`는 기사에서 추출한 투자 분석 대상 사실이며 제목, 요약, 기업·산업·키워드·근거를 보관한다. event는 기사 원문이나 provider 응답을 대체하지 않으며, 원본 article과의 연결은 workflow inference가 보존한다.
 
-`NewsEvent.event_type`은 필수 상위 Domain Category이며 `CORPORATE_EVENT`, `LEGAL_EVENT`, `FINANCIAL_EVENT`, `PRODUCT_EVENT`, `MACRO_EVENT`만 허용한다. EventType은 Impact 전용 값이 아니며 새 EventFact가 기존 Category에 수용되면 추가하지 않는다. `event_facts`는 선택적 immutable tuple의 독립 Fact다. 순서는 extraction 관측 순서로 보존하고 동일 Fact는 첫 값만 남긴다. Fact는 event의 주된 Type과 호환되어야 하며, Type을 결정하지 못한 event는 Parser가 recoverable event 오류로 제외한다.
+`NewsEvent.event_type`은 필수 상위 Domain Category이며 `CORPORATE_EVENT`, `LEGAL_EVENT`, `FINANCIAL_EVENT`, `PRODUCT_EVENT`, `MACRO_EVENT`만 허용한다. EventType은 Impact 전용 값이 아니며 새 EventFact가 기존 Category에 수용되면 추가하지 않는다. `event_facts`는 선택적 immutable tuple의 독립 Fact다. 순서는 extraction 관측 순서로 보존하고 동일 Fact는 첫 값만 남긴다. Fact와 Type의 관계는 EventFact Enum이 아니라 별도 immutable `EventTypeCompatibility` table이 소유하며, Parser가 주입된 table로 검증한다. Type을 결정하지 못한 event는 Parser가 recoverable event 오류로 제외한다.
 
 EventFact가 없는 EventType-only event는 유효한 Domain Event다. 다만 Fact를 요구하는 후속 Rule Catalog의 입력은 아니다. Fact 오류는 유효 event와 sibling Fact를 버리지 않으며 Parser가 fact-local 오류로 기록한다. 여러 Fact를 복합 Fact로 합치거나 새로운 의미를 추론하지 않는다.
 

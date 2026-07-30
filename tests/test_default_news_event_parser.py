@@ -16,6 +16,8 @@ from app.models import (
     CompanyRelation,
     EventFact,
     EventType,
+    EventTypeCompatibility,
+    EventTypeCompatibilityEntry,
     ExtractionErrorKind,
     ExtractedCompanyResponseItem,
     NewsEventExtractionResponse,
@@ -231,6 +233,43 @@ def test_parser_excludes_event_with_invalid_event_type() -> None:
 
     assert result.inferences[0].events == ()
     assert result.errors[0].kind is ExtractionErrorKind.EVENT_VALIDATION
+
+
+def test_parser_uses_injected_event_type_compatibility_table() -> None:
+    article: Article = build_article(1)
+    compatibility: EventTypeCompatibility = EventTypeCompatibility(
+        entries=(
+            EventTypeCompatibilityEntry(
+                event_type=EventType.PRODUCT_EVENT,
+                event_facts=(EventFact.FACTORY_EXPANSION,),
+            ),
+        )
+    )
+    response: NewsEventExtractionResponse = NewsEventExtractionResponse(
+        articles=[
+            ArticleInferenceResponseItem(
+                article_id=article.id,
+                summary="Article summary",
+                reasoning="Article reasoning",
+                confidence=0.8,
+                events=[
+                    NewsEventResponseItem(
+                        title="Expansion",
+                        summary="An expansion is announced.",
+                        event_type=EventType.PRODUCT_EVENT.value,
+                        event_facts=[EventFact.FACTORY_EXPANSION.value],
+                    )
+                ],
+            )
+        ]
+    )
+
+    result = DefaultNewsEventParser(compatibility).parse(response, (article,))
+
+    assert result.errors == ()
+    assert result.inferences[0].events[0].event_facts == (
+        EventFact.FACTORY_EXPANSION,
+    )
 
 
 def test_parser_normalizes_article_level_summary_and_reasoning() -> None:

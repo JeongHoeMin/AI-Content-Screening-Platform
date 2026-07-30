@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Annotated, ClassVar, Dict, List, Tuple
+from typing import Annotated, List, Tuple
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class EventType(str, Enum):
@@ -24,21 +24,6 @@ class EventFact(str, Enum):
     BANKRUPTCY = "bankruptcy"
     PRODUCT_RELEASE = "product_release"
     CEO_INTERVIEW = "ceo_interview"
-
-    _COMPATIBLE_EVENT_TYPES: ClassVar[Dict["EventFact", EventType]]
-
-    def is_compatible_with(self, event_type: EventType) -> bool:
-        """Return whether this fact belongs to the supplied event category."""
-        return self._COMPATIBLE_EVENT_TYPES[self] is event_type
-
-
-EventFact._COMPATIBLE_EVENT_TYPES = {
-    EventFact.FACTORY_EXPANSION: EventType.CORPORATE_EVENT,
-    EventFact.MASS_LAYOFF: EventType.CORPORATE_EVENT,
-    EventFact.BANKRUPTCY: EventType.FINANCIAL_EVENT,
-    EventFact.PRODUCT_RELEASE: EventType.PRODUCT_EVENT,
-    EventFact.CEO_INTERVIEW: EventType.CORPORATE_EVENT,
-}
 
 
 class CompanyRelation(str, Enum):
@@ -77,17 +62,3 @@ class NewsEvent(BaseModel):
     ) -> Tuple[EventFact, ...]:
         """Retain independent facts in extraction order without duplicates."""
         return tuple(dict.fromkeys(event_facts))
-
-    @model_validator(mode="after")
-    def validate_fact_compatibility(self) -> "NewsEvent":
-        """Reject facts that do not belong to the event's primary category."""
-        incompatible_facts: Tuple[EventFact, ...] = tuple(
-            fact
-            for fact in self.event_facts
-            if not fact.is_compatible_with(self.event_type)
-        )
-        if incompatible_facts:
-            raise ValueError(
-                "Event facts must be compatible with the primary event type."
-            )
-        return self

@@ -43,9 +43,12 @@ EventFact는 EventType 안의 구체적이고 독립적인 사건이다. 초기 
   정규화로 제거한다.
 - 여러 Fact를 복합 Fact로 합치거나 새 의미를 추론하지 않는다. Consumer와 PR30 Rule Catalog는
   각 Fact에 독립적으로 동작한다.
-- EventType은 event의 주된 Category이며 Fact는 해당 Type과 호환되어야 한다. 서로 다른 상위
-  Category의 복합 사건은 Extractor가 별도 NewsEvent로 분리한다.
-- `BANKRUPTCY`를 EventType에 영구 귀속하지 않는다. v1 호환성 표에서만
+- EventType과 EventFact의 호환성은 Enum 내부가 아닌 별도 immutable `EventTypeCompatibility`
+  table이 소유한다. Parser는 주입된 table로 Fact를 검증하며, 향후 Rule Set 또는 Consumer는
+  Domain Enum을 바꾸지 않고 table을 교체할 수 있다.
+- EventType은 event의 주된 Category이며 Fact는 주입된 compatibility table에서 해당 Type과
+  호환되어야 한다. 서로 다른 상위 Category의 복합 사건은 Extractor가 별도 NewsEvent로 분리한다.
+- `BANKRUPTCY`를 EventType에 영구 귀속하지 않는다. v1 default table에서만
   `FINANCIAL_EVENT`와 호환되는 Fact로 등록한다.
 - EventType만 있고 EventFact가 없는 값은 유효한 Domain Event다. 다만 PR30 Rule Catalog의 입력
   조건을 충족하지 않아 Impact observation을 만들지 않는다.
@@ -96,3 +99,9 @@ feat: add event classification contract
   deterministic Mock extraction을 구현했다.
 - 기존 Event fixture와 parser/prompt 회귀 테스트를 새 필수 Type 계약에 맞추고, 전체 테스트·컴파일·diff
   검증을 통과했다.
+
+### 2026-07-30 — Compatibility policy extraction
+
+- EventFact Enum에서 EventType 참조와 호환성 메서드를 제거했다.
+- immutable EventTypeCompatibility table을 추가하고 Parser가 생성자 주입으로 이를 검증하도록
+  변경했다. 기본 table과 교체 가능한 table의 동작을 테스트로 고정했다.

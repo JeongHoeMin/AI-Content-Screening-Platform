@@ -11,6 +11,7 @@ from app.models import (
     Article,
     ArticleRejectReason,
     CompanyRelation,
+    DEFAULT_EVENT_TYPE_COMPATIBILITY,
     EventFact,
     EventType,
     ExtractedCompany,
@@ -129,15 +130,25 @@ def test_news_event_preserves_fact_order_and_deduplicates_facts() -> None:
     )
 
 
-def test_news_event_rejects_incompatible_fact_type_pair() -> None:
-    with pytest.raises(ValidationError):
-        NewsEvent(
-            title="Product launch",
-            summary="A product is released.",
-            event_type=EventType.PRODUCT_EVENT,
-            event_facts=(EventFact.FACTORY_EXPANSION,),
-            companies=[],
-            industries=[],
-            keywords=[],
-            reasons=[],
-        )
+def test_event_type_compatibility_is_independent_of_event_fact_enum() -> None:
+    assert DEFAULT_EVENT_TYPE_COMPATIBILITY.is_compatible(
+        EventType.FINANCIAL_EVENT,
+        EventFact.BANKRUPTCY,
+    )
+    assert not DEFAULT_EVENT_TYPE_COMPATIBILITY.is_compatible(
+        EventType.PRODUCT_EVENT,
+        EventFact.FACTORY_EXPANSION,
+    )
+
+    event: NewsEvent = NewsEvent(
+        title="Product launch",
+        summary="A product is released.",
+        event_type=EventType.PRODUCT_EVENT,
+        event_facts=(EventFact.FACTORY_EXPANSION,),
+        companies=[],
+        industries=[],
+        keywords=[],
+        reasons=[],
+    )
+
+    assert event.event_facts == (EventFact.FACTORY_EXPANSION,)

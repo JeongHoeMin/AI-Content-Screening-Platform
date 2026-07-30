@@ -9,6 +9,11 @@ from app.models.collect_posts import (
 )
 from app.models.community import CommunityType
 from app.models.evaluation_response import EvaluationResponse, EvaluationResponseItem
+from app.models.event_compatibility import (
+    DEFAULT_EVENT_TYPE_COMPATIBILITY,
+    EventTypeCompatibility,
+    EventTypeCompatibilityEntry,
+)
 from app.models.evidence import CompanyEvidence, EvidenceAggregation
 from app.models.generate_script import (
     GeneratedScript,
@@ -121,8 +126,11 @@ __all__ = [
     "EvaluationResponse",
     "EvaluationResponseItem",
     "EvidenceAggregation",
+    "EventTypeCompatibility",
+    "EventTypeCompatibilityEntry",
     "EventFact",
     "EventType",
+    "DEFAULT_EVENT_TYPE_COMPATIBILITY",
     "ExtractedCompany",
     "ExtractedCompanyResponseItem",
     "GeneratedScript",

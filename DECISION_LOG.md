@@ -302,3 +302,25 @@ NewsEvent은 필수 EventType과 선택적 복수 EventFact를 가진다. EventT
 ## Consequences
 
 새 사건은 가능한 한 EventFact만 추가해 확장할 수 있고, EventType의 churn을 줄인다. Fact 없는 event도 Screening·Resolve 등 공통 흐름에서 유효하지만 Fact 기반 Impact observation은 만들지 않는다.
+
+# ADR-014
+
+## Title
+
+EventType과 EventFact 호환성은 교체 가능한 table로 분리한다.
+
+## Status
+
+Accepted
+
+## Context
+
+EventFact Enum 내부에 Category 호환성을 넣으면 Fact 값과 v1 정책이 결합되고, 새로운 Rule Set이나 Consumer가 다른 compatibility 정책을 사용하려면 Domain 모델을 변경해야 한다.
+
+## Decision
+
+EventFact와 EventType은 서로 직접 참조하지 않는 순수 Domain Enum으로 유지한다. immutable `EventTypeCompatibility` table이 호환성 행을 소유하며, Parser는 생성자 주입된 table로 Fact를 검증한다. default table은 v1 규칙을 제공하지만 다른 Consumer는 Enum 변경 없이 별도 table을 사용할 수 있다.
+
+## Consequences
+
+v1 호환성은 명시적이고 테스트 가능하며, 정책 교체가 Domain 값의 의미를 바꾸지 않는다. Domain 모델을 직접 구성할 때는 compatibility를 강제하지 않으므로 외부 transport 검증은 반드시 Parser 경계를 통해 수행해야 한다.

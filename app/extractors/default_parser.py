@@ -7,6 +7,10 @@ from pydantic import ValidationError
 from app.extractors.errors import InferenceResultValidationError
 from app.extractors.parser import NewsEventParser
 from app.models.article import Article
+from app.models.event_compatibility import (
+    DEFAULT_EVENT_TYPE_COMPATIBILITY,
+    EventTypeCompatibility,
+)
 from app.models.llm_inference import (
     ExtractionError,
     ExtractionErrorKind,
@@ -30,6 +34,12 @@ from app.models.news_event_response import (
 
 class DefaultNewsEventParser(NewsEventParser):
     """Validates batch inference identity and maps events without reordering."""
+
+    def __init__(
+        self,
+        compatibility: EventTypeCompatibility = DEFAULT_EVENT_TYPE_COMPATIBILITY,
+    ) -> None:
+        self._compatibility: EventTypeCompatibility = compatibility
 
     def parse(
         self,
@@ -85,8 +95,8 @@ class DefaultNewsEventParser(NewsEventParser):
                 "LLM output article IDs do not match input article IDs"
             )
 
-    @staticmethod
     def _map_inference(
+        self,
         article: Article,
         response_item: ArticleInferenceResponseItem,
     ) -> tuple[LLMInferenceResult, Tuple[ExtractionError, ...]]:
@@ -105,7 +115,7 @@ class DefaultNewsEventParser(NewsEventParser):
         errors: List[ExtractionError] = []
         for event_index, event in enumerate(response_item.events):
             try:
-                mapped_event, fact_errors = DefaultNewsEventParser._map_event(
+                mapped_event, fact_errors = self._map_event(
                     event,
                     article_id=article.id,
                     event_index=event_index,
@@ -130,8 +140,8 @@ class DefaultNewsEventParser(NewsEventParser):
         )
         return inference, tuple(errors)
 
-    @staticmethod
     def _map_event(
+        self,
         response_item: NewsEventResponseItem,
         *,
         article_id: str,
@@ -146,7 +156,7 @@ class DefaultNewsEventParser(NewsEventParser):
                 company_names.add(company_key)
                 companies.append(extracted)
         event_type: EventType = EventType(response_item.event_type)
-        event_facts, fact_errors = DefaultNewsEventParser._map_event_facts(
+        event_facts, fact_errors = self._map_event_facts(
             response_item.event_facts,
             event_type=event_type,
             article_id=article_id,
@@ -170,8 +180,8 @@ class DefaultNewsEventParser(NewsEventParser):
         )
         return event, tuple(fact_errors)
 
-    @staticmethod
     def _map_event_facts(
+        self,
         response_facts: List[str],
         *,
         event_type: EventType,
@@ -184,7 +194,7 @@ class DefaultNewsEventParser(NewsEventParser):
         for fact_index, response_fact in enumerate(response_facts):
             try:
                 event_fact: EventFact = EventFact(response_fact)
-                if not event_fact.is_compatible_with(event_type):
+                if not self._compatibility.is_compatible(event_type, event_fact):
                     raise ValueError("Event fact is incompatible with event type")
             except (TypeError, ValueError) as error:
                 errors.append(
