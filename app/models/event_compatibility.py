@@ -24,12 +24,21 @@ class EventTypeCompatibility(BaseModel):
     entries: Tuple[EventTypeCompatibilityEntry, ...]
 
     @model_validator(mode="after")
-    def validate_unique_event_types(self) -> "EventTypeCompatibility":
+    def validate_unique_entries(self) -> "EventTypeCompatibility":
         event_types: Tuple[EventType, ...] = tuple(
             entry.event_type for entry in self.entries
         )
         if len(set(event_types)) != len(event_types):
             raise ValueError("Compatibility entries must have unique event types.")
+        event_facts: Tuple[EventFact, ...] = tuple(
+            event_fact
+            for entry in self.entries
+            for event_fact in entry.event_facts
+        )
+        if len(set(event_facts)) != len(event_facts):
+            raise ValueError(
+                "Compatibility entries must assign each event fact only once."
+            )
         return self
 
     def is_compatible(self, event_type: EventType, event_fact: EventFact) -> bool:

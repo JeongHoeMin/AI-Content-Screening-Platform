@@ -46,6 +46,8 @@ EventFact는 EventType 안의 구체적이고 독립적인 사건이다. 초기 
 - EventType과 EventFact의 호환성은 Enum 내부가 아닌 별도 immutable `EventTypeCompatibility`
   table이 소유한다. Parser는 주입된 table로 Fact를 검증하며, 향후 Rule Set 또는 Consumer는
   Domain Enum을 바꾸지 않고 table을 교체할 수 있다.
+- Compatibility 정책은 table별로 교체할 수 있지만, 하나의 table 안에서 각 EventFact는 정확히
+  하나의 EventType에만 귀속된다. 동일 Fact를 여러 Type entry에 등록하면 table 생성이 fail-fast한다.
 - EventType은 event의 주된 Category이며 Fact는 주입된 compatibility table에서 해당 Type과
   호환되어야 한다. 서로 다른 상위 Category의 복합 사건은 Extractor가 별도 NewsEvent로 분리한다.
 - `BANKRUPTCY`를 EventType에 영구 귀속하지 않는다. v1 default table에서만
@@ -105,3 +107,8 @@ feat: add event classification contract
 - EventFact Enum에서 EventType 참조와 호환성 메서드를 제거했다.
 - immutable EventTypeCompatibility table을 추가하고 Parser가 생성자 주입으로 이를 검증하도록
   변경했다. 기본 table과 교체 가능한 table의 동작을 테스트로 고정했다.
+
+### 2026-07-30 — Single fact ownership per table
+
+- Compatibility table validator가 모든 entry의 Fact를 평탄화해, 하나의 table 안에서 같은 Fact가
+  여러 EventType에 귀속되면 fail-fast하도록 보완했다.

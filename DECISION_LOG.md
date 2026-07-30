@@ -319,7 +319,7 @@ EventFact Enum 내부에 Category 호환성을 넣으면 Fact 값과 v1 정책�
 
 ## Decision
 
-EventFact와 EventType은 서로 직접 참조하지 않는 순수 Domain Enum으로 유지한다. immutable `EventTypeCompatibility` table이 호환성 행을 소유하며, Parser는 생성자 주입된 table로 Fact를 검증한다. default table은 v1 규칙을 제공하지만 다른 Consumer는 Enum 변경 없이 별도 table을 사용할 수 있다.
+EventFact와 EventType은 서로 직접 참조하지 않는 순수 Domain Enum으로 유지한다. immutable `EventTypeCompatibility` table이 호환성 행을 소유하며, Parser는 생성자 주입된 table로 Fact를 검증한다. default table은 v1 규칙을 제공하지만 다른 Consumer는 Enum 변경 없이 별도 table을 사용할 수 있다. table은 각 EventFact를 정확히 하나의 EventType에만 등록해야 하며, 중복 Fact 귀속은 table 생성 시 fail-fast한다.
 
 ## Consequences
 

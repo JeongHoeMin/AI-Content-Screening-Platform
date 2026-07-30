@@ -14,6 +14,8 @@ from app.models import (
     DEFAULT_EVENT_TYPE_COMPATIBILITY,
     EventFact,
     EventType,
+    EventTypeCompatibility,
+    EventTypeCompatibilityEntry,
     ExtractedCompany,
     LLMInferenceResult,
     LLMExtractionResult,
@@ -152,3 +154,54 @@ def test_event_type_compatibility_is_independent_of_event_fact_enum() -> None:
     )
 
     assert event.event_facts == (EventFact.FACTORY_EXPANSION,)
+
+
+def test_compatibility_rejects_fact_assigned_to_multiple_event_types() -> None:
+    with pytest.raises(ValidationError):
+        EventTypeCompatibility(
+            entries=(
+                EventTypeCompatibilityEntry(
+                    event_type=EventType.CORPORATE_EVENT,
+                    event_facts=(EventFact.BANKRUPTCY,),
+                ),
+                EventTypeCompatibilityEntry(
+                    event_type=EventType.FINANCIAL_EVENT,
+                    event_facts=(EventFact.BANKRUPTCY,),
+                ),
+            )
+        )
+
+
+def test_compatibility_accepts_distinct_facts_for_distinct_event_types() -> None:
+    compatibility: EventTypeCompatibility = EventTypeCompatibility(
+        entries=(
+            EventTypeCompatibilityEntry(
+                event_type=EventType.CORPORATE_EVENT,
+                event_facts=(EventFact.FACTORY_EXPANSION,),
+            ),
+            EventTypeCompatibilityEntry(
+                event_type=EventType.FINANCIAL_EVENT,
+                event_facts=(EventFact.BANKRUPTCY,),
+            ),
+        )
+    )
+
+    assert compatibility.is_compatible(
+        EventType.CORPORATE_EVENT,
+        EventFact.FACTORY_EXPANSION,
+    )
+    assert compatibility.is_compatible(
+        EventType.FINANCIAL_EVENT,
+        EventFact.BANKRUPTCY,
+    )
+
+
+def test_default_compatibility_assigns_each_fact_once() -> None:
+    default_facts: Tuple[EventFact, ...] = tuple(
+        event_fact
+        for entry in DEFAULT_EVENT_TYPE_COMPATIBILITY.entries
+        for event_fact in entry.event_facts
+    )
+
+    assert len(default_facts) == len(set(default_facts))
+    assert set(default_facts) == set(EventFact)
