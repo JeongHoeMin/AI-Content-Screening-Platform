@@ -134,12 +134,13 @@ class ScreeningWorkflow:
     ]:
         """Project only safe, user-readable analysis observations from node outputs."""
         if node == "extract":
-            inferences = cast(Tuple[object, ...], node_update.get("inferences", ()))
+            inferences = cast(
+                Tuple[LLMInferenceResult, ...],
+                node_update.get("inferences", ()),
+            )
             article_analyses: list[WorkflowArticleAnalysisProgress] = []
             inference_article_ids: set[str] = set()
             for item in inferences:
-                if not isinstance(item, LLMInferenceResult):
-                    continue
                 inference_article_ids.add(item.article.id)
                 for event in item.events:
                     article_id_by_event_id[id(event)] = item.article.id
@@ -153,10 +154,11 @@ class ScreeningWorkflow:
                         event_titles=tuple(event.title for event in item.events),
                     )
                 )
-            evaluations = cast(Tuple[object, ...], state.get("evaluations", ()))
+            evaluations = cast(
+                Tuple[ArticleEvaluationResult, ...],
+                state.get("evaluations", ()),
+            )
             for item in evaluations:
-                if not isinstance(item, ArticleEvaluationResult):
-                    continue
                 if item.article.id in inference_article_ids:
                     continue
                 status_reason: str = (
@@ -175,11 +177,12 @@ class ScreeningWorkflow:
                 )
             return tuple(article_analyses), (), ()
         if node == "screen":
-            decisions = cast(Tuple[object, ...], node_update.get("decisions", ()))
+            decisions = cast(
+                Tuple[ScreeningDecision, ...],
+                node_update.get("decisions", ()),
+            )
             screening_analyses: list[WorkflowScreeningAnalysisProgress] = []
             for item in decisions:
-                if not isinstance(item, ScreeningDecision):
-                    continue
                 article_id: Optional[str] = article_id_by_event_id.get(id(item.event))
                 if article_id is None:
                     continue
@@ -197,13 +200,11 @@ class ScreeningWorkflow:
             return (), tuple(screening_analyses), ()
         if node == "cross_validate":
             validations = cast(
-                Tuple[object, ...],
+                Tuple[CrossValidationResult, ...],
                 node_update.get("cross_validation_results", ()),
             )
             validation_analyses: list[WorkflowValidationAnalysisProgress] = []
             for item in validations:
-                if not isinstance(item, CrossValidationResult):
-                    continue
                 article_id = article_id_by_event_id.get(id(item.event))
                 if article_id is None:
                     continue
