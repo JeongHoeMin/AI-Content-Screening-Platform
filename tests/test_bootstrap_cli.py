@@ -283,6 +283,28 @@ def test_mock_cli_ignores_invalid_openai_environment(
     assert "companies" in payload["recommendation"]
 
 
+def test_mock_cli_writes_opt_in_safe_execution_audit(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    audit_path: Path = tmp_path / "workflow-audit.jsonl"
+
+    exit_code: int = asyncio.run(
+        cli.run(("--input", str(SAMPLE_INPUT), "--mode", "mock", "--audit-log", str(audit_path)))
+    )
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert json.loads(captured.out)["recommendation"]
+    lines: list[str] = audit_path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    audit: dict[str, object] = json.loads(lines[0])
+    assert audit["execution_mode"] == "mock"
+    assert audit["status"] == "succeeded"
+    assert "statistics" in audit
+    assert "Samsung" not in lines[0]
+
+
 def test_cli_returns_execution_error_when_workflow_fails(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

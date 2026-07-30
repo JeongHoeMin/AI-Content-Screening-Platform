@@ -13,6 +13,10 @@ from pydantic import ValidationError
 
 from app.bootstrap import ExecutionMode, create_screening_workflow
 from app.config import ConfigurationError
+from app.harness.execution_audit import (
+    JsonLinesWorkflowExecutionAuditSink,
+    ScreeningExecutionHarness,
+)
 from app.models.article import Article
 from app.workflows import ScreeningResult
 
@@ -52,6 +56,11 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         help="Path to an Article JSON array.",
     )
     parser.add_argument("--mode", default=ExecutionMode.MOCK.value)
+    parser.add_argument(
+        "--audit-log",
+        type=Path,
+        help="Optional JSON Lines path for safe workflow execution audit records.",
+    )
     return parser.parse_args(arguments)
 
 
@@ -114,7 +123,13 @@ async def run(arguments: Sequence[str] | None = None) -> int:
         logger.error("cli_input_failed", error_type=type(error).__name__, error=str(error))
         return int(ExitCode.INPUT_ERROR)
     try:
-        result = await workflow.run(articles)
+        audit_sink = (
+            JsonLinesWorkflowExecutionAuditSink(args.audit_log)
+            if args.audit_log is not None
+            else None
+        )
+        harness = ScreeningExecutionHarness(audit_sink=audit_sink)
+        result = await harness.run(workflow, articles, execution_mode=mode.value)
     except Exception as error:
         logger.error(
             "cli_execution_failed",
