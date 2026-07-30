@@ -22,3 +22,4 @@
 ## 변경 이력
 
 - 2026-07-30: 사용자 요청으로 실제 추천 UI와 LangGraph 진행 관측을 위한 구현 계획을 작성했다.
+- 2026-07-30: LangGraph node completion을 Harness audit와 함께 streaming하고, FastAPI/SSE dashboard 및 Docker 실행 정의를 추가했다.

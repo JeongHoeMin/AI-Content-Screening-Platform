@@ -1,6 +1,6 @@
 # AI Content Screening Platform
 
-## 실제 데이터 수집 실행
+## 웹 대시보드 실행
 
 Docker 실행 환경에 아래 환경변수를 설정한다.
 
@@ -13,7 +13,15 @@ COMPANY_DIRECTORY_MODE=krx_api
 OPENAI_API_KEY=...
 ```
 
-그 다음 아래 명령으로 Naver 뉴스와 OpenDART 공시를 수집해 LLM 관측과 결정적 Policy 기반 종목 추천을 실행한다.
+`.env` 파일에 위 환경변수를 넣은 다음 Docker 서버에서 실행합니다.
+
+```bash
+docker compose up --build -d
+```
+
+`http://<server>:8000`에서 **오늘의 뉴스를 기준으로 추천받기**를 누르면 Naver 뉴스·OpenDART 공시 수집, KRX 종목 스냅샷, LangGraph 노드 진행 상태, 뉴스 카드, Policy 기반 매수·판매 추천을 확인할 수 있습니다.
+
+CLI 실행도 유지됩니다.
 
 ```bash
 screening --collect --mode openai --category "반도체" --period-hours 24 --limit 50

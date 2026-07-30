@@ -241,6 +241,10 @@ def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
     async def dashboard() -> str:
         return _DASHBOARD_HTML
 
+    @app.get("/api/health")
+    async def health() -> Dict[str, str]:
+        return {"status": "ok"}
+
     @app.post("/api/runs")
     async def start_run(request: RecommendationRunRequest) -> Dict[str, str]:
         return {"run_id": await run_manager.start(request)}

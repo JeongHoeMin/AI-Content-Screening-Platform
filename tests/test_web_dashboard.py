@@ -23,3 +23,12 @@ def test_dashboard_rejects_unknown_run() -> None:
     response = client.get("/api/runs/not-found")
 
     assert response.status_code == 404
+
+
+def test_dashboard_health_endpoint_is_ready_without_credentials() -> None:
+    client: TestClient = TestClient(create_web_app())
+
+    response = client.get("/api/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}

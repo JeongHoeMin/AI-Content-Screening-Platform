@@ -1,0 +1,10 @@
+services:
+  dashboard:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      COMPANY_DIRECTORY_MODE: krx_api
+    restart: unless-stopped
