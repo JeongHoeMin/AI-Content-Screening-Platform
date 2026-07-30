@@ -206,10 +206,18 @@ class ScreeningExecutionHarness:
         started_at: datetime = self._clock()
         try:
             result: ScreeningResult
-            if context is None:
-                result = await workflow.run(articles)
+            request_budget = getattr(workflow, "request_budget", None)
+            if request_budget is None:
+                if context is None:
+                    result = await workflow.run(articles)
+                else:
+                    result = await workflow.run(articles, context)
             else:
-                result = await workflow.run(articles, context)
+                with request_budget.execution_scope():
+                    if context is None:
+                        result = await workflow.run(articles)
+                    else:
+                        result = await workflow.run(articles, context)
         except Exception as error:
             finished_at: datetime = self._clock()
             failure: WorkflowExecutionAudit = WorkflowExecutionAudit(

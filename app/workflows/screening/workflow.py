@@ -9,6 +9,7 @@ from app.candidates.candidate_selection_engine import CandidateSelectionEngine
 from app.analyzers.base import ImpactAnalyzer
 from app.evaluators.article_evaluator import ArticleEvaluator
 from app.extractors.base import NewsEventExtractor
+from app.llms.budget import ProviderRequestBudget
 from app.models.article import Article
 from app.models.candidate_selection import CandidateSelectionResult
 from app.models.recommendation import RecommendationResult
@@ -44,6 +45,7 @@ class ScreeningWorkflow:
         scoring_engine: ScoringEngine,
         recommendation_engine: RecommendationEngine,
         candidate_selection_engine: CandidateSelectionEngine,
+        request_budget: Optional[ProviderRequestBudget] = None,
     ) -> None:
         self._graph: CompiledStateGraph = _build_screening_graph(
             evaluator=evaluator,
@@ -58,6 +60,7 @@ class ScreeningWorkflow:
             recommendation_engine=recommendation_engine,
             candidate_selection_engine=candidate_selection_engine,
         )
+        self.request_budget: Optional[ProviderRequestBudget] = request_budget
 
     async def run(
         self,

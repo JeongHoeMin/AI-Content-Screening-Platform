@@ -22,13 +22,15 @@ class OpenAIConfig:
     model: str
     timeout_seconds: float
     max_retries: int
+    max_requests_per_execution: int = 20
 
     def __repr__(self) -> str:
         """Render operational settings without exposing the provider credential."""
         return (
             "OpenAIConfig(api_key='[redacted]', "
             f"model={self.model!r}, timeout_seconds={self.timeout_seconds!r}, "
-            f"max_retries={self.max_retries!r})"
+            f"max_retries={self.max_retries!r}, "
+            f"max_requests_per_execution={self.max_requests_per_execution!r})"
         )
 
 
@@ -61,6 +63,7 @@ def _load_openai_config_from_environment() -> OpenAIConfig:
         model=model,
         timeout_seconds=_load_positive_float("OPENAI_TIMEOUT_SECONDS", 60.0),
         max_retries=_load_non_negative_int("OPENAI_MAX_RETRIES", 2),
+        max_requests_per_execution=_load_positive_int("OPENAI_MAX_REQUESTS_PER_EXECUTION", 20),
     )
 
 
@@ -87,4 +90,11 @@ def _load_non_negative_int(name: str, default: int) -> int:
         raise ConfigurationError(f"{name} must be a non-negative integer.") from error
     if value < 0:
         raise ConfigurationError(f"{name} must be a non-negative integer.")
+    return value
+
+
+def _load_positive_int(name: str, default: int) -> int:
+    value: int = _load_non_negative_int(name, default)
+    if value <= 0:
+        raise ConfigurationError(f"{name} must be a positive integer.")
     return value

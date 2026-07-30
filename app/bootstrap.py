@@ -29,6 +29,7 @@ from app.llms import (
     StructuredOutputLLM,
     create_async_openai_client,
 )
+from app.llms.budget import BudgetedStructuredOutputLLM, ProviderRequestBudget
 from app.models import (
     DEFAULT_RANKING_POLICY_CONFIG,
     DEFAULT_RECOMMENDATION_POLICY_CONFIG,
@@ -118,10 +119,13 @@ def _create_openai_workflow() -> ScreeningWorkflow:
     structured_client: StructuredOutputClient = OpenAIResponsesStructuredOutputClient(
         sdk_client
     )
-    structured_llm: StructuredOutputLLM = OpenAIResponsesStructuredOutputLLM(
+    request_budget: ProviderRequestBudget = ProviderRequestBudget(
+        config.max_requests_per_execution
+    )
+    structured_llm: StructuredOutputLLM = BudgetedStructuredOutputLLM(OpenAIResponsesStructuredOutputLLM(
         client=structured_client,
         model=config.model,
-    )
+    ), request_budget)
     screening_policy: DefaultScreeningPolicy = DefaultScreeningPolicy()
     cross_validation_policy: DefaultCrossValidationPolicy = (
         DefaultCrossValidationPolicy()
@@ -161,6 +165,7 @@ def _create_openai_workflow() -> ScreeningWorkflow:
         candidate_selection_engine=DefaultCandidateSelectionEngine(
             RuleCandidateSelectionPolicy(DEFAULT_RANKING_POLICY_CONFIG)
         ),
+        request_budget=request_budget,
     )
 
 
