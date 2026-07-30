@@ -11,6 +11,7 @@ def write_krx_master_csv(path: Path) -> Path:
         "표준코드,단축코드,한글 종목명,한글 종목약명,영문 종목명,상장일,시장구분\n"
         '"KR7005930003","005930","삼성전자보통주","삼성전자","Samsung Electronics Co., Ltd.","1975/06/11","KOSPI"\n'
         '"KR7035420009","035420","NAVER보통주","NAVER","NAVER Corporation","2002/10/29","KOSPI"\n'
+        '"KR737550K011","37550K","DL이앤씨1우선주","DL이앤씨우","DL E&C CO.","2021/01/25","KOSPI"\n'
     )
     path.write_bytes(content.encode("cp949"))
     return path
@@ -29,6 +30,7 @@ def test_krx_master_csv_directory_preserves_ticker_aliases_and_version(
     assert samsung.ticker == "005930"
     assert directory.find_candidates("삼성전자보통주") == (samsung,)
     assert directory.find_candidates("samsung electronics co., ltd.") == (samsung,)
+    assert directory.find_candidates("DL이앤씨우") == ()
 
 
 def test_krx_master_csv_mode_uses_the_user_source_without_conversion(

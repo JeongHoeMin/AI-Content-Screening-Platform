@@ -7,7 +7,9 @@ from datetime import date
 from io import StringIO
 from pathlib import Path
 from types import MappingProxyType
-from typing import Dict, Iterable, Mapping, Protocol, Sequence, Tuple
+from typing import Dict, Iterable, Mapping, Optional, Protocol, Sequence, Tuple
+
+import structlog
 
 from app.config.errors import ConfigurationError
 from app.models.company_resolution import (
@@ -33,6 +35,8 @@ _KRX_MASTER_COLUMNS: Tuple[str, ...] = (
     "영문 종목명",
     "시장구분",
 )
+
+logger = structlog.get_logger(__name__)
 
 
 class CompanyDirectory(Protocol):
@@ -192,9 +196,14 @@ class KrxMasterCsvCompanyDirectory(StaticCompanyDirectory):
             raise ConfigurationError("KRX master CSV must contain at least one row")
         version: str = cls._version_from_path(path)
         entries: list[CompanyDirectoryEntry] = []
-        for row in rows:
-            entry: CompanyDirectoryEntry = cls._parse_krx_row(row, version)
+        for row_index, row in enumerate(rows):
+            entry: Optional[CompanyDirectoryEntry] = cls._parse_krx_row(row, version)
+            if entry is None:
+                logger.info("krx_master_row_skipped", row_index=row_index)
+                continue
             entries.append(entry)
+        if not entries:
+            raise ConfigurationError("KRX master CSV has no supported common shares")
         try:
             return cls(entries, version=version)
         except ValueError as error:
@@ -213,10 +222,13 @@ class KrxMasterCsvCompanyDirectory(StaticCompanyDirectory):
     def _parse_krx_row(
         row: Mapping[str, str | None],
         version: str,
-    ) -> CompanyDirectoryEntry:
+    ) -> Optional[CompanyDirectoryEntry]:
         try:
             exchange: KRXExchange = KRXExchange((row.get("시장구분") or "").strip())
             canonical_name: str = (row.get("한글 종목약명") or "").strip()
+            ticker: str = (row.get("단축코드") or "").strip()
+            if not re.fullmatch(r"\d{6}", ticker):
+                return None
             aliases: Tuple[str, ...] = tuple(
                 value
                 for value in (
@@ -228,10 +240,10 @@ class KrxMasterCsvCompanyDirectory(StaticCompanyDirectory):
             company: CanonicalCompany = CanonicalCompany(
                 company_id=(row.get("표준코드") or "").strip(),
                 canonical_name=canonical_name,
-                ticker=(row.get("단축코드") or "").strip().zfill(6),
+                ticker=ticker,
                 exchange=exchange,
                 directory_version=version,
             )
             return CompanyDirectoryEntry(company=company, aliases=aliases)
-        except ValueError as error:
-            raise ConfigurationError("KRX master CSV row is invalid") from error
+        except ValueError:
+            return None
