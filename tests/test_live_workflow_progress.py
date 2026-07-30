@@ -46,5 +46,14 @@ def test_live_progress_emits_completed_langgraph_nodes_and_writes_audit(tmp_path
         "select_candidates",
     ]
     assert [event.completed_node_count for event in events] == list(range(1, 11))
+    extract_event: WorkflowProgressEvent = next(
+        event for event in events if event.node == "extract"
+    )
+    screen_event: WorkflowProgressEvent = next(
+        event for event in events if event.node == "screen"
+    )
+    assert len(extract_event.article_analyses) == len(articles)
+    assert all(item.summary for item in extract_event.article_analyses)
+    assert len(screen_event.screening_analyses) == len(result.decisions)
     assert result.statistics.total_articles == len(articles)
     assert len(audit_path.read_text(encoding="utf-8").splitlines()) == 1

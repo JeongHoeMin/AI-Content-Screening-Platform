@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Tuple
+from typing import Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -9,6 +9,43 @@ from app.models.candidate_selection import CandidateSelectionResult
 from app.models.screening import ScreeningDecision
 from app.models.cross_validation import CrossValidationResult
 from app.models.resolved_news_event import ResolvedNewsEvent
+
+
+class WorkflowArticleAnalysisProgress(BaseModel):
+    """Safe extraction summary for one article in a live workflow consumer."""
+
+    model_config = ConfigDict(frozen=True)
+
+    article_id: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    source: str = Field(min_length=1)
+    summary: str = Field(min_length=1)
+    reasoning: str = Field(min_length=1)
+    event_titles: Tuple[str, ...] = ()
+
+
+class WorkflowScreeningAnalysisProgress(BaseModel):
+    """Safe screening observation correlated to its source article."""
+
+    model_config = ConfigDict(frozen=True)
+
+    article_id: str = Field(min_length=1)
+    event_title: str = Field(min_length=1)
+    decision: str = Field(min_length=1)
+    relevance: int = Field(ge=0, le=100)
+    importance: int = Field(ge=0, le=100)
+    credibility: int = Field(ge=0, le=100)
+    reasons: Tuple[str, ...] = ()
+
+
+class WorkflowValidationAnalysisProgress(BaseModel):
+    """Safe cross-validation status correlated to its source article."""
+
+    model_config = ConfigDict(frozen=True)
+
+    article_id: str = Field(min_length=1)
+    event_title: str = Field(min_length=1)
+    status: str = Field(min_length=1)
 
 
 class WorkflowContext(BaseModel):
@@ -25,6 +62,9 @@ class WorkflowProgressEvent(BaseModel):
     node: str = Field(min_length=1)
     completed_node_count: int = Field(ge=1)
     output_keys: Tuple[str, ...]
+    article_analyses: Tuple[WorkflowArticleAnalysisProgress, ...] = ()
+    screening_analyses: Tuple[WorkflowScreeningAnalysisProgress, ...] = ()
+    validation_analyses: Tuple[WorkflowValidationAnalysisProgress, ...] = ()
 
 
 class WorkflowStatistics(BaseModel):

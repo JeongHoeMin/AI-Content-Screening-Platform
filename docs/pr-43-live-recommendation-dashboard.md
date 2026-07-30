@@ -32,3 +32,4 @@
 - 2026-07-30: 보충 event가 screening 단계에 도달하면서 OpenAI가 `BadRequestError`를 반환했다. 원인은 transport DTO의 `reasons: List[object]`가 OpenAI structured output에서 type 없는 JSON schema(`items: {}`)로 생성되는 것이므로, Parser가 허용하던 malformed primitive 범위는 유지하면서 명시적 primitive union schema로 바꾼다.
 - 2026-07-31: 실제 페이지의 빈 뉴스·추천 영역을 재현했다. 브라우저 요청이 기본 limit 50으로 소스별 50건(총 100건)을 처리해 완료 전 빈 화면이 지속됐다. 대시보드 기본 실행은 소스별 3건으로 제한하고, 실행 중 중복 요청을 막으며 실패·빈 결과를 명시적으로 표시한다. 수집/LLM/Policy 책임은 변경하지 않는다.
 - 2026-07-31: 소량 실행은 screen 단계까지 진행했지만 cross-validation response DTO의 claims/reasons가 `List[object]`라서 OpenAI structured-output schema가 거부됐다. Parser의 malformed primitive 관측은 유지하며, 세 목록을 typed primitive union으로 전환한다.
+- 2026-07-31: 모든 수집 뉴스의 분석 결과를 실시간으로 보여 달라는 요청에 따라, 수집 직후에는 전체 뉴스 목록을 표시하고 extract·screen·cross-validation node 완료 시 해당 기사 카드에 안전한 요약, event, 점수·결정, 검증 상태를 누적한다. SSE에는 원문·prompt·secret·raw provider 응답을 보내지 않는다.

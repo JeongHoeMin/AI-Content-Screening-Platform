@@ -13,6 +13,8 @@ from app.extractors.base import NewsEventExtractor
 from app.llms.budget import ProviderRequestBudget
 from app.models.article import Article
 from app.models.candidate_selection import CandidateSelectionResult
+from app.models.cross_validation import CrossValidationResult
+from app.models.llm_inference import LLMInferenceResult
 from app.models.recommendation import RecommendationResult
 from app.models.screening import ScreeningDecision
 from app.recommenders.recommendation_engine import RecommendationEngine
@@ -24,9 +26,12 @@ from app.cross_validators.base import CrossValidator
 from app.workflows.screening.graph import _build_screening_graph
 from app.workflows.screening.result import (
     ScreeningResult,
+    WorkflowArticleAnalysisProgress,
     WorkflowContext,
     WorkflowProgressEvent,
+    WorkflowScreeningAnalysisProgress,
     WorkflowStatistics,
+    WorkflowValidationAnalysisProgress,
 )
 from app.workflows.screening.state import ScreeningState
 
@@ -87,20 +92,106 @@ class ScreeningWorkflow:
             context = WorkflowContext()
         state: dict[str, object] = {"articles": articles, "context": context}
         completed_node_count: int = 0
+        article_id_by_event_id: dict[int, str] = {}
         async for update in self._graph.astream(state, stream_mode="updates"):
             for node, node_update in update.items():
                 if not isinstance(node_update, Mapping):
                     raise ValueError("LangGraph node update must be a mapping")
                 state.update(node_update)
                 completed_node_count += 1
+                (
+                    article_analyses,
+                    screening_analyses,
+                    validation_analyses,
+                ) = self._analysis_progress(
+                    node,
+                    node_update,
+                    article_id_by_event_id,
+                )
                 await progress_callback(
                     WorkflowProgressEvent(
                         node=node,
                         completed_node_count=completed_node_count,
                         output_keys=tuple(sorted(str(key) for key in node_update)),
+                        article_analyses=article_analyses,
+                        screening_analyses=screening_analyses,
+                        validation_analyses=validation_analyses,
                     )
                 )
         return self._result_from_final_state(state)
+
+    @staticmethod
+    def _analysis_progress(
+        node: str,
+        node_update: Mapping[str, object],
+        article_id_by_event_id: dict[int, str],
+    ) -> tuple[
+        Tuple[WorkflowArticleAnalysisProgress, ...],
+        Tuple[WorkflowScreeningAnalysisProgress, ...],
+        Tuple[WorkflowValidationAnalysisProgress, ...],
+    ]:
+        """Project only safe, user-readable analysis observations from node outputs."""
+        if node == "extract":
+            inferences = cast(Tuple[object, ...], node_update.get("inferences", ()))
+            article_analyses: list[WorkflowArticleAnalysisProgress] = []
+            for item in inferences:
+                if not isinstance(item, LLMInferenceResult):
+                    continue
+                for event in item.events:
+                    article_id_by_event_id[id(event)] = item.article.id
+                article_analyses.append(
+                    WorkflowArticleAnalysisProgress(
+                        article_id=item.article.id,
+                        title=item.article.title,
+                        source=item.article.source,
+                        summary=item.summary,
+                        reasoning=item.reasoning,
+                        event_titles=tuple(event.title for event in item.events),
+                    )
+                )
+            return tuple(article_analyses), (), ()
+        if node == "screen":
+            decisions = cast(Tuple[object, ...], node_update.get("decisions", ()))
+            screening_analyses: list[WorkflowScreeningAnalysisProgress] = []
+            for item in decisions:
+                if not isinstance(item, ScreeningDecision):
+                    continue
+                article_id: Optional[str] = article_id_by_event_id.get(id(item.event))
+                if article_id is None:
+                    continue
+                screening_analyses.append(
+                    WorkflowScreeningAnalysisProgress(
+                        article_id=article_id,
+                        event_title=item.event.title,
+                        decision=item.decision.value,
+                        relevance=item.relevance,
+                        importance=item.importance,
+                        credibility=item.credibility,
+                        reasons=item.reasons,
+                    )
+                )
+            return (), tuple(screening_analyses), ()
+        if node == "cross_validate":
+            validations = cast(
+                Tuple[object, ...],
+                node_update.get("cross_validation_results", ()),
+            )
+            validation_analyses: list[WorkflowValidationAnalysisProgress] = []
+            for item in validations:
+                if not isinstance(item, CrossValidationResult):
+                    continue
+                article_id = article_id_by_event_id.get(id(item.event))
+                if article_id is None:
+                    continue
+                validation_analyses.append(
+                    WorkflowValidationAnalysisProgress(
+                        article_id=article_id,
+                        event_title=item.event.title,
+                        status=item.status.value,
+                    )
+                )
+            return (), (), tuple(validation_analyses)
+        return (), (), ()
 
     def _result_from_final_state(
         self,
