@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-from typing import Tuple
-
-from app.models.recommendation import CompanyRecommendation, RecommendationResult
+from app.models.recommendation import RecommendationResult
 from app.models.scoring import ScoringResult
 from app.recommenders.recommendation_engine import RecommendationEngine
 from app.recommenders.recommendation_policy import RecommendationPolicy
@@ -13,13 +11,12 @@ class DefaultRecommendationEngine(RecommendationEngine):
 
     Every recommendation decision belongs to the configured
     RecommendationPolicy; the engine owns only orchestration and result
-    assembly. It never evaluates recommendation rules directly and preserves
-    the policy-returned tuple without copying or reordering it.
+    assembly. It never evaluates recommendation rules directly and returns the
+    exact RecommendationResult instance produced by its policy.
     """
 
     def __init__(self, policy: RecommendationPolicy) -> None:
         self._policy: RecommendationPolicy = policy
 
     def recommend(self, scoring: ScoringResult) -> RecommendationResult:
-        companies: Tuple[CompanyRecommendation, ...] = self._policy.recommend(scoring)
-        return RecommendationResult(companies=companies)
+        return self._policy.recommend(scoring)

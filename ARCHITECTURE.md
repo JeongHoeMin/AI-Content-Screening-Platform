@@ -20,6 +20,11 @@ LangGraph ScreeningWorkflow / Harness / CLI Bootstrap
 
 `app/models/`는 외부 계층을 모르는 immutable Pydantic Domain 모델을 둔다. `NewsEvent`는 필수 상위 EventType과 선택적 독립 EventFact tuple을 보존하며, Parser가 LLM transport를 검증한다. `app/analyzers/`의 exhaustive Rule Catalog는 Fact별 direction/reason을 소유하고, Policy는 eligibility만 소유한다. `app/aggregators/`의 adapter가 eligible observation을 하나씩 기존 scoring evidence로 변환한다. `app/scorers/`의 Config/Catalog는 direction weight를 소유하고 Strategy는 contribution provenance가 포함된 final ScoringResult를 만든다. `app/core/`는 Skill request/result/error/metadata와 공통 예외 계약을 둔다. 상위 계층은 하위의 추상 인터페이스에 의존하며, Domain 모델은 OpenAI SDK, LangGraph, CLI를 import하지 않는다.
 
+`app/recommenders/`는 `RecommendationPolicyConfig` 하나를 주입받아 score threshold를 해석한다. threshold 값의
+유효성은 `RecommendationThresholdSnapshot` Domain Value가 소유하고, Policy는 `RecommendationDecision`과
+result-level policy version을 생성한다. Engine은 Policy 결과를 재조립하지 않는다. CLI adapter만 내부 explainability
+필드를 legacy JSON schema로 변환하므로 Domain policy와 외부 표현의 책임이 분리된다.
+
 ## 주요 구성 요소
 
 | 경계 | 책임 | 현재 구현 위치 |

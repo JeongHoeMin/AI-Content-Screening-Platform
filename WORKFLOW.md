@@ -12,6 +12,11 @@ Article
   → Analyze → Aggregate → Score → Recommend → WorkflowResult / CLI JSON
 ```
 
+`Recommend` 노드는 하나의 `ScoringResult`를 `RecommendationPolicy`에 전달한다. Policy는 threshold snapshot,
+reason code, action을 포함한 final immutable `RecommendationResult`를 만들고, Engine은 이를 정확히 한 번 호출해
+같은 객체 identity로 반환한다. CLI는 workflow result 직렬화 경계에서만 Decision을 기존 recommendation JSON
+schema로 투영하며 Policy provenance를 외부 schema에 추가하지 않는다.
+
 ## 노드 계약 형식
 
 아래의 모든 실행 노드는 같은 여섯 개 계약 필드를 사용한다.

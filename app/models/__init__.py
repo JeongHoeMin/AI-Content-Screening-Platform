@@ -74,8 +74,15 @@ from app.models.resolve import ResolveDecision
 from app.models.raw_post import RawDcInsidePost, RawPost, RawRedditPost
 from app.models.recommendation import (
     CompanyRecommendation,
+    DEFAULT_RECOMMENDATION_POLICY_CONFIG,
+    DEFAULT_RECOMMENDATION_THRESHOLD_SNAPSHOT,
     Recommendation,
+    RecommendationAction,
+    RecommendationDecision,
+    RecommendationPolicyConfig,
+    RecommendationReasonCode,
     RecommendationResult,
+    RecommendationThresholdSnapshot,
 )
 from app.models.screen_posts import (
     PostEvaluationResult,
@@ -140,6 +147,8 @@ __all__ = [
     "CompanyRecommendation",
     "CompanyRelation",
     "CompanyScore",
+    "DEFAULT_RECOMMENDATION_POLICY_CONFIG",
+    "DEFAULT_RECOMMENDATION_THRESHOLD_SNAPSHOT",
     "DirectionScoreCatalog",
     "DirectionScoreEntry",
     "ScoreContribution",
@@ -191,7 +200,12 @@ __all__ = [
     "TickerResolvedEvent",
     "ResolveDecision",
     "Recommendation",
+    "RecommendationAction",
+    "RecommendationDecision",
+    "RecommendationPolicyConfig",
+    "RecommendationReasonCode",
     "RecommendationResult",
+    "RecommendationThresholdSnapshot",
     "ScreeningResult",
     "ScreenPostsData",
     "ScreenPostsMetadata",

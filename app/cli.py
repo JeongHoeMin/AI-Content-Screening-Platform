@@ -6,7 +6,7 @@ import json
 import sys
 from enum import IntEnum
 from pathlib import Path
-from typing import Sequence, Tuple
+from typing import Any, Sequence, Tuple
 
 import structlog
 from pydantic import ValidationError
@@ -83,8 +83,20 @@ def _load_articles(path: Path) -> Tuple[Article, ...]:
 
 
 def _serialize_result(result: ScreeningResult) -> str:
-    """Keep internal company-resolution metadata out of the public CLI schema."""
-    payload: object = result.model_dump(mode="json", exclude=_INTERNAL_RESOLUTION_FIELDS)
+    """Keep internal metadata and explainability fields out of the CLI schema."""
+    payload: dict[str, Any] = result.model_dump(
+        mode="json",
+        exclude=_INTERNAL_RESOLUTION_FIELDS,
+    )
+    payload["recommendation"] = {
+        "companies": [
+            {
+                "score": decision.company_score.model_dump(mode="json"),
+                "recommendation": decision.action.value,
+            }
+            for decision in result.recommendation.decisions
+        ]
+    }
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 

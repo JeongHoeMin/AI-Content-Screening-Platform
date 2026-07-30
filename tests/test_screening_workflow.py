@@ -11,6 +11,7 @@ from app.analyzers import ImpactAnalyzer
 from app.evaluators import ArticleEvaluator
 from app.extractors import NewsEventExtractor
 from app.models import (
+    DEFAULT_RECOMMENDATION_POLICY_CONFIG,
     Article,
     ArticleEvaluationResult,
     CompanyRelation,
@@ -235,7 +236,10 @@ class FakeScoringEngine(ScoringEngine):
 class FakeRecommendationEngine(RecommendationEngine):
     def __init__(self) -> None:
         self.calls: List[ScoringResult] = []
-        self.result: RecommendationResult = RecommendationResult(companies=())
+        self.result: RecommendationResult = RecommendationResult(
+            policy_version=DEFAULT_RECOMMENDATION_POLICY_CONFIG.policy_version,
+            decisions=(),
+        )
 
     def recommend(self, scoring: ScoringResult) -> RecommendationResult:
         self.calls.append(scoring)

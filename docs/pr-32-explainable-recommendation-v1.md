@@ -221,3 +221,11 @@ feat: add explainable recommendation decisions
 - threshold finite/order validator를 `RecommendationThresholdSnapshot`에 귀속하고, Config는 policy
   version과 검증된 Snapshot을 조립하는 단일 진입점으로만 제한했다.
 - Snapshot 단독 fail-fast와 Config의 blank version 검증을 별도 테스트 계약으로 분리했다.
+
+### 2026-07-30 — Implementation completed
+
+- immutable Pydantic Recommendation Domain, ordered threshold validator, action별 reason code와 decision
+  consistency validator를 구현했다.
+- Policy가 final `RecommendationResult`를 생성하고 Engine이 동일 객체를 반환하도록 전환했다.
+- CLI 직렬화 경계에서만 Decision을 기존 `companies[].score`와 `companies[].recommendation` JSON shape로
+  투영해 외부 schema를 유지했다.

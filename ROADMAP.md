@@ -116,21 +116,21 @@ score factor, 가중치, 경계값이 명시적 Policy로 관리되고 같은 �
 
 scoring factor contract, aggregation strategy, 설정 가능한 Policy, 회귀 테스트와 설명 가능한 score breakdown.
 
-# Phase 8 — Portfolio Recommendation
+# Phase 8 — Explainable Recommendation
 
-**Status:** Planned
+**Status:** Completed
 
 ## 목적
 
-종목 점수를 사용자에게 이해 가능한 buy/watch/caution 관찰과 포트폴리오 수준 제약으로 연결한다.
+종목 점수를 기존 다섯 recommendation action으로 연결하고, 결정된 action의 정책 근거를 immutable Domain으로 보존한다.
 
 ## 완료 조건
 
-추천은 근거·불확실성·위험 제약을 함께 설명하고 자동 거래를 수행하지 않는다.
+기존 threshold boundary 및 CLI JSON schema를 유지하면서 action·reason code·threshold snapshot을 설명 가능하게 보존한다.
 
 ## 산출물
 
-recommendation Policy, risk/profile input model, portfolio constraint strategy, 사용자 출력과 제품 고지.
+explainable recommendation policy, threshold snapshot, result-level policy provenance, regression tests.
 
 # Phase 9 — 운영 안정성 및 자동화
 

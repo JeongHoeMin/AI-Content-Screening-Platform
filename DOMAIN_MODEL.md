@@ -96,6 +96,20 @@ company, score, contributions만 저장하고, `evidences`는 contribution impac
 policy version은 회사별 값이 아니라 실행 단위 provenance이므로 ScoringResult만 보관한다.
 `DefaultScoringEngine`은 Strategy 결과를 변경·복사·재조립하지 않고 동일 객체를 반환한다.
 
+## Recommendation 계약
+
+`RecommendationThresholdSnapshot`은 strong-buy, buy, sell, strong-sell 네 threshold를 가진 immutable
+Domain Value다. 모든 값은 finite float이고 `strong_sell < sell < buy < strong_buy`를 Snapshot 단독 validator가
+강제한다. `RecommendationPolicyConfig`는 nonblank policy version과 검증된 Snapshot만 소유하는 단일 정책
+입력이다.
+
+`RecommendationDecision`은 Policy가 하나의 `CompanyScore`에 대해 만든 immutable 결과이며,
+`company_score`, action, action별 reason code, threshold snapshot을 원자적으로 보관한다. score는 중복 저장하지
+않고 `company_score.score` property로 노출한다. validator는 score 구간, action, reason code, snapshot이 실제
+ordered threshold 정책과 일치하는지 fail-fast한다. `RecommendationResult`는 실행 단위 policy version과
+decision tuple만 저장하며, 기존 `companies` access는 decisions를 반환하는 read-only compatibility property다.
+CLI는 이 내부 Decision을 기존 `companies[].score`/`companies[].recommendation` schema로만 투영한다.
+
 ## Policy 경계
 
 Policy는 검증된 Domain 입력을 받아 결정만 반환한다. Policy는 Prompt·LLM·DB·네트워크를 호출하지 않는다. 점수 임계값, cross-validation 상태, resolve 결론, stock score, recommendation은 Policy/strategy가 소유하며 transport 오류나 model 편차에 의해 직접 바뀌지 않아야 한다.

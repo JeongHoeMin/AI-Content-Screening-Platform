@@ -1,76 +1,42 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Final, Tuple
 
-from app.models.recommendation import CompanyRecommendation, Recommendation
+from app.models.recommendation import (
+    DEFAULT_RECOMMENDATION_POLICY_CONFIG,
+    RecommendationDecision,
+    RecommendationPolicyConfig,
+    RecommendationResult,
+    RecommendationThresholdSnapshot,
+)
 from app.models.scoring import CompanyScore, ScoringResult
 from app.recommenders.recommendation_policy import RecommendationPolicy
 
 
 @dataclass(frozen=True)
-class _RecommendationRule:
-    """Internal rule that decides whether the supplied score belongs to it.
-
-    The predicate encapsulates all threshold and boundary semantics. The
-    recommendation algorithm only invokes the predicate and never interprets
-    thresholds, inclusive or exclusive bounds, or intervals directly.
-    """
-
-    recommendation: Recommendation
-    predicate: Callable[[float], bool]
-
-
-def _is_strong_buy(score: float) -> bool:
-    return score >= 2.0
-
-
-def _is_buy(score: float) -> bool:
-    return score >= 1.0
-
-
-def _is_hold(score: float) -> bool:
-    return score > -1.0
-
-
-def _is_sell(score: float) -> bool:
-    return score > -2.0
-
-
-_RULES: Final[Tuple[_RecommendationRule, ...]] = (
-    _RecommendationRule(Recommendation.STRONG_BUY, _is_strong_buy),
-    _RecommendationRule(Recommendation.BUY, _is_buy),
-    _RecommendationRule(Recommendation.HOLD, _is_hold),
-    _RecommendationRule(Recommendation.SELL, _is_sell),
-)
-
-
-@dataclass(frozen=True)
 class RuleRecommendationPolicy(RecommendationPolicy):
-    """Immutable deterministic policy that evaluates ordered score rules.
+    """Deterministically creates immutable, explainable recommendation decisions."""
 
-    Rules are evaluated from top to bottom, and the first matching rule wins.
-    Their order is therefore part of the current policy.
-    """
+    config: RecommendationPolicyConfig = DEFAULT_RECOMMENDATION_POLICY_CONFIG
 
-    def recommend(
-        self,
-        scoring: ScoringResult,
-    ) -> Tuple[CompanyRecommendation, ...]:
-        return tuple(
-            self._recommend_company(score) for score in scoring.companies
+    def recommend(self, scoring: ScoringResult) -> RecommendationResult:
+        decisions: tuple[RecommendationDecision, ...] = tuple(
+            self._recommend_company(company_score)
+            for company_score in scoring.companies
+        )
+        return RecommendationResult(
+            policy_version=self.config.policy_version,
+            decisions=decisions,
         )
 
-    def _recommend_company(self, score: CompanyScore) -> CompanyRecommendation:
-        """Create one decision while preserving the supplied score identity."""
-        return CompanyRecommendation(
-            score=score,
-            recommendation=self._select_recommendation(score.score),
+    def _recommend_company(self, company_score: CompanyScore) -> RecommendationDecision:
+        action, reason_code = RecommendationDecision._expected_evaluation(
+            company_score.score,
+            self.config.threshold_snapshot,
         )
-
-    @staticmethod
-    def _select_recommendation(score: float) -> Recommendation:
-        for rule in _RULES:
-            if rule.predicate(score):
-                return rule.recommendation
-        return Recommendation.STRONG_SELL
+        return RecommendationDecision(
+            company_score=company_score,
+            action=action,
+            reason_code=reason_code,
+            threshold_snapshot=self.config.threshold_snapshot,
+        )

@@ -379,3 +379,30 @@ DefaultScoringEngine은 같은 객체를 반환한다. policy version은 result�
 
 direction score의 정책과 근거가 감사 가능해지고, recommendation은 기존 float score contract를 계속
 소비한다. event fact, validation, uncertainty는 현재 scoring 입력이 아니므로 가중치에 사용하지 않는다.
+
+# ADR-017
+
+## Title
+
+Recommendation은 threshold snapshot을 포함한 immutable decision을 생성한다.
+
+## Status
+
+Accepted
+
+## Context
+
+기존 recommendation은 action만 남겨 동일 score가 어떤 threshold 정책으로 판단되었는지 감사할 수 없었다.
+반면 CLI JSON schema를 곧바로 확장하면 기존 소비자와의 호환이 깨진다.
+
+## Decision
+
+Policy는 strict ordered `RecommendationThresholdSnapshot`을 가진 Config를 주입받고 CompanyScore마다
+action·reason code·snapshot을 보존하는 `RecommendationDecision`을 만든다. `RecommendationResult`는
+policy version과 decision tuple을 소유하며 Engine은 Policy 반환 객체를 그대로 전달한다. CLI adapter는
+Decision을 기존 score/recommendation JSON shape로 투영하고 explainability provenance는 internal Domain에 둔다.
+
+## Consequences
+
+추천 결과는 정책 근거를 잃지 않으면서 CLI public contract를 유지한다. reason code나 threshold를 외부에 노출하는
+새 API/CLI schema는 별도 버전의 후속 작업으로 다룬다.

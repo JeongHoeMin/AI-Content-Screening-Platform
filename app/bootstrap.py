@@ -29,6 +29,7 @@ from app.llms import (
     create_async_openai_client,
 )
 from app.models import (
+    DEFAULT_RECOMMENDATION_POLICY_CONFIG,
     DEFAULT_SCORING_POLICY_CONFIG,
     BatchCrossValidationConfig,
     BatchExtractionConfig,
@@ -94,7 +95,9 @@ def _create_mock_workflow() -> ScreeningWorkflow:
         scoring_engine=DefaultScoringEngine(
             EvidenceAwareScoringStrategy(DEFAULT_SCORING_POLICY_CONFIG)
         ),
-        recommendation_engine=DefaultRecommendationEngine(RuleRecommendationPolicy()),
+        recommendation_engine=DefaultRecommendationEngine(
+            RuleRecommendationPolicy(DEFAULT_RECOMMENDATION_POLICY_CONFIG)
+        ),
     )
 
 
@@ -147,7 +150,9 @@ def _create_openai_workflow() -> ScreeningWorkflow:
         scoring_engine=DefaultScoringEngine(
             EvidenceAwareScoringStrategy(DEFAULT_SCORING_POLICY_CONFIG)
         ),
-        recommendation_engine=DefaultRecommendationEngine(RuleRecommendationPolicy()),
+        recommendation_engine=DefaultRecommendationEngine(
+            RuleRecommendationPolicy(DEFAULT_RECOMMENDATION_POLICY_CONFIG)
+        ),
     )
 
 
