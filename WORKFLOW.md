@@ -300,6 +300,9 @@ Input → Output → Failure → Retry → Owner → Responsibility
 ### Responsibility
 
 - 검증된 aggregation을 명시적인 규칙으로 종목 점수로 변환한다.
+- Strategy는 Config와 evidence contribution으로 최종 `ScoringResult`를 만들며, Engine은 동일 객체를
+  그대로 반환한다. score evidence는 `ScoreContribution`으로 보존하고 score는 contribution 합과 일치한다.
+- `ScoringResult.policy_version`은 이번 scoring 실행에 사용한 policy provenance를 보관한다.
 - LLM 출력만으로 점수 또는 매수 결론을 만들지 않는다.
 
 ## Recommend

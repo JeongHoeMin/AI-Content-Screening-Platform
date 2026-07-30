@@ -20,7 +20,7 @@ PR31은 기존 `EvidenceAggregation → ScoringResult → RecommendationResult` 
 - `CompanyScore`에는 contribution breakdown만 저장하고, 기존 `evidences`는 contribution에서 계산하는
   read-only property로 제공한다. score가 contribution 합과 일치하도록 validator로 고정한다.
 - 새 deterministic `EvidenceAwareScoringStrategy`가 contribution을 만들고 합산하며,
-  `DefaultScoringEngine`은 Strategy 결과를 조립만 하도록 유지한다.
+  `DefaultScoringEngine`은 Strategy가 만든 동일 결과를 그대로 반환한다.
 - Bootstrap은 완성된 `ScoringPolicyConfig` 하나를 Strategy에 명시적으로 주입한다.
 - PR31, Domain, Workflow, Architecture, ADR 및 scoring 테스트를 실제 계약에 맞춰 갱신한다.
 
@@ -41,8 +41,8 @@ PR31은 기존 `EvidenceAggregation → ScoringResult → RecommendationResult` 
 - 따라서 PR31의 Scoring 입력인 `CompanyEvidence.impacts`는 company와 direction만 보장한다.
   PR30 snapshot의 `event_fact`, `uncertainty`, `reason_code`, validation 상태는 현재 scoring 경계의
   입력이 아니다.
-- 현재 `RuleScoringStrategy`는 direction별 숫자를 내부 mapping으로 관리하고, `CompanyScore`는
-  float 합계와 원본 evidence tuple만 보관한다.
+- PR31 이전 `RuleScoringStrategy`는 direction별 숫자를 내부 mapping으로 관리하고, `CompanyScore`는
+  float 합계와 원본 evidence tuple만 보관했다.
 - Recommendation은 `CompanyScore.score`만 Policy 경계값으로 해석한다. PR31 default weight는 기존
   결과를 유지해야 하므로 positive `+1.0`, negative `-1.0`, neutral/unknown `0.0`이다.
 
@@ -170,10 +170,10 @@ ScoringResult
 existing RecommendationPolicy
 ```
 
-- `ScoringStrategy.score()`는 모든 `CompanyEvidence`에 순서대로 정확히 하나의 `CompanyScore`를
-  반환한다.
-- `DefaultScoringEngine`은 injected strategy를 한 번 호출하고 그 tuple을 복사·정렬·filtering 없이
-  `ScoringResult`에 보관한다.
+- `ScoringStrategy.score()`는 모든 `CompanyEvidence`에 순서대로 정확히 하나의 `CompanyScore`를 담은
+  최종 immutable `ScoringResult`를 생성한다.
+- `DefaultScoringEngine`은 injected strategy를 정확히 한 번 호출하고 반환된 `ScoringResult` 객체를
+  복사·재조립·정렬·filtering 없이 동일 identity로 반환한다.
 - `EvidenceAwareScoringStrategy`는 `ScoringPolicyConfig` 하나만 주입받고 network, LLM, Prompt, Directory, database, cache를 호출하지
   않는다.
 - malformed Catalog는 recoverable item error가 아니라 configuration error이므로 전파한다.
@@ -212,8 +212,8 @@ existing RecommendationPolicy
 
 ### Regression
 
-- default Config에서 기존 `RuleScoringStrategy`의 score와 새 strategy의 score가 동일하고,
-  `ScoringResult`가 configured policy version을 보존하는지 검증한다.
+- default Config의 direction score가 기존 기본값과 동일하고, `ScoringResult`가 configured policy
+  version을 보존하는지 검증한다.
 - existing `RecommendationPolicy`의 모든 threshold 경계 결과가 동일 score에서 바뀌지 않는지 검증한다.
 - Resolve → Analyze → Aggregate → Score → Recommend workflow의 event/company ordering과 current public
   result contract를 회귀 검증한다.
@@ -256,3 +256,10 @@ feat: add explainable stock scoring
 
 - policy version은 회사별 속성이 아니라 하나의 scoring 실행 정책이므로 `ScoringResult`만 소유하도록
   계약을 수정했다. CompanyScore와 ScoringResult 사이의 중복·불일치 불변식은 만들지 않는다.
+
+### 2026-07-30 — Implementation completed
+
+- exhaustive direction Catalog와 단일 `ScoringPolicyConfig`, atomic `ScoreContribution`, contribution 기반
+  CompanyScore 및 result-level policy provenance를 구현했다.
+- Strategy가 최종 `ScoringResult`를 생성하고 Engine이 동일 객체를 그대로 반환하도록 scoring interface를
+  전환했다. Bootstrap의 Mock/OpenAI 경로는 같은 default config를 사용한다.

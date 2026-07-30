@@ -80,6 +80,22 @@ Direction은 versioned Impact Rule Catalog의 등록된 Fact, Direction, Reason 
 
 `ImpactPolicy`는 observation의 허용·제외와 downstream 전달 여부만 결정하는 filtering 계층이다. `ImpactEvaluation`은 observation과 eligibility를 함께 보관하며, eligible이면 reason이 null, ineligible이면 하나의 Policy 전용 `exclusion_reason`을 가진다. 우선순위는 `EVENT_REJECTED` → `EVENT_REVIEW_NOT_VERIFIED` → `COMPANY_NOT_RESOLVED` → `COMPANY_IDENTITY_MISSING` → `UNSUPPORTED_SCOPE` → `UNKNOWN_DIRECTION`이다. Policy는 Strategy observation의 identity와 순서를 유지하며 `direction`, `scope`, `reason_code`, `uncertainty`, company reference를 수정·교체·삭제하지 않는다. Aggregation adapter는 eligible evaluation의 observation 하나를 CompanyImpact 하나로 변환하며 병합·상쇄하지 않는다.
 
+## Stock Scoring 계약
+
+Scoring은 `EvidenceAggregation`의 `CompanyImpact(company, direction)`만 소비한다. immutable
+`DirectionScoreCatalog`는 모든 `ImpactDirection`을 정확히 한 번 등록하고, `ScoringPolicyConfig`는
+policy version, finite weight range, Catalog를 소유하는 유일한 정책 입력이다. Catalog 중복·누락,
+non-finite 또는 범위 밖 weight는 fail-fast한다.
+
+`ScoreContribution`은 원본 CompanyImpact와 factor, weight, value, reason code를 원자적으로 보존한다.
+v1에서 value는 weight와 같으며 모든 evidence는 하나의 contribution으로 남는다. `CompanyScore`는
+company, score, contributions만 저장하고, `evidences`는 contribution impact를 원래 순서·객체 identity로
+노출하는 read-only property다. score는 contribution value의 `math.fsum`과 일치해야 한다.
+
+`EvidenceAwareScoringStrategy`는 Config로부터 최종 immutable `ScoringResult`를 생성한다.
+policy version은 회사별 값이 아니라 실행 단위 provenance이므로 ScoringResult만 보관한다.
+`DefaultScoringEngine`은 Strategy 결과를 변경·복사·재조립하지 않고 동일 객체를 반환한다.
+
 ## Policy 경계
 
 Policy는 검증된 Domain 입력을 받아 결정만 반환한다. Policy는 Prompt·LLM·DB·네트워크를 호출하지 않는다. 점수 임계값, cross-validation 상태, resolve 결론, stock score, recommendation은 Policy/strategy가 소유하며 transport 오류나 model 편차에 의해 직접 바뀌지 않아야 한다.

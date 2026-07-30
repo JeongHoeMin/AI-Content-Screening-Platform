@@ -84,7 +84,18 @@ from app.models.screen_posts import (
     ScreenPostsMetadata,
     ScreenPostsRequest,
 )
-from app.models.scoring import CompanyScore, ScoringResult
+from app.models.scoring import (
+    DEFAULT_DIRECTION_SCORE_CATALOG,
+    DEFAULT_SCORING_POLICY_CONFIG,
+    CompanyScore,
+    DirectionScoreCatalog,
+    DirectionScoreEntry,
+    ScoreContribution,
+    ScoreFactor,
+    ScoreReasonCode,
+    ScoringPolicyConfig,
+    ScoringResult,
+)
 from app.models.screening import (
     BatchScreeningConfig,
     ScreeningAssessment,
@@ -129,6 +140,12 @@ __all__ = [
     "CompanyRecommendation",
     "CompanyRelation",
     "CompanyScore",
+    "DirectionScoreCatalog",
+    "DirectionScoreEntry",
+    "ScoreContribution",
+    "ScoreFactor",
+    "ScoreReasonCode",
+    "ScoringPolicyConfig",
     "EvaluationResponse",
     "EvaluationResponseItem",
     "EvidenceAggregation",
@@ -181,6 +198,8 @@ __all__ = [
     "ScreenPostsRequest",
     "ScriptGenerationResult",
     "ScoringResult",
+    "DEFAULT_DIRECTION_SCORE_CATALOG",
+    "DEFAULT_SCORING_POLICY_CONFIG",
     "ScreeningAssessment",
     "ScreeningAssessmentResponse",
     "ScreeningAssessmentResponseItem",

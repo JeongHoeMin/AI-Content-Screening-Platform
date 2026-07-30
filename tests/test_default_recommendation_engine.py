@@ -47,8 +47,8 @@ def build_scoring() -> ScoringResult:
         relation=CompanyRelation.DIRECT,
         ticker=ResolvedTicker(ticker="005930", exchange="KRX"),
     )
-    score: CompanyScore = CompanyScore(company=company, score=1.0, evidences=())
-    return ScoringResult(companies=(score,))
+    score: CompanyScore = CompanyScore(company=company, score=0.0, contributions=())
+    return ScoringResult(policy_version="test-v1", companies=(score,))
 
 
 def build_recommendations(
@@ -87,7 +87,7 @@ def test_engine_preserves_policy_tuple_identity_without_copying() -> None:
 
 
 def test_engine_handles_empty_policy_result() -> None:
-    scoring: ScoringResult = ScoringResult(companies=())
+    scoring: ScoringResult = ScoringResult(policy_version="test-v1", companies=())
     policy: FakeRecommendationPolicy = FakeRecommendationPolicy(())
     engine: DefaultRecommendationEngine = DefaultRecommendationEngine(policy)
 

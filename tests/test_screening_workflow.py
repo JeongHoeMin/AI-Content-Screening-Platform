@@ -229,7 +229,7 @@ class FakeScoringEngine(ScoringEngine):
 
     def score(self, aggregation: EvidenceAggregation) -> ScoringResult:
         self.calls.append(aggregation)
-        return ScoringResult(companies=())
+        return ScoringResult(policy_version="test-v1", companies=())
 
 
 class FakeRecommendationEngine(RecommendationEngine):

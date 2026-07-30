@@ -28,7 +28,12 @@ from app.llms import (
     StructuredOutputLLM,
     create_async_openai_client,
 )
-from app.models import BatchCrossValidationConfig, BatchExtractionConfig, BatchScreeningConfig
+from app.models import (
+    DEFAULT_SCORING_POLICY_CONFIG,
+    BatchCrossValidationConfig,
+    BatchExtractionConfig,
+    BatchScreeningConfig,
+)
 from app.evaluators import RuleArticleEvaluator, RuleArticleEvaluatorConfig
 from app.mock_screening import (
     DeterministicMockCrossValidator,
@@ -38,7 +43,7 @@ from app.mock_screening import (
 from app.recommenders import DefaultRecommendationEngine, RuleRecommendationPolicy
 from app.prompts import CrossValidationPromptBuilder, NewsEventPromptBuilder, ScreeningPromptBuilder
 from app.resolvers import CompanyResolutionPolicy, DefaultCompanyResolver, DefaultResolvePolicy
-from app.scorers import DefaultScoringEngine, RuleScoringStrategy
+from app.scorers import DefaultScoringEngine, EvidenceAwareScoringStrategy
 from app.screeners import (
     DefaultScreeningAssessmentParser,
     DefaultScreeningPolicy,
@@ -86,7 +91,9 @@ def _create_mock_workflow() -> ScreeningWorkflow:
             DefaultImpactPolicy(),
         ),
         evidence_aggregator=DefaultEvidenceAggregator(DefaultAggregationStrategy()),
-        scoring_engine=DefaultScoringEngine(RuleScoringStrategy()),
+        scoring_engine=DefaultScoringEngine(
+            EvidenceAwareScoringStrategy(DEFAULT_SCORING_POLICY_CONFIG)
+        ),
         recommendation_engine=DefaultRecommendationEngine(RuleRecommendationPolicy()),
     )
 
@@ -137,7 +144,9 @@ def _create_openai_workflow() -> ScreeningWorkflow:
             DefaultImpactPolicy(),
         ),
         evidence_aggregator=DefaultEvidenceAggregator(DefaultAggregationStrategy()),
-        scoring_engine=DefaultScoringEngine(RuleScoringStrategy()),
+        scoring_engine=DefaultScoringEngine(
+            EvidenceAwareScoringStrategy(DEFAULT_SCORING_POLICY_CONFIG)
+        ),
         recommendation_engine=DefaultRecommendationEngine(RuleRecommendationPolicy()),
     )
 

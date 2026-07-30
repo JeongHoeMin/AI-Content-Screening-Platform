@@ -8,7 +8,12 @@ from app.models import (
     CompanyRecommendation,
     CompanyRelation,
     CompanyScore,
+    CompanyImpact,
+    ImpactDirection,
     Recommendation,
+    ScoreContribution,
+    ScoreFactor,
+    ScoreReasonCode,
     ResolvedCompany,
     ResolvedTicker,
     ScoringResult,
@@ -25,10 +30,23 @@ def build_company(index: int) -> ResolvedCompany:
 
 
 def build_score(index: int, value: float) -> CompanyScore:
+    company: ResolvedCompany = build_company(index)
+    if value == 0.0:
+        return CompanyScore(company=company, score=0.0, contributions=())
+    direction: ImpactDirection = (
+        ImpactDirection.POSITIVE if value > 0.0 else ImpactDirection.NEGATIVE
+    )
+    contribution: ScoreContribution = ScoreContribution(
+        impact=CompanyImpact(company=company, direction=direction),
+        factor=(ScoreFactor.POSITIVE_EVIDENCE if value > 0.0 else ScoreFactor.NEGATIVE_EVIDENCE),
+        weight=value,
+        value=value,
+        reason_code=(ScoreReasonCode.POSITIVE_DIRECTION_WEIGHT if value > 0.0 else ScoreReasonCode.NEGATIVE_DIRECTION_WEIGHT),
+    )
     return CompanyScore(
-        company=build_company(index),
+        company=company,
         score=value,
-        evidences=(),
+        contributions=(contribution,),
     )
 
 
@@ -52,7 +70,7 @@ def test_rule_policy_applies_current_score_policy(
     expected: Recommendation,
 ) -> None:
     company_score: CompanyScore = build_score(1, score)
-    scoring: ScoringResult = ScoringResult(companies=(company_score,))
+    scoring: ScoringResult = ScoringResult(policy_version="test-v1", companies=(company_score,))
     policy: RecommendationPolicy = RuleRecommendationPolicy()
 
     result: Tuple[CompanyRecommendation, ...] = policy.recommend(scoring)
@@ -63,7 +81,7 @@ def test_rule_policy_applies_current_score_policy(
 
 def test_rule_policy_uses_the_first_matching_rule() -> None:
     company_score: CompanyScore = build_score(1, 3.0)
-    scoring: ScoringResult = ScoringResult(companies=(company_score,))
+    scoring: ScoringResult = ScoringResult(policy_version="test-v1", companies=(company_score,))
     policy: RuleRecommendationPolicy = RuleRecommendationPolicy()
 
     result: Tuple[CompanyRecommendation, ...] = policy.recommend(scoring)
@@ -75,7 +93,7 @@ def test_rule_policy_preserves_score_order_identity_and_cardinality() -> None:
     first_score: CompanyScore = build_score(1, 1.0)
     second_score: CompanyScore = build_score(2, -1.0)
     third_score: CompanyScore = build_score(3, 1.0)
-    scoring: ScoringResult = ScoringResult(
+    scoring: ScoringResult = ScoringResult(policy_version="test-v1",
         companies=(first_score, second_score, third_score)
     )
     policy: RuleRecommendationPolicy = RuleRecommendationPolicy()
@@ -91,7 +109,7 @@ def test_rule_policy_preserves_score_order_identity_and_cardinality() -> None:
 
 
 def test_rule_policy_handles_empty_scoring_result() -> None:
-    scoring: ScoringResult = ScoringResult(companies=())
+    scoring: ScoringResult = ScoringResult(policy_version="test-v1", companies=())
     policy: RuleRecommendationPolicy = RuleRecommendationPolicy()
 
     result: Tuple[CompanyRecommendation, ...] = policy.recommend(scoring)
@@ -101,7 +119,7 @@ def test_rule_policy_handles_empty_scoring_result() -> None:
 
 def test_rule_policy_is_deterministic_and_does_not_mutate_scores() -> None:
     company_score: CompanyScore = build_score(1, -1.5)
-    scoring: ScoringResult = ScoringResult(companies=(company_score,))
+    scoring: ScoringResult = ScoringResult(policy_version="test-v1", companies=(company_score,))
     companies_snapshot: Tuple[CompanyScore, ...] = scoring.companies
     policy: RuleRecommendationPolicy = RuleRecommendationPolicy()
 

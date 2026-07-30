@@ -86,7 +86,7 @@ KRX local master-data directory, 영구 company identity, resolution 관측 모�
 
 # Phase 6 — Impact Analysis
 
-**Status:** Planned
+**Status:** Completed
 
 ## 목적
 
@@ -102,7 +102,7 @@ KRX local master-data directory, 영구 company identity, resolution 관측 모�
 
 # Phase 7 — Stock Scoring
 
-**Status:** Planned
+**Status:** Completed
 
 ## 목적
 

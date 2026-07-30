@@ -352,3 +352,30 @@ Strategy는 DIRECT company와 Fact마다 독립 observation을 만들고 상충 
 
 방향 생성, downstream 선택, 기존 scoring 호환의 책임이 분리된다. 기존 scoring 계약은 유지되지만
 전체 provenance는 ImpactAnalysis snapshot에 남으므로 후속 consumer migration이 가능하다.
+
+# ADR-016
+
+## Title
+
+Stock Scoring은 atomic contribution과 exhaustive direction policy를 사용한다.
+
+## Status
+
+Accepted
+
+## Context
+
+단순 direction 합산은 각 score가 어떤 evidence에서 나왔는지 정형화해 보존하지 않으며, Strategy의
+hard-coded mapping은 policy 교체와 완전성 검증을 어렵게 만든다.
+
+## Decision
+
+`ScoringPolicyConfig`는 policy version, weight range, exhaustive DirectionScoreCatalog를 소유한다.
+Strategy는 모든 CompanyImpact를 하나의 ScoreContribution으로 변환하고 CompanyScore는 contribution만
+저장한다. evidences는 contribution에서 계산한다. Strategy가 final ScoringResult를 생성하고
+DefaultScoringEngine은 같은 객체를 반환한다. policy version은 result에 한 번만 보존한다.
+
+## Consequences
+
+direction score의 정책과 근거가 감사 가능해지고, recommendation은 기존 float score contract를 계속
+소비한다. event fact, validation, uncertainty는 현재 scoring 입력이 아니므로 가중치에 사용하지 않는다.
