@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from app.web.app import RecommendationRunRequest, create_web_app
+from datetime import datetime, timezone
+
+from app.models import CommunityType, Post
+from app.web.app import DashboardRunManager, RecommendationRunRequest, create_web_app
 
 
 def test_dashboard_page_exposes_recommendation_controls() -> None:
@@ -25,6 +28,21 @@ def test_dashboard_uses_small_default_collection_limit() -> None:
     request: RecommendationRunRequest = RecommendationRunRequest()
 
     assert request.limit == 3
+
+
+def test_dashboard_analysis_cards_use_workflow_article_identity() -> None:
+    post: Post = Post(
+        id="post-1",
+        source=CommunityType.NAVER_NEWS,
+        title="News title",
+        content="News content",
+        created_at=datetime(2026, 7, 31, tzinfo=timezone.utc),
+        url="https://example.com/news",
+    )
+
+    analysis = DashboardRunManager._initial_analyses([post])[0]
+
+    assert analysis.id == "naver_news:post-1"
 
 
 def test_dashboard_rejects_unknown_run() -> None:

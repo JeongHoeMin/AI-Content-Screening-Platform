@@ -261,7 +261,7 @@ class DashboardRunManager:
         """Project all collected posts before workflow analysis begins."""
         return [
             NewsAnalysisCard(
-                id=post.id,
+                id=f"{post.source.value}:{post.id}",
                 title=post.title,
                 source=post.source.value,
                 status="수집 완료 · 분석 대기",
