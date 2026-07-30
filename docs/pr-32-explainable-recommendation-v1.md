@@ -69,7 +69,8 @@ RecommendationPolicyConfig
 └── threshold_snapshot: RecommendationThresholdSnapshot
 ```
 
-`RecommendationThresholdSnapshot`은 다음 finite float을 보관한다.
+`RecommendationThresholdSnapshot`은 threshold 값 자체를 소유하는 immutable Pydantic Domain Value이며,
+다음 finite float을 보관한다.
 
 ```text
 strong_buy_threshold
@@ -78,15 +79,17 @@ sell_threshold
 strong_sell_threshold
 ```
 
-다음 순서가 성립하지 않으면 Config 생성 시 fail-fast한다.
+Snapshot은 단독 생성 시 finite float 여부와 다음 순서를 validator로 fail-fast 검증한다.
 
 ```text
 strong_sell_threshold < sell_threshold < buy_threshold < strong_buy_threshold
 ```
 
-blank policy version과 NaN/positive infinity/negative infinity threshold는 허용하지 않는다.
-Bootstrap은 완성된 default config 하나를 생성해 Policy에 주입한다. Mock/OpenAI workflow는 같은
-default config instance를 사용한다.
+`RecommendationPolicyConfig`는 `policy_version`과 검증된 `threshold_snapshot`만 소유하는 immutable
+정책의 단일 진입점이다. Config는 blank policy version만 직접 검증하며 threshold의 finite/order 규칙을
+중복 검증하지 않는다. NaN/positive infinity/negative infinity threshold는 Snapshot이 거부한다.
+Bootstrap은 완성된 default config 하나를 생성해 Policy에 주입한다. Mock/OpenAI workflow는 같은 default
+config instance를 사용한다.
 
 ### 2. Decision 원자화
 
@@ -172,7 +175,9 @@ same RecommendationResult identity
 ### Domain and config
 
 - default snapshot의 네 threshold와 strict ordering을 검증한다.
-- blank policy version, non-finite threshold, invalid threshold ordering을 reject하는지 검증한다.
+- Snapshot 단독 생성에서 non-finite threshold와 invalid threshold ordering을 reject하는지 검증한다.
+- Config가 blank policy version을 reject하고 이미 유효한 Snapshot을 단일 정책 입력으로 보관하는지
+  검증한다.
 - 각 action에 대해 reason code와 score interval이 일치하는지 검증한다.
 - action/reason mismatch, score/action mismatch, snapshot/action mismatch Decision이 fail-fast하는지 검증한다.
 - `decision.score == decision.company_score.score`, CompanyScore identity, decision 순서 및
@@ -210,3 +215,9 @@ feat: add explainable recommendation decisions
 - 기존 5개 action과 실제 comparison order/boundary를 제품 계약으로 고정하고, action별 reason code와
   threshold snapshot을 decision에 보존하도록 했다.
 - ranking, candidate selection, portfolio allocation, risk/profile은 PR33 이후 범위로 분리했다.
+
+### 2026-07-30 — Threshold value ownership hardening
+
+- threshold finite/order validator를 `RecommendationThresholdSnapshot`에 귀속하고, Config는 policy
+  version과 검증된 Snapshot을 조립하는 단일 진입점으로만 제한했다.
+- Snapshot 단독 fail-fast와 Config의 blank version 검증을 별도 테스트 계약으로 분리했다.
