@@ -107,7 +107,8 @@ Domain Value다. 모든 값은 finite float이고 `strong_sell < sell < buy < st
 `company_score`, action, action별 reason code, threshold snapshot을 원자적으로 보관한다. score는 중복 저장하지
 않고 `company_score.score` property로 노출한다. validator는 score 구간, action, reason code, snapshot이 실제
 ordered threshold 정책과 일치하는지 fail-fast한다. `RecommendationResult`는 실행 단위 policy version과
-decision tuple만 저장하며, 기존 `companies` access는 decisions를 반환하는 read-only compatibility property다.
+decision tuple만 저장한다. 기존 `companies` access는 별도 legacy view가 아니라 동일한
+`RecommendationDecision` collection을 반환하는 read-only compatibility alias다.
 CLI는 이 내부 Decision을 기존 `companies[].score`/`companies[].recommendation` schema로만 투영한다.
 
 ## Policy 경계

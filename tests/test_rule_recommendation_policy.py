@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from app.models import (
     DEFAULT_RECOMMENDATION_POLICY_CONFIG,
     CompanyRelation,
+    CompanyRecommendation,
     CompanyScore,
     CompanyImpact,
     ImpactDirection,
@@ -97,6 +98,8 @@ def test_policy_preserves_order_identity_and_cardinality() -> None:
 
     assert len(result.decisions) == len(scores)
     assert result.companies is result.decisions
+    assert CompanyRecommendation is RecommendationDecision
+    assert all(isinstance(company, RecommendationDecision) for company in result.companies)
     assert all(
         decision.company_score is scores[index]
         for index, decision in enumerate(result.decisions)

@@ -204,7 +204,7 @@ class RecommendationResult(BaseModel):
 
     @property
     def companies(self) -> Tuple[RecommendationDecision, ...]:
-        """Expose decisions through the former result collection name."""
+        """Expose the Decision collection through the legacy collection alias."""
         return self.decisions
 
 

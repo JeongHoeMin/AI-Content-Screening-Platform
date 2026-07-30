@@ -138,9 +138,9 @@ policy version은 회사별 속성이 아니라 Recommendation Policy 실행의 
 보관한다. `ScoringResult.policy_version`과 `RecommendationResult.policy_version`은 서로 다른
 policy layer의 version이며 같을 필요가 없다.
 
-기존 `companies` public access는 `decisions`에서 계산하는 read-only property로 유지한다. 별도
-companies tuple을 저장하지 않으므로 decision/company score 대응의 길이·순서·identity는 구조적으로
-보장된다.
+기존 `companies` public access는 별도 legacy view가 아니라 `RecommendationDecision` collection을 그대로
+반환하는 read-only compatibility alias로 유지한다. 별도 companies tuple을 저장하지 않으므로
+decision/company score 대응의 길이·순서·identity는 구조적으로 보장된다.
 
 기존 `Recommendation` enum은 `RecommendationAction`의 backwards-compatible alias로 유지한다.
 `RecommendationDecision`은 기존 `CompanyRecommendation`의 canonical replacement이며, 기존
@@ -181,7 +181,7 @@ same RecommendationResult identity
 - 각 action에 대해 reason code와 score interval이 일치하는지 검증한다.
 - action/reason mismatch, score/action mismatch, snapshot/action mismatch Decision이 fail-fast하는지 검증한다.
 - `decision.score == decision.company_score.score`, CompanyScore identity, decision 순서 및
-  `RecommendationResult.companies` read-only property의 대응을 검증한다.
+  `RecommendationResult.companies`가 Decision collection의 compatibility alias인지 검증한다.
 
 ### Policy, engine, regression
 
@@ -229,3 +229,9 @@ feat: add explainable recommendation decisions
 - Policy가 final `RecommendationResult`를 생성하고 Engine이 동일 객체를 반환하도록 전환했다.
 - CLI 직렬화 경계에서만 Decision을 기존 `companies[].score`와 `companies[].recommendation` JSON shape로
   투영해 외부 schema를 유지했다.
+
+### 2026-07-30 — Compatibility alias semantics clarified
+
+- `RecommendationResult.companies`는 별도 `CompanyRecommendation` projection이 아니라 canonical
+  `RecommendationDecision` collection을 반환하는 read-only compatibility alias임을 명시했다.
+- CLI JSON compatibility는 Result property가 아니라 CLI projection boundary가 소유한다.
