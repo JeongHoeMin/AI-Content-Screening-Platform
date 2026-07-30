@@ -33,6 +33,19 @@ def response() -> CrossValidationAssessmentResponse:
     return CrossValidationAssessmentResponse(assessments=[CrossValidationAssessmentResponseItem(event_index=0, confidence=80, reasons=["Compared."], evidence=[CrossValidationEvidenceResponseItem(evidence_index=0, relation="supports", matched_claims=["Match"], conflicting_claims=[])])])
 
 
+def test_cross_validation_response_schema_types_text_list_items() -> None:
+    schema: dict[str, object] = CrossValidationAssessmentResponse.model_json_schema()
+    definitions: dict[str, object] = schema["$defs"]  # type: ignore[assignment]
+    assessment_schema: dict[str, object] = definitions["CrossValidationAssessmentResponseItem"]  # type: ignore[index,assignment]
+    evidence_schema: dict[str, object] = definitions["CrossValidationEvidenceResponseItem"]  # type: ignore[index,assignment]
+    assessment_properties: dict[str, object] = assessment_schema["properties"]  # type: ignore[index,assignment]
+    evidence_properties: dict[str, object] = evidence_schema["properties"]  # type: ignore[index,assignment]
+
+    assert "anyOf" in assessment_properties["reasons"]["items"]  # type: ignore[index,operator]
+    assert "anyOf" in evidence_properties["matched_claims"]["items"]  # type: ignore[index,operator]
+    assert "anyOf" in evidence_properties["conflicting_claims"]["items"]  # type: ignore[index,operator]
+
+
 def validator(responses: List[CrossValidationAssessmentResponse]) -> tuple[LLMEventCrossValidator, FakeLLM]:
     llm = FakeLLM(responses)
     return LLMEventCrossValidator(llm, DefaultCrossValidationAssessmentParser(), FakePromptBuilder(), DefaultCrossValidationPolicy(), BatchCrossValidationConfig(max_candidates_per_batch=1)), llm
