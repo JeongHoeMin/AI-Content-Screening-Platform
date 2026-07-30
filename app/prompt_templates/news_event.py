@@ -20,6 +20,12 @@ article does not support it.
 factory_expansion, mass_layoff, and ceo_interview require corporate_event;
 bankruptcy and major_supply_contract require financial_event; product_release
 requires product_event.
+For source "dart", the title and content are official Korean filing metadata.
+Treat a named company's filing title "단일판매ㆍ공급계약체결" (including a
+correction of that filing) as directly supported evidence of exactly one
+financial_event with major_supply_contract. Do not apply this rule to other DART
+filing titles, and do not infer a contract party that is not named in the filing
+metadata.
 Use events=[] when no supported event_type can be determined.
 Do not infer absent companies, industries, or tickers.
 Do not make accept/reject decisions, investment recommendations, final trust
