@@ -22,3 +22,5 @@ in the dashboard.
 ## Change log
 
 - 2026-07-31: Approved implementation plan created.
+- 2026-07-31: Retry interval changed to LangGraph standard exponential backoff:
+  immediate first attempt, then 5 seconds and 10 seconds; jitter remains disabled.

@@ -67,7 +67,8 @@ Input → Output → Failure → Retry → Owner → Responsibility
 ### Retry
 
 - `extract`, `screen`, `cross_validate`의 OpenAI timeout, connection, authentication,
-  authorization failure는 같은 입력으로 총 3회까지 LangGraph가 재시도한다.
+  authorization failure는 LangGraph 표준 지수 백오프로 같은 입력을 총 3회까지 재시도한다.
+  최초 요청은 즉시 실행하고, 이후 재시도는 5초·10초 뒤에 실행한다.
 - 3회가 모두 실패하면 workflow는 해당 stage와 safe error type을 보존하고 종료한다.
 - response/parser/input-size 오류는 재시도하지 않으며 valid sibling 결과를 보존한다.
 

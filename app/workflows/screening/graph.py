@@ -73,9 +73,9 @@ def _retry_llm_stage(error: Exception) -> bool:
 
 
 _LLM_RETRY_POLICY: RetryPolicy = RetryPolicy(
-    initial_interval=0.5,
+    initial_interval=5.0,
     backoff_factor=2.0,
-    max_interval=2.0,
+    max_interval=20.0,
     max_attempts=3,
     jitter=False,
     retry_on=_retry_llm_stage,
