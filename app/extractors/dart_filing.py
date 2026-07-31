@@ -22,12 +22,45 @@ class DartFilingEventAugmenter:
         r"^(?P<company_name>.+?)\s*\(종목코드:",
     )
 
-    def augment(self, result: LLMExtractionResult) -> LLMExtractionResult:
-        """Append a missing official-contract observation to each matching inference."""
+    def augment(
+        self,
+        result: LLMExtractionResult,
+        articles: Tuple[Article, ...] = (),
+    ) -> LLMExtractionResult:
+        """Preserve explicit official-contract facts after partial LLM failures."""
+        inference_by_article_id: dict[str, LLMInferenceResult] = {
+            inference.article.id: inference for inference in result.inferences
+        }
+        source_articles: Tuple[Article, ...] = articles or tuple(
+            inference.article for inference in result.inferences
+        )
         inferences: Tuple[LLMInferenceResult, ...] = tuple(
-            self._augment_inference(inference) for inference in result.inferences
+            self._augment_article(
+                article,
+                inference_by_article_id.get(article.id),
+            )
+            for article in source_articles
+            if article.id in inference_by_article_id or self._event_for(article) is not None
         )
         return result.model_copy(update={"inferences": inferences})
+
+    def _augment_article(
+        self,
+        article: Article,
+        inference: LLMInferenceResult | None,
+    ) -> LLMInferenceResult:
+        if inference is not None:
+            return self._augment_inference(inference)
+        event: NewsEvent = self._event_for(article)
+        if event is None:
+            raise ValueError("Only explicit DART contract articles may recover an inference")
+        return LLMInferenceResult(
+            article=article,
+            events=(event,),
+            summary="DART 공시 제목에 단일판매·공급계약체결이 명시되었습니다.",
+            reasoning="공식 DART 공시 제목과 종목명이 직접 확인되었습니다.",
+            confidence=1.0,
+        )
 
     def _augment_inference(self, inference: LLMInferenceResult) -> LLMInferenceResult:
         event: NewsEvent | None = self._event_for(inference.article)

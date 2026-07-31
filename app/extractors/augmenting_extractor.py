@@ -24,4 +24,4 @@ class DartAugmentingNewsEventExtractor(NewsEventExtractor):
         articles: Tuple[Article, ...],
     ) -> LLMExtractionResult:
         result: LLMExtractionResult = await self._extractor.extract(articles)
-        return self._augmenter.augment(result)
+        return self._augmenter.augment(result, articles)

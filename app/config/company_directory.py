@@ -39,7 +39,7 @@ class CompanyDirectoryConfig(BaseModel):
         if self.mode in {CompanyDirectoryMode.LOCAL_CSV, CompanyDirectoryMode.KRX_MASTER_CSV} and self.csv_path is None:
             raise ValueError("COMPANY_DIRECTORY_CSV_PATH is required for CSV directory modes")
         if self.mode in {CompanyDirectoryMode.EMPTY, CompanyDirectoryMode.KRX_API} and self.csv_path is not None:
-            raise ValueError("COMPANY_DIRECTORY_CSV_PATH is not allowed for empty")
+            raise ValueError("COMPANY_DIRECTORY_CSV_PATH is not allowed for empty or krx_api")
         return self
 
 

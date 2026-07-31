@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, List, Mapping, Optional, Sequence, Tuple
 
 from pydantic import ValidationError
@@ -20,6 +20,7 @@ _KRX_ENDPOINTS: Tuple[Tuple[KRXExchange, str], ...] = (
     (KRXExchange.KOSDAQ, "https://data-dbg.krx.co.kr/svc/apis/sto/ksq_isu_base_info"),
     (KRXExchange.KONEX, "https://data-dbg.krx.co.kr/svc/apis/sto/knx_isu_base_info"),
 )
+_MAX_SNAPSHOT_LOOKBACK_DAYS: int = 7
 
 
 class KrxCompanyDirectoryLoader:
@@ -34,31 +35,42 @@ class KrxCompanyDirectoryLoader:
         self._http_client: JsonHttpClient = http_client or StdlibJsonHttpClient()
 
     async def load(self) -> StaticCompanyDirectory:
-        results: Sequence[Optional[List[CompanyDirectoryEntry]]] = await asyncio.gather(
-            *(self._load_exchange(exchange, url) for exchange, url in _KRX_ENDPOINTS)
-        )
-        entries: List[CompanyDirectoryEntry] = []
-        for result in results:
-            if result is not None:
-                entries.extend(result)
-        if not entries:
-            raise ConfigurationError("KRX company directory could not load any market")
-        version: str = self._config.directory_date.isoformat()
-        try:
-            return StaticCompanyDirectory(entries, version=version)
-        except ValueError as error:
-            raise ConfigurationError("KRX company directory contains invalid rows") from error
+        for days_ago in range(_MAX_SNAPSHOT_LOOKBACK_DAYS):
+            snapshot_date: date = self._config.directory_date - timedelta(days=days_ago)
+            results: Sequence[Optional[List[CompanyDirectoryEntry]]] = await asyncio.gather(
+                *(
+                    self._load_exchange(exchange, url, snapshot_date)
+                    for exchange, url in _KRX_ENDPOINTS
+                )
+            )
+            entries: List[CompanyDirectoryEntry] = []
+            for result in results:
+                if result is not None:
+                    entries.extend(result)
+            if not entries:
+                continue
+            try:
+                return StaticCompanyDirectory(
+                    entries,
+                    version=snapshot_date.isoformat(),
+                )
+            except ValueError as error:
+                raise ConfigurationError(
+                    "KRX company directory contains invalid rows"
+                ) from error
+        raise ConfigurationError("KRX company directory could not load any market")
 
     async def _load_exchange(
         self,
         exchange: KRXExchange,
         url: str,
+        snapshot_date: date,
     ) -> Optional[List[CompanyDirectoryEntry]]:
         try:
             payload: Mapping[str, Any] = await self._http_client.post(
                 url=url,
                 headers={"AUTH_KEY": self._config.api_key.get_secret_value()},
-                body={"basDd": self._config.directory_date.strftime("%Y%m%d")},
+                body={"basDd": snapshot_date.strftime("%Y%m%d")},
                 timeout_seconds=self._config.timeout_seconds,
             )
             rows: object = payload.get("OutBlock_1")
@@ -66,7 +78,11 @@ class KrxCompanyDirectoryLoader:
                 raise ValueError("KRX response OutBlock_1 must be a list")
             entries: List[CompanyDirectoryEntry] = []
             for index, row in enumerate(rows):
-                entry: Optional[CompanyDirectoryEntry] = self._parse_row(row, exchange)
+                entry: Optional[CompanyDirectoryEntry] = self._parse_row(
+                    row,
+                    exchange,
+                    snapshot_date,
+                )
                 if entry is None:
                     logger.warning(
                         "krx_company_row_skipped",
@@ -90,6 +106,7 @@ class KrxCompanyDirectoryLoader:
         self,
         row: object,
         exchange: KRXExchange,
+        snapshot_date: date,
     ) -> Optional[CompanyDirectoryEntry]:
         if not isinstance(row, dict):
             return None
@@ -110,7 +127,7 @@ class KrxCompanyDirectoryLoader:
                 canonical_name=canonical_name,
                 ticker=ticker,
                 exchange=exchange,
-                directory_version=self._config.directory_date.isoformat(),
+                directory_version=snapshot_date.isoformat(),
             )
             return CompanyDirectoryEntry(company=company, aliases=aliases)
         except (KeyError, TypeError, ValueError, ValidationError):

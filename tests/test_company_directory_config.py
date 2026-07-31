@@ -43,6 +43,14 @@ def test_empty_mode_rejects_csv_path(monkeypatch: pytest.MonkeyPatch) -> None:
         load_company_directory_config()
 
 
+def test_krx_api_mode_rejects_csv_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("COMPANY_DIRECTORY_MODE", "krx_api")
+    monkeypatch.setenv("COMPANY_DIRECTORY_CSV_PATH", "companies.csv")
+
+    with pytest.raises(ConfigurationError):
+        load_company_directory_config()
+
+
 def test_local_csv_mode_loads_a_directory(tmp_path: Path) -> None:
     path: Path = tmp_path / "companies.csv"
     path.write_text(

@@ -6,8 +6,5 @@ services:
     env_file:
       - .env
     environment:
-      COMPANY_DIRECTORY_MODE: krx_master_csv
-      COMPANY_DIRECTORY_CSV_PATH: /app/data/company_directory.csv
-    volumes:
-      - ${COMPANY_DIRECTORY_HOST_CSV_PATH:-./data_0551_20260730.csv}:/app/data/company_directory.csv:ro
+      COMPANY_DIRECTORY_MODE: krx_api
     restart: unless-stopped

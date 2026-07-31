@@ -39,6 +39,34 @@ class KrxHttpClientDouble(JsonHttpClient):
         return response
 
 
+class KrxDateAwareHttpClientDouble(JsonHttpClient):
+    """Returns a configured KRX response for each requested snapshot date."""
+
+    def __init__(self, responses: Mapping[str, Mapping[str, Mapping[str, Any]]]) -> None:
+        self.responses: Mapping[str, Mapping[str, Mapping[str, Any]]] = responses
+        self.calls: list[tuple[str, Mapping[str, str], Mapping[str, Any]]] = []
+
+    async def get(
+        self,
+        url: str,
+        headers: Mapping[str, str],
+        query: Mapping[str, str],
+        timeout_seconds: float,
+    ) -> Mapping[str, Any]:
+        raise AssertionError("KRX directory must use JSON POST")
+
+    async def post(
+        self,
+        url: str,
+        headers: Mapping[str, str],
+        body: Mapping[str, Any],
+        timeout_seconds: float,
+    ) -> Mapping[str, Any]:
+        self.calls.append((url, headers, body))
+        snapshot_date: str = str(body["basDd"])
+        return self.responses[snapshot_date][url]
+
+
 def test_krx_loader_builds_one_snapshot_from_all_markets() -> None:
     kospi_url: str = "https://data-dbg.krx.co.kr/svc/apis/sto/stk_isu_base_info"
     kosdaq_url: str = "https://data-dbg.krx.co.kr/svc/apis/sto/ksq_isu_base_info"
@@ -111,6 +139,47 @@ def test_krx_loader_keeps_successful_markets_after_one_market_failure() -> None:
     directory = asyncio.run(loader.load())
 
     assert directory.find_candidates("삼성전자")[0].exchange.value == "KOSPI"
+
+
+def test_krx_loader_uses_latest_available_api_snapshot() -> None:
+    kospi_url: str = "https://data-dbg.krx.co.kr/svc/apis/sto/stk_isu_base_info"
+    kosdaq_url: str = "https://data-dbg.krx.co.kr/svc/apis/sto/ksq_isu_base_info"
+    konex_url: str = "https://data-dbg.krx.co.kr/svc/apis/sto/knx_isu_base_info"
+    empty_markets: Mapping[str, Mapping[str, Any]] = {
+        url: {"OutBlock_1": []} for url in (kospi_url, kosdaq_url, konex_url)
+    }
+    available_markets: Mapping[str, Mapping[str, Any]] = {
+        kospi_url: {
+            "OutBlock_1": [
+                {
+                    "ISU_CD": "KR7005930003",
+                    "ISU_SRT_CD": "005930",
+                    "ISU_NM": "삼성전자",
+                }
+            ]
+        },
+        kosdaq_url: {"OutBlock_1": []},
+        konex_url: {"OutBlock_1": []},
+    }
+    client: KrxDateAwareHttpClientDouble = KrxDateAwareHttpClientDouble(
+        {"20260731": empty_markets, "20260730": available_markets}
+    )
+    loader: KrxCompanyDirectoryLoader = KrxCompanyDirectoryLoader(
+        KrxConfig(api_key="krx-key", directory_date=date(2026, 7, 31)), client
+    )
+
+    directory = asyncio.run(loader.load())
+
+    assert directory.version == "2026-07-30"
+    assert directory.find_candidates("삼성전자")[0].ticker == "005930"
+    assert [call[2]["basDd"] for call in client.calls] == [
+        "20260731",
+        "20260731",
+        "20260731",
+        "20260730",
+        "20260730",
+        "20260730",
+    ]
 
 
 def test_krx_loader_fails_when_no_market_can_supply_entries() -> None:

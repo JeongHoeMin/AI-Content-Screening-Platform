@@ -64,3 +64,26 @@ def test_augmenter_leaves_non_dart_and_non_contract_articles_unchanged() -> None
 
     assert augmenter.augment(build_result(non_dart)).inferences[0].events == ()
     assert augmenter.augment(build_result(non_contract)).inferences[0].events == ()
+
+
+def test_augmenter_recovers_explicit_contract_from_a_failed_llm_batch() -> None:
+    article: Article = build_article(
+        source="dart",
+        title="단일판매ㆍ공급계약체결(자율공시)",
+        content="HDC (종목코드: 012630)의 공시입니다.",
+    )
+    result: LLMExtractionResult = LLMExtractionResult(
+        inferences=(),
+        successful_batches=0,
+    )
+
+    augmented: LLMExtractionResult = DartFilingEventAugmenter().augment(
+        result,
+        (article,),
+    )
+
+    assert augmented.successful_batches == 0
+    assert augmented.inferences[0].article is article
+    assert augmented.inferences[0].events[0].event_facts == (
+        EventFact.MAJOR_SUPPLY_CONTRACT,
+    )
