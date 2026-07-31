@@ -75,6 +75,19 @@ def test_dashboard_event_exposes_full_progress_state() -> None:
     assert event.total_stage_count == 12
 
 
+def test_dashboard_event_exposes_safe_terminal_failure_detail() -> None:
+    event = DashboardEvent(
+        type="failed",
+        message="cross_validate 단계에서 APITimeoutError 오류로 작업이 중단되었습니다.",
+        error_type="APITimeoutError",
+        failure_stage="cross_validate",
+        failure_attempts=3,
+    )
+
+    assert event.failure_stage == "cross_validate"
+    assert event.failure_attempts == 3
+
+
 def test_dashboard_maps_completed_workflow_node_to_next_active_stage() -> None:
     assert DashboardRunManager._next_workflow_stage("screen") == "cross_validate"
     assert DashboardRunManager._next_workflow_stage("select_candidates") is None

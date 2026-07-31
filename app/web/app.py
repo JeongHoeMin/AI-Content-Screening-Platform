@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -16,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.bootstrap import ExecutionMode
 from app.harness import Harness
 from app.harness.execution_audit import ScreeningExecutionHarness
+from app.harness.execution_audit import JsonLinesWorkflowExecutionAuditSink
 from app.market_data import (
     create_market_collect_posts_skill,
     create_market_screening_workflow,
@@ -26,6 +28,16 @@ from app.models.community import CommunityType
 from app.models.post import Post
 from app.workflows import ScreeningResult, WorkflowProgressEvent
 from app.web.dashboard_html import DASHBOARD_HTML
+from app.observability import configure_application_logging
+
+import structlog
+
+configure_application_logging()
+logger = structlog.get_logger(__name__)
+
+_RETRIED_ERROR_TYPES: frozenset[str] = frozenset(
+    {"APITimeoutError", "APIConnectionError", "AuthenticationError", "PermissionDeniedError"}
+)
 
 
 class RecommendationRunRequest(BaseModel):
@@ -51,6 +63,8 @@ class DashboardEvent(BaseModel):
     completed_stage_count: int = Field(default=0, ge=0)
     total_stage_count: int = Field(default=12, ge=1)
     error_type: Optional[str] = None
+    failure_stage: Optional[str] = None
+    failure_attempts: Optional[int] = Field(default=None, ge=1, le=3)
     analyses: List["NewsAnalysisCard"] = Field(default_factory=list)
 
 
@@ -117,6 +131,8 @@ class _RunState:
     queue: asyncio.Queue[DashboardEvent] = field(default_factory=asyncio.Queue)
     result: Optional[DashboardRunResult] = None
     error_type: Optional[str] = None
+    failure_stage: Optional[str] = None
+    failure_attempts: Optional[int] = None
     completed: bool = False
     analyses: Dict[str, NewsAnalysisCard] = field(default_factory=dict)
     active_stage: str = "collect"
@@ -248,7 +264,9 @@ class DashboardRunManager:
                     analyses=changed_analyses,
                 )
 
-            result: ScreeningResult = await ScreeningExecutionHarness().run_with_progress(
+            result: ScreeningResult = await ScreeningExecutionHarness(
+                audit_sink=self._audit_sink(),
+            ).run_with_progress(
                 workflow,
                 articles,
                 ExecutionMode.OPENAI.value,
@@ -264,13 +282,30 @@ class DashboardRunManager:
             )
         except Exception as error:
             state.error_type = type(error).__name__
+            state.failure_stage = getattr(error, "stage", state.active_stage)
+            error_type: str = getattr(error, "error_type", state.error_type)
+            state.failure_attempts = getattr(
+                error,
+                "attempts",
+                3 if error_type in _RETRIED_ERROR_TYPES else 1,
+            )
             state.completed = True
+            logger.error(
+                "dashboard_workflow_failed",
+                run_id=run_id,
+                stage=state.failure_stage,
+                error_type=error_type,
+                attempts=state.failure_attempts,
+            )
             await self._emit(
                 state,
                 "failed",
-                "추천 실행에 실패했습니다. 실행 환경 설정을 확인하세요.",
+                f"{state.failure_stage} 단계에서 {error_type} 오류로 작업이 중단되었습니다. "
+                f"시도 횟수: {state.failure_attempts}/3.",
                 completed_stage_count=state.completed_stage_count,
-                error_type=state.error_type,
+                error_type=error_type,
+                failure_stage=state.failure_stage,
+                failure_attempts=state.failure_attempts,
             )
         finally:
             heartbeat_task.cancel()
@@ -297,6 +332,16 @@ class DashboardRunManager:
         if source_count <= 0:
             raise ValueError("Collection source count must be positive")
         return ceil(total_limit / source_count)
+
+    @staticmethod
+    def _audit_sink() -> Optional[JsonLinesWorkflowExecutionAuditSink]:
+        raw_path: str = os.getenv("WORKFLOW_AUDIT_LOG_PATH", "").strip()
+        if not raw_path:
+            return None
+        from pathlib import Path
+        path = Path(raw_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return JsonLinesWorkflowExecutionAuditSink(path)
 
     async def _emit_heartbeats(self, state: _RunState) -> None:
         """Confirm long-running work without exposing provider or LLM internals."""
@@ -424,6 +469,8 @@ class DashboardRunManager:
         node: Optional[str] = None,
         completed_node_count: Optional[int] = None,
         error_type: Optional[str] = None,
+        failure_stage: Optional[str] = None,
+        failure_attempts: Optional[int] = None,
         analyses: Optional[List[NewsAnalysisCard]] = None,
         active_stage: Optional[str] = None,
         completed_stage_count: Optional[int] = None,
@@ -442,6 +489,8 @@ class DashboardRunManager:
                 completed_stage_count=state.completed_stage_count,
                 total_stage_count=self._TOTAL_STAGE_COUNT,
                 error_type=error_type,
+                failure_stage=failure_stage,
+                failure_attempts=failure_attempts,
                 analyses=analyses or [],
             )
         )

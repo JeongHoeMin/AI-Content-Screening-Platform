@@ -4,6 +4,7 @@ from typing import Dict, Mapping, Protocol, Tuple, TypeVar
 
 import structlog
 from langgraph.graph import END, START, StateGraph
+from langgraph.types import RetryPolicy
 from langgraph.graph.state import CompiledStateGraph
 
 from app.aggregators.base import EvidenceAggregator
@@ -40,6 +41,9 @@ from app.resolvers.policy import ResolvePolicy
 from app.scorers.base import ScoringEngine
 from app.screeners.base import EventScreener
 from app.cross_validators.base import CrossValidator
+from app.extractors.errors import AllExtractionBatchesFailedError
+from app.llms.errors import StructuredOutputCallError
+from app.screeners.errors import NoValidScreeningDecisionsError
 from app.models.cross_validation import CrossValidationCandidate, CrossValidationResult, CrossValidationStatus
 from app.workflows.screening.result import (
     WorkflowImpactDiagnostics,
@@ -48,6 +52,34 @@ from app.workflows.screening.result import (
 from app.workflows.screening.state import ScreeningState
 
 logger = structlog.get_logger(__name__)
+
+_RETRYABLE_LLM_ERROR_TYPES: frozenset[str] = frozenset(
+    {
+        "APITimeoutError",
+        "APIConnectionError",
+        "AuthenticationError",
+        "PermissionDeniedError",
+    }
+)
+
+
+def _retry_llm_stage(error: Exception) -> bool:
+    """Retry only bounded OpenAI transport/authentication failure categories."""
+    if isinstance(error, StructuredOutputCallError):
+        return error.error_type in _RETRYABLE_LLM_ERROR_TYPES
+    if isinstance(error, (AllExtractionBatchesFailedError, NoValidScreeningDecisionsError)):
+        return error.error_type in _RETRYABLE_LLM_ERROR_TYPES
+    return False
+
+
+_LLM_RETRY_POLICY: RetryPolicy = RetryPolicy(
+    initial_interval=0.5,
+    backoff_factor=2.0,
+    max_interval=2.0,
+    max_attempts=3,
+    jitter=False,
+    retry_on=_retry_llm_stage,
+)
 
 
 class HasNewsEvent(Protocol):
@@ -149,9 +181,10 @@ class _ScreeningNodes:
                     candidate_id=f"{source_article.id}:{index}",
                     decision=decision,
                     source_article=source_article,
-                    related_articles=tuple(
-                        article for article in state["articles"]
-                        if article.id != source_article.id
+                    related_articles=self._related_articles(
+                        decision.event,
+                        source_article,
+                        state["articles"],
                     ),
                 )
             )
@@ -160,6 +193,31 @@ class _ScreeningNodes:
             return {"cross_validation_results": ()}
         results: Tuple[CrossValidationResult, ...] = await self._cross_validator.validate(candidates)
         return {"cross_validation_results": results}
+
+    @staticmethod
+    def _related_articles(
+        event: NewsEvent,
+        source_article: Article,
+        articles: Tuple[Article, ...],
+    ) -> Tuple[Article, ...]:
+        """Select bounded, deterministic evidence before an LLM sees article text."""
+        terms: set[str] = {
+            term.casefold()
+            for term in (
+                *event.keywords,
+                *(company.name for company in event.companies),
+                event.title,
+            )
+            if term.strip()
+        }
+        candidates: list[Article] = [
+            article for article in articles if article.id != source_article.id
+        ]
+        def rank(article: Article) -> tuple[int, str]:
+            haystack: str = f"{article.title} {article.content}".casefold()
+            matches: int = sum(term in haystack for term in terms)
+            return (-matches, article.id)
+        return tuple(sorted(candidates, key=rank)[:5])
 
     def resolve(self, state: ScreeningState) -> Mapping[str, object]:
         decisions: Tuple[ScreeningDecision, ...] = state.get("decisions", ())
@@ -421,9 +479,9 @@ def _build_screening_graph(
     )
     builder: StateGraph = StateGraph(ScreeningState)
     builder.add_node("evaluate", nodes.evaluate)
-    builder.add_node("extract", nodes.extract)
-    builder.add_node("screen", nodes.screen)
-    builder.add_node("cross_validate", nodes.cross_validate)
+    builder.add_node("extract", nodes.extract, retry_policy=_LLM_RETRY_POLICY)
+    builder.add_node("screen", nodes.screen, retry_policy=_LLM_RETRY_POLICY)
+    builder.add_node("cross_validate", nodes.cross_validate, retry_policy=_LLM_RETRY_POLICY)
     builder.add_node("resolve", nodes.resolve)
     builder.add_node("analyze", nodes.analyze)
     builder.add_node("aggregate", nodes.aggregate)

@@ -37,11 +37,27 @@ class LLMEventCrossValidator(CrossValidator):
         for batch_index, batch in enumerate(self._batches(targets)):
             try:
                 parsed = await self._assess_batch(batch)
-            except StructuredOutputCallError:
-                logger.warning("cross_validation_batch_failed", batch_index=batch_index, candidate_count=len(batch), error_kind="structured_output_call")
+            except StructuredOutputCallError as error:
+                logger.warning("cross_validation_batch_failed", batch_index=batch_index, candidate_count=len(batch), error_kind="structured_output_call", provider=error.provider, provider_error_type=error.error_type)
+                if self._is_retryable_provider_error(error.error_type):
+                    raise
+                results.extend(
+                    self._policy.insufficient_evidence(
+                        candidate,
+                        ("Cross-validation provider was unavailable.",),
+                    )
+                    for candidate in batch
+                )
                 continue
             except (StructuredOutputResponseError, ValidationError):
                 logger.warning("cross_validation_batch_failed", batch_index=batch_index, candidate_count=len(batch), error_kind="structured_output_response")
+                results.extend(
+                    self._policy.insufficient_evidence(
+                        candidate,
+                        ("Cross-validation response could not be validated.",),
+                    )
+                    for candidate in batch
+                )
                 continue
             for error in parsed.errors:
                 self._log_parse_error(batch_index, error)
@@ -54,6 +70,15 @@ class LLMEventCrossValidator(CrossValidator):
             raise NoValidCrossValidationResultsError("No valid cross-validation results were produced")
         results_by_event: dict[int, CrossValidationResult] = {id(result.event): result for result in results}
         return tuple(results_by_event[id(candidate.decision.event)] for candidate in candidates if id(candidate.decision.event) in results_by_event)
+
+    @staticmethod
+    def _is_retryable_provider_error(error_type: str) -> bool:
+        return error_type in {
+            "APITimeoutError",
+            "APIConnectionError",
+            "AuthenticationError",
+            "PermissionDeniedError",
+        }
 
     async def _assess_batch(self, candidates: Tuple[CrossValidationCandidate, ...]):
         messages: List[ChatMessage] = self._prompt_builder.build(BatchCrossValidationPromptInput(candidates=candidates))

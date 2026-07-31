@@ -148,4 +148,5 @@ class CrossValidationResult(BaseModel):
 
 class BatchCrossValidationConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
-    max_candidates_per_batch: int = Field(default=20, gt=0)
+    max_candidates_per_batch: int = Field(default=2, gt=0, le=2)
+    max_related_articles_per_candidate: int = Field(default=5, gt=0, le=5)
