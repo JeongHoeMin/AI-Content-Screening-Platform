@@ -6,7 +6,7 @@ from app.models.article import Article, ArticleEvaluationResult
 from app.models.candidate_selection import CandidateSelectionResult
 from app.models.evidence import EvidenceAggregation
 from app.models.impact_analysis import ImpactAnalysis
-from app.models.llm_inference import LLMInferenceResult
+from app.models.llm_inference import ExtractionError, LLMInferenceResult
 from app.models.news_event import NewsEvent
 from app.models.recommendation import RecommendationResult
 from app.models.resolved_news_event import ResolvedNewsEvent
@@ -23,6 +23,7 @@ class ScreeningState(TypedDict, total=False):
     articles: Tuple[Article, ...]
     evaluations: Tuple[ArticleEvaluationResult, ...]
     inferences: Tuple[LLMInferenceResult, ...]
+    extraction_errors: Tuple[ExtractionError, ...]
     successful_batches: int
     events: Tuple[NewsEvent, ...]
     decisions: Tuple[ScreeningDecision, ...]

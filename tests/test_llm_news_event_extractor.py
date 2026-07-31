@@ -165,6 +165,29 @@ async def test_extractor_splits_batches_and_preserves_global_input_order() -> No
 
 
 @pytest.mark.anyio
+async def test_default_extraction_batch_size_limits_large_structured_responses() -> None:
+    articles: Tuple[Article, ...] = tuple(build_article(index) for index in range(50))
+    batches: List[Tuple[Article, ...]] = [
+        articles[index : index + 10] for index in range(0, len(articles), 10)
+    ]
+    extractor, builder, llm = build_extractor(
+        [build_response(batch) for batch in batches],
+    )
+
+    result = await extractor.extract(articles)
+
+    assert [len(prompt_input.articles) for prompt_input in builder.inputs] == [
+        10,
+        10,
+        10,
+        10,
+        10,
+    ]
+    assert result.successful_batches == 5
+    assert llm.calls == 5
+
+
+@pytest.mark.anyio
 async def test_extractor_records_actual_request_count_for_fifty_articles() -> None:
     articles: Tuple[Article, ...] = tuple(build_article(index) for index in range(50))
     batches: List[Tuple[Article, ...]] = [
@@ -193,6 +216,7 @@ async def test_extractor_raises_when_every_batch_fails() -> None:
     articles: Tuple[Article, ...] = (build_article(1),)
     extractor, builder, llm = build_extractor(
         responses=[],
+        config=BatchExtractionConfig(max_batch_retry_attempts=0),
         llm_error=expected_error,
     )
 
@@ -219,7 +243,10 @@ async def test_extractor_continues_after_one_batch_fails_and_counts_empty_succes
     )
     extractor, _, llm = build_extractor(
         [empty_response],
-        config=BatchExtractionConfig(max_articles_per_batch=1),
+        config=BatchExtractionConfig(
+            max_articles_per_batch=1,
+            max_batch_retry_attempts=0,
+        ),
     )
     original_generate = llm.generate
     calls: int = 0
@@ -285,7 +312,10 @@ async def test_extractor_records_safe_structured_response_reason() -> None:
     )
     extractor, _, llm = build_extractor(
         [empty_response],
-        config=BatchExtractionConfig(max_articles_per_batch=1),
+        config=BatchExtractionConfig(
+            max_articles_per_batch=1,
+            max_batch_retry_attempts=0,
+        ),
     )
     original_generate = llm.generate
     calls: int = 0
@@ -306,3 +336,113 @@ async def test_extractor_records_safe_structured_response_reason() -> None:
 
     assert result.errors[0].kind.value == "response_processing"
     assert result.errors[0].message.endswith("response_incomplete")
+
+
+@pytest.mark.anyio
+async def test_extractor_retries_transient_failed_batch_without_losing_articles() -> None:
+    articles: Tuple[Article, ...] = (build_article(1), build_article(2))
+    extractor, builder, llm = build_extractor(
+        [build_response(articles)],
+        config=BatchExtractionConfig(max_articles_per_batch=2),
+    )
+    original_generate = llm.generate
+    calls: int = 0
+
+    async def generate_with_transient_failure(
+        messages: List[ChatMessage],
+        response_model: Type[OutputT],
+    ) -> OutputT:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise StructuredOutputCallError("test", "APIConnectionError")
+        return await original_generate(messages, response_model)
+
+    llm.generate = generate_with_transient_failure  # type: ignore[method-assign]
+
+    result = await extractor.extract(articles)
+
+    assert tuple(inference.article for inference in result.inferences) == articles
+    assert result.successful_batches == 1
+    assert result.errors == ()
+    assert [len(item.articles) for item in builder.inputs] == [2, 2]
+
+
+@pytest.mark.anyio
+async def test_extractor_splits_failed_batch_after_retry_budget_is_disabled() -> None:
+    articles: Tuple[Article, ...] = tuple(build_article(index) for index in range(4))
+    first_recovery_batch: Tuple[Article, ...] = articles[:2]
+    second_recovery_batch: Tuple[Article, ...] = articles[2:]
+    extractor, builder, llm = build_extractor(
+        [build_response(first_recovery_batch), build_response(second_recovery_batch)],
+        config=BatchExtractionConfig(
+            max_articles_per_batch=4,
+            max_batch_retry_attempts=0,
+            recovery_max_articles_per_batch=2,
+            max_recovery_requests=2,
+        ),
+    )
+    original_generate = llm.generate
+    calls: int = 0
+
+    async def generate_with_initial_response_failure(
+        messages: List[ChatMessage],
+        response_model: Type[OutputT],
+    ) -> OutputT:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise StructuredOutputResponseError("response_incomplete")
+        return await original_generate(messages, response_model)
+
+    llm.generate = generate_with_initial_response_failure  # type: ignore[method-assign]
+
+    result = await extractor.extract(articles)
+
+    assert tuple(inference.article for inference in result.inferences) == articles
+    assert result.successful_batches == 1
+    assert result.errors == ()
+    assert [len(item.articles) for item in builder.inputs] == [4, 2, 2]
+
+
+@pytest.mark.anyio
+async def test_extractor_logs_safe_recovery_trace_without_article_content(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    records: List[dict[str, object]] = []
+
+    class CapturingLogger:
+        def info(self, event: str, **kwargs: object) -> None:
+            records.append({"event": event, **kwargs})
+
+        def warning(self, event: str, **kwargs: object) -> None:
+            records.append({"event": event, **kwargs})
+
+    from app.extractors import llm_extractor
+
+    monkeypatch.setattr(llm_extractor, "logger", CapturingLogger())
+    article: Article = build_article(1).model_copy(update={"content": "SECRET_ARTICLE_BODY"})
+    extractor, _, _ = build_extractor(
+        responses=[],
+        config=BatchExtractionConfig(max_batch_retry_attempts=0),
+        llm_error=StructuredOutputCallError("test", "RateLimitError"),
+    )
+
+    with pytest.raises(AllExtractionBatchesFailedError):
+        await extractor.extract((article,))
+
+    assert records[0] == {
+        "event": "extraction_batch_attempt_started",
+        "batch_index": 1,
+        "total_batches": 1,
+        "article_count": 1,
+        "attempt": 1,
+        "phase": "initial",
+        "max_articles_per_batch": 10,
+        "recovery_batch_size": 5,
+        "max_batch_retry_attempts": 0,
+        "max_recovery_requests": 4,
+    }
+    assert records[1]["event"] == "extraction_batch_attempt_failed"
+    assert records[1]["error_message"] == "test request failed: RateLimitError"
+    assert "SECRET_ARTICLE_BODY" not in repr(records)

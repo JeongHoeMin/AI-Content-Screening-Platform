@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, Mapping, Protocol, Tuple, TypeVar
 
+import structlog
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
@@ -13,8 +14,17 @@ from app.extractors.base import NewsEventExtractor
 from app.models.article import Article, ArticleEvaluationResult
 from app.models.candidate_selection import CandidateSelectionResult
 from app.models.evidence import EvidenceAggregation
-from app.models.impact_analysis import ImpactAnalysis
-from app.models.llm_inference import LLMExtractionResult, LLMInferenceResult
+from app.models.impact_analysis import (
+    ImpactAnalysis,
+    ImpactEvaluation,
+    ImpactExclusionReason,
+)
+from app.models.llm_inference import (
+    ExtractionError,
+    ExtractionErrorKind,
+    LLMExtractionResult,
+    LLMInferenceResult,
+)
 from app.models.news_event import NewsEvent
 from app.models.recommendation import RecommendationResult
 from app.models.resolved_news_event import (
@@ -31,8 +41,13 @@ from app.scorers.base import ScoringEngine
 from app.screeners.base import EventScreener
 from app.cross_validators.base import CrossValidator
 from app.models.cross_validation import CrossValidationCandidate, CrossValidationResult, CrossValidationStatus
-from app.workflows.screening.result import WorkflowStatistics
+from app.workflows.screening.result import (
+    WorkflowImpactDiagnostics,
+    WorkflowStatistics,
+)
 from app.workflows.screening.state import ScreeningState
+
+logger = structlog.get_logger(__name__)
 
 
 class HasNewsEvent(Protocol):
@@ -92,10 +107,20 @@ class _ScreeningNodes:
         events: Tuple[NewsEvent, ...] = tuple(
             event for inference in inferences for event in inference.events
         )
+        logger.info(
+            "workflow_extraction_completed",
+            accepted_article_count=len(accepted_articles),
+            inference_count=len(inferences),
+            extracted_event_count=len(events),
+            successful_batch_count=extraction.successful_batches,
+            extraction_error_count=len(extraction.errors),
+            extraction_error_kinds=tuple(error.kind.value for error in extraction.errors),
+        )
         return {
             "inferences": inferences,
             "events": events,
             "successful_batches": extraction.successful_batches,
+            "extraction_errors": extraction.errors,
         }
 
     async def screen(self, state: ScreeningState) -> Mapping[str, object]:
@@ -226,6 +251,66 @@ class _ScreeningNodes:
             state["scoring"]
         )
         evaluations: Tuple[ArticleEvaluationResult, ...] = state["evaluations"]
+        impact_analyses: Tuple[ImpactAnalysis, ...] = state.get("analyses", ())
+        extraction_errors: Tuple[ExtractionError, ...] = state.get(
+            "extraction_errors",
+            (),
+        )
+        impact_evaluations: Tuple[ImpactEvaluation, ...] = tuple(
+            evaluation
+            for analysis in impact_analyses
+            for evaluation in analysis.evaluations
+        )
+        impact_diagnostics: WorkflowImpactDiagnostics = WorkflowImpactDiagnostics(
+            events_without_impact_observations=sum(
+                not analysis.evaluations for analysis in impact_analyses
+            ),
+            failed_extraction_batches=sum(
+                error.kind
+                in {
+                    ExtractionErrorKind.API_CALL,
+                    ExtractionErrorKind.RESPONSE_PROCESSING,
+                }
+                for error in extraction_errors
+            ),
+            malformed_extraction_items=sum(
+                error.kind
+                in {
+                    ExtractionErrorKind.EVENT_VALIDATION,
+                    ExtractionErrorKind.FACT_VALIDATION,
+                }
+                for error in extraction_errors
+            ),
+            total_impact_observations=len(impact_evaluations),
+            eligible_impact_observations=sum(
+                evaluation.eligible for evaluation in impact_evaluations
+            ),
+            event_rejected_exclusions=self._impact_exclusion_count(
+                impact_evaluations,
+                ImpactExclusionReason.EVENT_REJECTED,
+            ),
+            review_not_verified_exclusions=self._impact_exclusion_count(
+                impact_evaluations,
+                ImpactExclusionReason.EVENT_REVIEW_NOT_VERIFIED,
+            ),
+            unresolved_company_exclusions=self._impact_exclusion_count(
+                impact_evaluations,
+                ImpactExclusionReason.COMPANY_NOT_RESOLVED,
+            ),
+            missing_company_identity_exclusions=self._impact_exclusion_count(
+                impact_evaluations,
+                ImpactExclusionReason.COMPANY_IDENTITY_MISSING,
+            ),
+            unsupported_scope_exclusions=self._impact_exclusion_count(
+                impact_evaluations,
+                ImpactExclusionReason.UNSUPPORTED_SCOPE,
+            ),
+            unknown_direction_exclusions=self._impact_exclusion_count(
+                impact_evaluations,
+                ImpactExclusionReason.UNKNOWN_DIRECTION,
+            ),
+            scored_company_count=len(state["scoring"].companies),
+        )
         accepted_articles: int = sum(
             evaluation.accepted for evaluation in evaluations
         )
@@ -254,12 +339,49 @@ class _ScreeningNodes:
             resolved_accept_count=sum(event.decision is ResolvedDecisionType.ACCEPT for event in state.get("resolved_events", ())),
             resolved_review_count=sum(event.decision is ResolvedDecisionType.REVIEW for event in state.get("resolved_events", ())),
             resolved_reject_count=sum(event.decision is ResolvedDecisionType.REJECT for event in state.get("resolved_events", ())),
+            impact_diagnostics=impact_diagnostics,
+        )
+        logger.info(
+            "workflow_recommendation_decided",
+            recommendation_count=len(recommendation.decisions),
+            scored_company_count=impact_diagnostics.scored_company_count,
+            eligible_impact_observation_count=(
+                impact_diagnostics.eligible_impact_observations
+            ),
+            events_without_impact_observation_count=(
+                impact_diagnostics.events_without_impact_observations
+            ),
+            review_not_verified_exclusion_count=(
+                impact_diagnostics.review_not_verified_exclusions
+            ),
+            unresolved_company_exclusion_count=(
+                impact_diagnostics.unresolved_company_exclusions
+            ),
+            failed_extraction_batch_count=(
+                impact_diagnostics.failed_extraction_batches
+            ),
         )
         return {"recommendation": recommendation, "statistics": statistics}
+
+    @staticmethod
+    def _impact_exclusion_count(
+        evaluations: Tuple[ImpactEvaluation, ...],
+        reason: ImpactExclusionReason,
+    ) -> int:
+        """Count one safe policy exclusion without retaining raw event content."""
+        return sum(
+            evaluation.exclusion_reason is reason
+            for evaluation in evaluations
+        )
 
     def select_candidates(self, state: ScreeningState) -> Mapping[str, object]:
         candidate_selection: CandidateSelectionResult = self._candidate_selection_engine.select(
             state["recommendation"]
+        )
+        logger.info(
+            "workflow_candidates_selected",
+            selected_candidate_count=len(candidate_selection.candidates),
+            excluded_candidate_count=len(candidate_selection.excluded),
         )
         return {"candidate_selection": candidate_selection}
 

@@ -11,6 +11,25 @@ from app.models.cross_validation import CrossValidationResult
 from app.models.resolved_news_event import ResolvedNewsEvent
 
 
+class WorkflowImpactDiagnostics(BaseModel):
+    """Safe counts explaining how resolved events reached stock evidence."""
+
+    model_config = ConfigDict(frozen=True)
+
+    events_without_impact_observations: int = Field(default=0, ge=0)
+    failed_extraction_batches: int = Field(default=0, ge=0)
+    malformed_extraction_items: int = Field(default=0, ge=0)
+    total_impact_observations: int = Field(default=0, ge=0)
+    eligible_impact_observations: int = Field(default=0, ge=0)
+    event_rejected_exclusions: int = Field(default=0, ge=0)
+    review_not_verified_exclusions: int = Field(default=0, ge=0)
+    unresolved_company_exclusions: int = Field(default=0, ge=0)
+    missing_company_identity_exclusions: int = Field(default=0, ge=0)
+    unsupported_scope_exclusions: int = Field(default=0, ge=0)
+    unknown_direction_exclusions: int = Field(default=0, ge=0)
+    scored_company_count: int = Field(default=0, ge=0)
+
+
 class WorkflowArticleAnalysisProgress(BaseModel):
     """Safe extraction summary for one article in a live workflow consumer."""
 
@@ -87,6 +106,9 @@ class WorkflowStatistics(BaseModel):
     resolved_accept_count: int = Field(ge=0)
     resolved_review_count: int = Field(ge=0)
     resolved_reject_count: int = Field(ge=0)
+    impact_diagnostics: WorkflowImpactDiagnostics = Field(
+        default_factory=WorkflowImpactDiagnostics
+    )
 
 
 class ScreeningResult(BaseModel):

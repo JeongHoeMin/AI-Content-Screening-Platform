@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from typing import Mapping, Optional, Tuple, cast
 
+import structlog
 from langgraph.graph.state import CompiledStateGraph
 
 from app.aggregators.base import EvidenceAggregator
@@ -34,6 +35,8 @@ from app.workflows.screening.result import (
     WorkflowValidationAnalysisProgress,
 )
 from app.workflows.screening.state import ScreeningState
+
+logger = structlog.get_logger(__name__)
 
 
 class ScreeningWorkflow:
@@ -107,6 +110,15 @@ class ScreeningWorkflow:
                     node,
                     state,
                     article_id_by_event_id,
+                )
+                logger.info(
+                    "workflow_node_completed",
+                    node=node,
+                    completed_node_count=completed_node_count,
+                    output_keys=tuple(sorted(str(key) for key in node_update)),
+                    article_analysis_count=len(article_analyses),
+                    screening_analysis_count=len(screening_analyses),
+                    validation_analysis_count=len(validation_analyses),
                 )
                 await progress_callback(
                     WorkflowProgressEvent(

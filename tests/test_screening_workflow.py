@@ -363,6 +363,9 @@ async def test_workflow_runs_in_order_and_preserves_event_identity() -> None:
     assert result.statistics.accepted_events == 2
     assert result.statistics.review_events == 0
     assert result.statistics.rejected_events == 0
+    assert result.statistics.impact_diagnostics.events_without_impact_observations == 0
+    assert result.statistics.impact_diagnostics.eligible_impact_observations == 0
+    assert result.statistics.impact_diagnostics.scored_company_count == 0
 
 
 @pytest.mark.anyio

@@ -14,7 +14,10 @@ class BatchExtractionConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    max_articles_per_batch: int = Field(default=20, gt=0)
+    max_articles_per_batch: int = Field(default=10, gt=0)
+    max_batch_retry_attempts: int = Field(default=1, ge=0)
+    recovery_max_articles_per_batch: int = Field(default=5, gt=0)
+    max_recovery_requests: int = Field(default=4, ge=0)
 
 
 class LLMInferenceResult(BaseModel):
