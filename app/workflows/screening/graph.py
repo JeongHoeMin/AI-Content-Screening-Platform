@@ -6,10 +6,12 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from app.aggregators.base import EvidenceAggregator
+from app.candidates.candidate_selection_engine import CandidateSelectionEngine
 from app.analyzers.base import ImpactAnalyzer
 from app.evaluators.article_evaluator import ArticleEvaluator
 from app.extractors.base import NewsEventExtractor
 from app.models.article import Article, ArticleEvaluationResult
+from app.models.candidate_selection import CandidateSelectionResult
 from app.models.evidence import EvidenceAggregation
 from app.models.impact_analysis import ImpactAnalysis
 from app.models.llm_inference import LLMExtractionResult, LLMInferenceResult
@@ -57,6 +59,7 @@ class _ScreeningNodes:
         evidence_aggregator: EvidenceAggregator,
         scoring_engine: ScoringEngine,
         recommendation_engine: RecommendationEngine,
+        candidate_selection_engine: CandidateSelectionEngine,
     ) -> None:
         self._evaluator: ArticleEvaluator = evaluator
         self._extractor: NewsEventExtractor = extractor
@@ -68,6 +71,7 @@ class _ScreeningNodes:
         self._evidence_aggregator: EvidenceAggregator = evidence_aggregator
         self._scoring_engine: ScoringEngine = scoring_engine
         self._recommendation_engine: RecommendationEngine = recommendation_engine
+        self._candidate_selection_engine: CandidateSelectionEngine = candidate_selection_engine
 
     def evaluate(self, state: ScreeningState) -> Mapping[str, object]:
         evaluations: Tuple[ArticleEvaluationResult, ...] = self._evaluator.evaluate(
@@ -253,6 +257,12 @@ class _ScreeningNodes:
         )
         return {"recommendation": recommendation, "statistics": statistics}
 
+    def select_candidates(self, state: ScreeningState) -> Mapping[str, object]:
+        candidate_selection: CandidateSelectionResult = self._candidate_selection_engine.select(
+            state["recommendation"]
+        )
+        return {"candidate_selection": candidate_selection}
+
     @staticmethod
     def has_accepted_articles(state: ScreeningState) -> str:
         if any(evaluation.accepted for evaluation in state["evaluations"]):
@@ -271,6 +281,7 @@ def _build_screening_graph(
     evidence_aggregator: EvidenceAggregator,
     scoring_engine: ScoringEngine,
     recommendation_engine: RecommendationEngine,
+    candidate_selection_engine: CandidateSelectionEngine,
 ) -> CompiledStateGraph:
     """Build the private LangGraph implementation used by ScreeningWorkflow."""
     nodes: _ScreeningNodes = _ScreeningNodes(
@@ -284,6 +295,7 @@ def _build_screening_graph(
         evidence_aggregator=evidence_aggregator,
         scoring_engine=scoring_engine,
         recommendation_engine=recommendation_engine,
+        candidate_selection_engine=candidate_selection_engine,
     )
     builder: StateGraph = StateGraph(ScreeningState)
     builder.add_node("evaluate", nodes.evaluate)
@@ -295,6 +307,7 @@ def _build_screening_graph(
     builder.add_node("aggregate", nodes.aggregate)
     builder.add_node("score", nodes.score)
     builder.add_node("recommend", nodes.recommend)
+    builder.add_node("select_candidates", nodes.select_candidates)
     builder.add_edge(START, "evaluate")
     builder.add_conditional_edges(
         "evaluate",
@@ -308,5 +321,6 @@ def _build_screening_graph(
     builder.add_edge("analyze", "aggregate")
     builder.add_edge("aggregate", "score")
     builder.add_edge("score", "recommend")
-    builder.add_edge("recommend", END)
+    builder.add_edge("recommend", "select_candidates")
+    builder.add_edge("select_candidates", END)
     return builder.compile()

@@ -18,6 +18,7 @@ from app.models import (
     Article,
     BatchScreeningConfig,
     CompanyRelation,
+    EventType,
     ExtractedCompany,
     LLMInferenceResult,
     NewsEvent,
@@ -92,6 +93,7 @@ def build_inferences(event_count: int = 2) -> Tuple[LLMInferenceResult, ...]:
         NewsEvent(
             title=f"Event {index}",
             summary="Event summary",
+            event_type=EventType.CORPORATE_EVENT,
             companies=[
                 ExtractedCompany(
                     name="Samsung Electronics",
@@ -207,6 +209,20 @@ def test_response_dto_rejects_extra_properties() -> None:
                 "unexpected": True,
             }
         )
+
+
+def test_response_dto_uses_a_typed_schema_for_reason_items() -> None:
+    schema: dict[str, object] = ScreeningAssessmentResponse.model_json_schema()
+    definitions: dict[str, object] = schema["$defs"]  # type: ignore[assignment]
+    item_schema: dict[str, object] = definitions["ScreeningAssessmentResponseItem"]  # type: ignore[index,assignment]
+    properties: dict[str, object] = item_schema["properties"]  # type: ignore[index,assignment]
+    reasons_schema: dict[str, object] = properties["reasons"]  # type: ignore[index,assignment]
+    reason_items: dict[str, object] = reasons_schema["items"]  # type: ignore[index,assignment]
+
+    assert all(
+        "type" in primitive_schema
+        for primitive_schema in reason_items["anyOf"]  # type: ignore[index,union-attr]
+    )
 
 
 @pytest.mark.parametrize("score", [50.5, float("nan"), float("inf"), -1, 101])
@@ -445,6 +461,8 @@ async def test_screener_continues_after_batch_call_failure(
         "batch_index": 0,
         "candidate_count": 1,
         "error_kind": "structured_output_call",
+        "provider": "test",
+        "provider_error_type": "APIError",
     }
     assert "secret-openai-test-key" not in repr(records)
 

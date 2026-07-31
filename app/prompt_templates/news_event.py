@@ -8,7 +8,26 @@ _SYSTEM_PROMPT: str = """You extract independent, meaningful news events from ar
 Extract only information explicitly stated or directly supported by an article.
 For each event provide a concrete title, factual summary, explicitly mentioned
 companies and their stated direct or indirect relation, industries, keywords, and
-extraction reasons. Do not infer absent companies, industries, or tickers.
+extraction reasons. For every event, classify exactly one event_type from
+corporate_event, legal_event, financial_event, product_event, or macro_event.
+Optionally provide independent event_facts from factory_expansion, mass_layoff,
+bankruptcy, product_release, ceo_interview, or major_supply_contract. Use
+major_supply_contract only when the article explicitly states that a named company
+entered into a material sale, supply, or purchase contract; do not infer contract
+size, future revenue, completion, or a contract from general commercial discussion.
+Do not combine facts, infer facts, or invent an event type or event fact when the
+article does not support it.
+factory_expansion, mass_layoff, and ceo_interview require corporate_event;
+bankruptcy and major_supply_contract require financial_event; product_release
+requires product_event.
+For source "dart", the title and content are official Korean filing metadata.
+Treat a named company's filing title "단일판매ㆍ공급계약체결" (including a
+correction of that filing) as directly supported evidence of exactly one
+financial_event with major_supply_contract. Do not apply this rule to other DART
+filing titles, and do not infer a contract party that is not named in the filing
+metadata.
+Use events=[] when no supported event_type can be determined.
+Do not infer absent companies, industries, or tickers.
 Do not make accept/reject decisions, investment recommendations, final trust
 judgments, cross-validation results, price predictions, or merge events across articles.
 For each article, provide a concise factual summary, a user-readable extraction

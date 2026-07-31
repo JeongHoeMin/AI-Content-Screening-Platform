@@ -1,0 +1,88 @@
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
+
+from app.analyzers import DefaultImpactPolicy
+from app.models import (
+    CompanyRelation, CompanyResolutionStatus, CrossValidationStatus, EventFact,
+    EventType, ExtractedCompany, ImpactDirection, ImpactExclusionReason,
+    ImpactEvaluation, ImpactObservation, ImpactReasonCode, ImpactScope,
+    ImpactUncertainty, NewsEvent, ResolvedCompany, ResolvedDecisionType,
+    ResolvedNewsEvent, ResolvedTicker,
+)
+
+
+def build_event(
+    decision: ResolvedDecisionType = ResolvedDecisionType.ACCEPT,
+    status: CrossValidationStatus | None = None,
+) -> ResolvedNewsEvent:
+    company: ResolvedCompany = ResolvedCompany(name="Company", relation=CompanyRelation.DIRECT, ticker=ResolvedTicker(ticker="005930", exchange="KRX"), company_id="KRX-1", resolution_status=CompanyResolutionStatus.RESOLVED)
+    event: NewsEvent = NewsEvent(title="Title", summary="Summary", event_type=EventType.CORPORATE_EVENT, event_facts=(EventFact.FACTORY_EXPANSION,), companies=[ExtractedCompany(name="Company", relation=CompanyRelation.DIRECT)], industries=["Industry"], keywords=["Keyword"], reasons=["Reason"])
+    return ResolvedNewsEvent(event=event, companies=(company,), decision=decision, cross_validation_status=status)
+
+
+def build_observation(event: ResolvedNewsEvent, direction: ImpactDirection = ImpactDirection.POSITIVE) -> ImpactObservation:
+    return ImpactObservation(scope=ImpactScope.COMPANY, company=event.companies[0], event_fact=EventFact.FACTORY_EXPANSION, direction=direction, uncertainty=ImpactUncertainty.HIGH, reason_code=ImpactReasonCode.FACTORY_EXPANSION_POSITIVE)
+
+
+def test_policy_uses_fixed_priority_for_multiple_exclusion_conditions() -> None:
+    event: ResolvedNewsEvent = build_event(ResolvedDecisionType.REJECT)
+    unresolved: ImpactObservation = build_observation(event).model_copy(update={
+        "company": ResolvedCompany(name="Unresolved", relation=CompanyRelation.DIRECT, ticker=None),
+        "direction": ImpactDirection.UNKNOWN,
+    })
+
+    result: ImpactEvaluation = DefaultImpactPolicy().evaluate(event, (unresolved,))[0]
+
+    assert result == ImpactEvaluation(observation=unresolved, eligible=False, exclusion_reason=ImpactExclusionReason.EVENT_REJECTED)
+
+
+def test_policy_filters_review_not_verified_and_unknown_direction() -> None:
+    review_event: ResolvedNewsEvent = build_event(ResolvedDecisionType.REVIEW)
+    assert DefaultImpactPolicy().evaluate(review_event, (build_observation(review_event),))[0].exclusion_reason is ImpactExclusionReason.EVENT_REVIEW_NOT_VERIFIED
+    accepted_event: ResolvedNewsEvent = build_event()
+    assert DefaultImpactPolicy().evaluate(accepted_event, (build_observation(accepted_event, ImpactDirection.UNKNOWN),))[0].exclusion_reason is ImpactExclusionReason.UNKNOWN_DIRECTION
+
+
+def test_policy_preserves_each_input_observation_identity_and_order() -> None:
+    event: ResolvedNewsEvent = build_event()
+    first: ImpactObservation = build_observation(event)
+    second: ImpactObservation = first.model_copy(update={
+        "event_fact": EventFact.MASS_LAYOFF,
+        "direction": ImpactDirection.NEGATIVE,
+        "reason_code": ImpactReasonCode.MASS_LAYOFF_NEGATIVE,
+    })
+
+    evaluations: tuple[ImpactEvaluation, ...] = DefaultImpactPolicy().evaluate(
+        event,
+        (first, second),
+    )
+
+    assert tuple(item.observation for item in evaluations) == (first, second)
+    assert evaluations[0].observation is first
+    assert evaluations[1].observation is second
+
+
+def test_policy_excludes_unsupported_scope_after_event_gates() -> None:
+    event: ResolvedNewsEvent = build_event()
+    observation: ImpactObservation = ImpactObservation(
+        scope=ImpactScope.INDUSTRY,
+        event_fact=EventFact.FACTORY_EXPANSION,
+        direction=ImpactDirection.POSITIVE,
+        uncertainty=ImpactUncertainty.HIGH,
+        reason_code=ImpactReasonCode.FACTORY_EXPANSION_POSITIVE,
+    )
+
+    result: ImpactEvaluation = DefaultImpactPolicy().evaluate(event, (observation,))[0]
+
+    assert result.exclusion_reason is ImpactExclusionReason.UNSUPPORTED_SCOPE
+
+
+@pytest.mark.parametrize(
+    ("eligible", "reason"),
+    [(True, ImpactExclusionReason.UNKNOWN_DIRECTION), (False, None)],
+)
+def test_evaluation_rejects_inconsistent_eligibility(eligible: bool, reason: ImpactExclusionReason | None) -> None:
+    with pytest.raises(ValidationError):
+        ImpactEvaluation(observation=build_observation(build_event()), eligible=eligible, exclusion_reason=reason)

@@ -23,6 +23,8 @@ class NewsEventResponseItem(BaseModel):
 
     title: str
     summary: str
+    event_type: str
+    event_facts: List[str] = Field(default_factory=list)
     companies: List[ExtractedCompanyResponseItem] = Field(default_factory=list)
     industries: List[str] = Field(default_factory=list)
     keywords: List[str] = Field(default_factory=list)

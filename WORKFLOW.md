@@ -12,6 +12,14 @@ Article
   → Analyze → Aggregate → Score → Recommend → WorkflowResult / CLI JSON
 ```
 
+`Recommend` 노드는 하나의 `ScoringResult`를 `RecommendationPolicy`에 전달한다. Policy는 threshold snapshot,
+reason code, action을 포함한 final immutable `RecommendationResult`를 만들고, Engine은 이를 정확히 한 번 호출해
+같은 객체 identity로 반환한다. 이어지는 `Select Candidates` 노드는 RecommendationDecision만 소비해 internal
+`CandidateSelectionResult`를 만들며 score/action을 수정하지 않는다. CLI는 workflow result 직렬화 경계에서만
+Decision을 기존 recommendation JSON schema로 투영하고 candidate provenance는 외부 schema에 추가하지 않는다.
+`ScreeningResult`는 internal `CandidateSelectionResult`를 필수로 보존한다. CLI JSON은 output projection이며
+internal workflow snapshot을 재구성하는 round-trip DTO가 아니다.
+
 ## 노드 계약 형식
 
 아래의 모든 실행 노드는 같은 여섯 개 계약 필드를 사용한다.
@@ -78,13 +86,15 @@ Input → Output → Failure → Retry → Owner → Responsibility
 ### Output
 
 - `LLMInferenceResult[]`
-- 원본 identity를 유지한 `NewsEvent[]`
+- 원본 identity를 유지한 `NewsEvent[]` (`event_type` 필수, `event_facts` 선택)
 - 성공 batch 수
 
 ### Failure
 
 - 빈 입력은 LLM 호출 없이 빈 결과다.
 - event 단위 parser 오류는 정상 sibling event를 보존한다.
+- EventType 오류는 해당 event만 제외하고, EventFact 오류는 해당 Fact만 제외해 유효 event와
+  sibling Fact를 보존한다.
 - provider, structured-response, root-validation 오류는 해당 batch를 건너뛰고 다음 batch를 계속 처리한다.
 - 처리 대상이 있었지만 유효 inference가 0개면 단계 예외를 발생시킨다.
 
@@ -101,6 +111,8 @@ Input → Output → Failure → Retry → Owner → Responsibility
 ### Responsibility
 
 - Article에서 구조화된 event 관측을 만든다.
+- EventType은 상위 Domain Category이며 EventFact는 독립적이고 선택적인 구체 사건이다. Extractor는
+  서로 다른 Category의 복합 사건을 별도 event로 분리한다.
 - Parser는 transport를 Domain으로 검증한다.
 - 최종 event 정책이나 투자 추천을 결정하지 않는다.
 
@@ -231,10 +243,14 @@ Input → Output → Failure → Retry → Owner → Responsibility
 
 - `ImpactAnalyzer`
 - impact strategy
+- impact policy
 
 ### Responsibility
 
-- resolved event가 기업·산업·시장·거시에 미치는 영향을 분석한다.
+- Strategy는 등록된 Impact Rule Catalog와 `DIRECT` company relation으로 observation을 생성한다. `INDIRECT` 및 향후 Supplier/Customer/Competitor/Parent/Subsidiary relation은 별도 정책 전에는 direction을 자동 전파하지 않는다.
+- Policy는 observation을 변경하지 않는 filtering만 수행하고, 허용·제외·downstream 전달 여부만 결정한다.
+- 모든 observation은 `ImpactAnalysis` snapshot에 보존한다.
+- `ImpactAnalysis.evaluations`는 `ImpactPolicy`가 생성하며, Strategy observation과 Policy eligibility를 하나의 immutable 값으로 결합한다. `observations`는 evaluations에서 계산되므로 별도 tuple의 길이·순서 불일치가 발생하지 않는다.
 - 최종 stock score와 recommendation을 결정하지 않는다.
 
 ## Aggregate
@@ -263,7 +279,7 @@ Input → Output → Failure → Retry → Owner → Responsibility
 
 ### Responsibility
 
-- 분석 결과를 scoring에 사용할 증거 집계로 변환한다.
+- snapshot을 변경하거나 observation을 삭제하지 않고, policy가 eligible로 표시한 canonical `COMPANY` observation만 scoring에 사용할 downstream evidence로 선택한다. adapter는 eligible observation 하나를 `CompanyImpact` 하나로 변환하며 같은 company/event observation을 병합·상쇄·dedup하지 않는다. `UNKNOWN` 및 `AMBIGUOUS`/`UNRESOLVED` company observation은 snapshot에는 보존하고 aggregation에서만 제외한다.
 - 새 기사 사실을 생성하거나 recommendation을 결정하지 않는다.
 
 ## Score
@@ -292,6 +308,9 @@ Input → Output → Failure → Retry → Owner → Responsibility
 ### Responsibility
 
 - 검증된 aggregation을 명시적인 규칙으로 종목 점수로 변환한다.
+- Strategy는 Config와 evidence contribution으로 최종 `ScoringResult`를 만들며, Engine은 동일 객체를
+  그대로 반환한다. score evidence는 `ScoreContribution`으로 보존하고 score는 contribution 합과 일치한다.
+- `ScoringResult.policy_version`은 이번 scoring 실행에 사용한 policy provenance를 보관한다.
 - LLM 출력만으로 점수 또는 매수 결론을 만들지 않는다.
 
 ## Recommend
@@ -327,4 +346,8 @@ Input → Output → Failure → Retry → Owner → Responsibility
 
 `ExecutionMode.MOCK`은 결정적 extractor/screener/cross validator를 사용하고, `ExecutionMode.OPENAI`는 같은 structured-output gateway를 사용하는 LLM 구현을 사용한다. 이후 downstream과 CLI JSON schema는 두 mode에서 동일하다.
 
-CLI는 `python -m app screening --input <articles.json> --mode mock|openai`로 실행한다. 표준 출력은 결과 JSON만 사용하고, 제한된 structlog 로그와 오류는 표준 오류로 분리한다.
+CLI는 `python -m app --input <articles.json> --mode mock|openai`로 실행한다. `--audit-log`는 safe terminal audit JSONL을, `--alert-log`는 audit 저장 이후 발생한 safe alert JSONL을 남긴다. `python -m app --audit-report <audit.jsonl>`는 workflow를 실행하지 않고 aggregate metrics만 출력한다. 표준 출력은 결과 또는 report JSON만 사용하고, 제한된 structlog 로그와 오류는 표준 오류로 분리한다.
+
+## 운영 실행 계약
+
+`ScreeningExecutionHarness`만 workflow terminal audit persistence와 provider request-budget scope를 소유한다. `DailyWorkflowScheduler`는 UTC daily schedule과 injected job lifecycle만 소유하며 실패한 job 뒤에도 다음 slot을 예약한다. `OperationalAlertPolicy`는 failed execution 및 configured duration threshold를 safe alert로 투영한다. JSONL retention은 atomic rotation과 prune candidate plan만 제공하며, 자동 파일 삭제를 수행하지 않는다.

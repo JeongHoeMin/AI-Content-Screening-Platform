@@ -40,6 +40,15 @@ def test_load_openai_config_uses_defaults(monkeypatch: pytest.MonkeyPatch) -> No
     assert config.max_retries == 2
 
 
+def test_openai_config_repr_redacts_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sensitive-api-key")
+
+    config = load_openai_config()
+
+    assert "sensitive-api-key" not in repr(config)
+    assert "[redacted]" in repr(config)
+
+
 def test_dotenv_path_is_repository_root_and_ignores_current_directory(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

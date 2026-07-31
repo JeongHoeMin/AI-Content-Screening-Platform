@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from app.models import (
     CompanyRelation,
+    EventType,
     ExtractedCompany,
     NewsEvent,
     ScreeningAssessment,
@@ -17,6 +18,7 @@ def build_event() -> NewsEvent:
     return NewsEvent(
         title="Investment announcement",
         summary="A company announced a material investment.",
+        event_type=EventType.CORPORATE_EVENT,
         companies=[
             ExtractedCompany(
                 name="Samsung Electronics",

@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
+    "fastapi>=0.115.0",
     "langchain>=0.3.30",
     "langchain-openai>=0.3.35",
     "langgraph>=0.6.11",
@@ -15,6 +16,7 @@ dependencies = [
     "rich>=15.0.0",
     "structlog>=25.5.0",
     "typer>=0.23.2",
+    "uvicorn>=0.30.0",
 ]
 
 [project.scripts]

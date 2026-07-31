@@ -6,7 +6,7 @@ from typing import List, Optional
 import pytest
 
 from app.deduplicators import DuplicateStrategy, RuleDuplicateStrategy
-from app.models import CompanyRelation, ExtractedCompany, NewsEvent
+from app.models import CompanyRelation, EventType, ExtractedCompany, NewsEvent
 
 
 def build_event(
@@ -28,6 +28,7 @@ def build_event(
     return NewsEvent(
         title=title,
         summary="Event summary",
+        event_type=EventType.CORPORATE_EVENT,
         companies=[
             ExtractedCompany(name=name, relation=relation)
             for name in resolved_company_names

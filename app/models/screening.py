@@ -71,6 +71,7 @@ class ScreeningAssessmentResponse(BaseModel):
 IndexValue = Union[StrictInt, StrictStr, StrictBool, None]
 ScoreValue = Union[StrictInt, StrictFloat, StrictStr, StrictBool, None]
 BooleanValue = Union[StrictBool, StrictInt, StrictStr, None]
+ReasonValue = Union[StrictStr, StrictInt, StrictFloat, StrictBool, None]
 
 
 class ScreeningAssessmentResponseItem(BaseModel):
@@ -83,7 +84,7 @@ class ScreeningAssessmentResponseItem(BaseModel):
     importance: ScoreValue = None
     credibility: ScoreValue = None
     requires_cross_validation: BooleanValue = None
-    reasons: List[object] = Field(default_factory=list)
+    reasons: List[ReasonValue] = Field(default_factory=list)
 
 
 class ScreeningParseErrorKind(str, Enum):

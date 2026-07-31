@@ -43,3 +43,29 @@ class RawDcInsidePost(RawPost):
     views: int = Field(default=0, ge=0)
     recommend_count: int = Field(default=0)
     reply_count: int = Field(default=0, ge=0)
+
+
+class RawNaverNewsPost(RawPost):
+    """Structured raw news result returned by the Naver search API."""
+
+    source: CommunityType = CommunityType.NAVER_NEWS
+    title_html: str = Field(min_length=1)
+    description_html: str = Field(min_length=1)
+    publisher_url: HttpUrl
+    naver_url: HttpUrl
+    published_at: datetime
+
+
+class RawDartDisclosurePost(RawPost):
+    """Structured raw disclosure metadata returned by the OpenDART list API."""
+
+    source: CommunityType = CommunityType.DART
+    corporation_code: str = Field(min_length=1)
+    corporation_name: str = Field(min_length=1)
+    stock_code: Optional[str] = None
+    market_class: Optional[str] = None
+    report_name: str = Field(min_length=1)
+    receipt_number: str = Field(min_length=1)
+    receipt_date: datetime
+    filer_name: Optional[str] = None
+    disclosure_url: HttpUrl

@@ -76,14 +76,15 @@ class CrossValidationAssessment(BaseModel):
 IndexValue = Union[StrictInt, StrictStr, StrictBool, None]
 ScoreValue = Union[StrictInt, StrictFloat, StrictStr, StrictBool, None]
 RelationValue = Union[StrictStr, StrictInt, StrictBool, None]
+TextListValue = Union[StrictStr, StrictInt, StrictFloat, StrictBool, None]
 
 
 class CrossValidationEvidenceResponseItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
     evidence_index: IndexValue = None
     relation: RelationValue = None
-    matched_claims: List[object] = Field(default_factory=list)
-    conflicting_claims: List[object] = Field(default_factory=list)
+    matched_claims: List[TextListValue] = Field(default_factory=list)
+    conflicting_claims: List[TextListValue] = Field(default_factory=list)
 
 
 class CrossValidationAssessmentResponseItem(BaseModel):
@@ -91,7 +92,7 @@ class CrossValidationAssessmentResponseItem(BaseModel):
     event_index: IndexValue = None
     evidence: List[CrossValidationEvidenceResponseItem] = Field(default_factory=list)
     confidence: ScoreValue = None
-    reasons: List[object] = Field(default_factory=list)
+    reasons: List[TextListValue] = Field(default_factory=list)
 
 
 class CrossValidationAssessmentResponse(BaseModel):

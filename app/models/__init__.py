@@ -1,6 +1,17 @@
 """Domain models."""
 
 from app.models.article import Article, ArticleEvaluationResult, ArticleRejectReason
+from app.models.candidate_selection import (
+    DEFAULT_RANKING_POLICY_CONFIG,
+    DEFAULT_RECOMMENDATION_RANK_CATALOG,
+    CandidateEvaluation,
+    CandidateReasonCode,
+    CandidateSelectionResult,
+    CandidateStatus,
+    RankingPolicyConfig,
+    RecommendationRankCatalog,
+    RecommendationRankEntry,
+)
 from app.models.collect_posts import (
     CollectPostsData,
     CollectPostsMetadata,
@@ -9,6 +20,11 @@ from app.models.collect_posts import (
 )
 from app.models.community import CommunityType
 from app.models.evaluation_response import EvaluationResponse, EvaluationResponseItem
+from app.models.event_compatibility import (
+    DEFAULT_EVENT_TYPE_COMPATIBILITY,
+    EventTypeCompatibility,
+    EventTypeCompatibilityEntry,
+)
 from app.models.evidence import CompanyEvidence, EvidenceAggregation
 from app.models.generate_script import (
     GeneratedScript,
@@ -21,6 +37,12 @@ from app.models.impact_analysis import (
     CompanyImpact,
     ImpactAnalysis,
     ImpactDirection,
+    ImpactExclusionReason,
+    ImpactEvaluation,
+    ImpactObservation,
+    ImpactReasonCode,
+    ImpactScope,
+    ImpactUncertainty,
 )
 from app.models.llm_inference import (
     BatchExtractionConfig,
@@ -31,7 +53,13 @@ from app.models.llm_inference import (
     NewsEventParseResult,
 )
 from app.models.normalize import NormalizeResult
-from app.models.news_event import CompanyRelation, ExtractedCompany, NewsEvent
+from app.models.news_event import (
+    CompanyRelation,
+    EventFact,
+    EventType,
+    ExtractedCompany,
+    NewsEvent,
+)
 from app.models.company_resolution import (
     CanonicalCompany,
     CompanyDirectoryEntry,
@@ -54,11 +82,24 @@ from app.models.resolved_news_event import (
     TickerResolvedEvent,
 )
 from app.models.resolve import ResolveDecision
-from app.models.raw_post import RawDcInsidePost, RawPost, RawRedditPost
+from app.models.raw_post import (
+    RawDartDisclosurePost,
+    RawDcInsidePost,
+    RawNaverNewsPost,
+    RawPost,
+    RawRedditPost,
+)
 from app.models.recommendation import (
     CompanyRecommendation,
+    DEFAULT_RECOMMENDATION_POLICY_CONFIG,
+    DEFAULT_RECOMMENDATION_THRESHOLD_SNAPSHOT,
     Recommendation,
+    RecommendationAction,
+    RecommendationDecision,
+    RecommendationPolicyConfig,
+    RecommendationReasonCode,
     RecommendationResult,
+    RecommendationThresholdSnapshot,
 )
 from app.models.screen_posts import (
     PostEvaluationResult,
@@ -67,7 +108,18 @@ from app.models.screen_posts import (
     ScreenPostsMetadata,
     ScreenPostsRequest,
 )
-from app.models.scoring import CompanyScore, ScoringResult
+from app.models.scoring import (
+    DEFAULT_DIRECTION_SCORE_CATALOG,
+    DEFAULT_SCORING_POLICY_CONFIG,
+    CompanyScore,
+    DirectionScoreCatalog,
+    DirectionScoreEntry,
+    ScoreContribution,
+    ScoreFactor,
+    ScoreReasonCode,
+    ScoringPolicyConfig,
+    ScoringResult,
+)
 from app.models.screening import (
     BatchScreeningConfig,
     ScreeningAssessment,
@@ -97,6 +149,10 @@ __all__ = [
     "BatchExtractionConfig",
     "BatchScreeningConfig",
     "BatchCrossValidationConfig",
+    "CandidateEvaluation",
+    "CandidateReasonCode",
+    "CandidateSelectionResult",
+    "CandidateStatus",
     "CollectPostsData",
     "CollectPostsMetadata",
     "CollectPostsRequest",
@@ -112,9 +168,24 @@ __all__ = [
     "CompanyRecommendation",
     "CompanyRelation",
     "CompanyScore",
+    "DEFAULT_RANKING_POLICY_CONFIG",
+    "DEFAULT_RECOMMENDATION_POLICY_CONFIG",
+    "DEFAULT_RECOMMENDATION_RANK_CATALOG",
+    "DEFAULT_RECOMMENDATION_THRESHOLD_SNAPSHOT",
+    "DirectionScoreCatalog",
+    "DirectionScoreEntry",
+    "ScoreContribution",
+    "ScoreFactor",
+    "ScoreReasonCode",
+    "ScoringPolicyConfig",
     "EvaluationResponse",
     "EvaluationResponseItem",
     "EvidenceAggregation",
+    "EventTypeCompatibility",
+    "EventTypeCompatibilityEntry",
+    "EventFact",
+    "EventType",
+    "DEFAULT_EVENT_TYPE_COMPATIBILITY",
     "ExtractedCompany",
     "ExtractedCompanyResponseItem",
     "GeneratedScript",
@@ -123,6 +194,12 @@ __all__ = [
     "GenerateScriptRequest",
     "ImpactAnalysis",
     "ImpactDirection",
+    "ImpactExclusionReason",
+    "ImpactEvaluation",
+    "ImpactObservation",
+    "ImpactReasonCode",
+    "ImpactScope",
+    "ImpactUncertainty",
     "KRXExchange",
     "LLMInferenceResult",
     "LLMExtractionResult",
@@ -137,6 +214,8 @@ __all__ = [
     "PostEvaluationResult",
     "ProviderResultMetadata",
     "RawDcInsidePost",
+    "RawDartDisclosurePost",
+    "RawNaverNewsPost",
     "RawPost",
     "RawRedditPost",
     "ResolvedCompany",
@@ -146,13 +225,23 @@ __all__ = [
     "TickerResolvedEvent",
     "ResolveDecision",
     "Recommendation",
+    "RecommendationAction",
+    "RecommendationDecision",
+    "RecommendationPolicyConfig",
+    "RecommendationReasonCode",
+    "RecommendationRankCatalog",
+    "RecommendationRankEntry",
     "RecommendationResult",
+    "RecommendationThresholdSnapshot",
+    "RankingPolicyConfig",
     "ScreeningResult",
     "ScreenPostsData",
     "ScreenPostsMetadata",
     "ScreenPostsRequest",
     "ScriptGenerationResult",
     "ScoringResult",
+    "DEFAULT_DIRECTION_SCORE_CATALOG",
+    "DEFAULT_SCORING_POLICY_CONFIG",
     "ScreeningAssessment",
     "ScreeningAssessmentResponse",
     "ScreeningAssessmentResponseItem",

@@ -22,6 +22,10 @@ CrossValidationCandidate → CrossValidationAssessment → CrossValidationResult
 
 `Article`은 외부 기사 표준화 결과로서 id, 제목, 본문, source, 발행 시각, URL을 가진다. `NewsEvent`는 기사에서 추출한 투자 분석 대상 사실이며 제목, 요약, 기업·산업·키워드·근거를 보관한다. event는 기사 원문이나 provider 응답을 대체하지 않으며, 원본 article과의 연결은 workflow inference가 보존한다.
 
+`NewsEvent.event_type`은 필수 상위 Domain Category이며 `CORPORATE_EVENT`, `LEGAL_EVENT`, `FINANCIAL_EVENT`, `PRODUCT_EVENT`, `MACRO_EVENT`만 허용한다. EventType은 Impact 전용 값이 아니며 새 EventFact가 기존 Category에 수용되면 추가하지 않는다. `event_facts`는 선택적 immutable tuple의 독립 Fact다. 순서는 extraction 관측 순서로 보존하고 동일 Fact는 첫 값만 남긴다. Fact와 Type의 관계는 EventFact Enum이 아니라 별도 immutable `EventTypeCompatibility` table이 소유하며, Parser가 주입된 table로 검증한다. table은 교체 가능하지만 하나의 table 안에서 EventFact Enum의 모든 값은 정확히 하나의 Type entry에만 귀속된다. Type을 결정하지 못한 event는 Parser가 recoverable event 오류로 제외한다.
+
+EventFact가 없는 EventType-only event는 유효한 Domain Event다. 다만 Fact를 요구하는 후속 Rule Catalog의 입력은 아니다. Fact 오류는 유효 event와 sibling Fact를 버리지 않으며 Parser가 fact-local 오류로 기록한다. 여러 Fact를 복합 Fact로 합치거나 새로운 의미를 추론하지 않는다.
+
 ## Screening 계약
 
 `ScreeningAssessment`는 `relevance`, `importance`, `credibility`의 0–100 실제 Python `int`, `requires_cross_validation`, 최대 3개의 정규화된 reasons로 구성된다. `ScreeningDecision`은 assessment와 원본 `NewsEvent`를 묶고 `ScreeningPolicy`가 낸 `ACCEPT`, `REVIEW`, `REJECT` 상태를 갖는다.
@@ -60,11 +64,72 @@ domain 정규화는 소문자화, port 제거, 선행 `www.` 제거만 수행한
 
 ## Company Resolution 계약
 
-Company Resolution v1은 KRX 상장사만 다루며 versioned local CSV의 `CanonicalCompany`를 사용한다. `company_id`는 ticker·exchange·회사명과 독립적인 영구 identity이며 회사 동일성 비교의 기준이다. KRX ticker는 leading zero를 보존하는 6자리 문자열이고 exchange는 `KOSPI`, `KOSDAQ`, `KONEX` 중 하나다.
+Company Resolution v1은 KRX 상장사만 다루며 versioned `CanonicalCompany` snapshot을 사용한다. snapshot은 local CSV 또는 KRX OpenAPI에서 만들 수 있다. `company_id`는 ticker·exchange·회사명과 독립적인 영구 identity이며 회사 동일성 비교의 기준이다. KRX ticker는 leading zero를 보존하는 6자리 문자열이고 exchange는 `KOSPI`, `KOSDAQ`, `KONEX` 중 하나다.
 
 Directory는 normalized canonical name과 aliases의 name index에서 후보 사실만 반환한다. Policy는 distinct `company_id` 수가 1개면 `RESOLVED`, 2개 이상이면 `AMBIGUOUS`, 0개면 `UNRESOLVED`를 결정한다. alias collision은 다중 후보로 보존하며, 같은 company ID master row의 중복은 configuration error다.
 
-모든 resolution observation과 `ResolvedCompany` snapshot은 directory version을 보관한다. local CSV version은 `YYYY-MM-DD`, empty directory version은 `empty`다. 모호·미해결 회사는 원본 name/relation/status를 보존하지만 canonical ID와 ticker는 갖지 않으며, 종목 evidence aggregation·score·recommendation에서는 제외한다.
+모든 resolution observation과 `ResolvedCompany` snapshot은 directory version을 보관한다. local CSV와 KRX API snapshot version은 `YYYY-MM-DD`, empty directory version은 `empty`다. 모호·미해결 회사는 원본 name/relation/status를 보존하지만 canonical ID와 ticker는 갖지 않으며, 종목 evidence aggregation·score·recommendation에서는 제외한다.
+
+## Impact Analysis 계약
+
+`ImpactAnalysis`는 원본 `ResolvedNewsEvent` 동일 객체와 immutable `ImpactEvaluation` tuple을 보관하는 snapshot이다. `ImpactEvaluation`은 `ImpactPolicy`가 하나의 Strategy `ImpactObservation`에 대해 생성하는 결과이며, observation과 eligibility를 원자적으로 결합한다. `observations`는 evaluations에서 계산하는 read-only property이므로 별도 저장 tuple과 순서가 어긋날 수 없다. observation은 `scope`, `company`, `event_fact`, `direction`, `uncertainty`, Strategy 전용 `reason_code`를 가진다. `COMPANY` scope observation은 회사를 반드시 참조하고, `INDUSTRY`·`MARKET`·`MACRO` scope에는 회사를 넣지 않는다.
+
+`ImpactDirection`의 `UNKNOWN`은 근거 부족을, `NEUTRAL`은 영향 없다는 적극적 판단을 뜻한다. 둘은 동일시하지 않는다. 모든 observation은 방향이나 resolution 상태와 무관하게 analysis snapshot에 보존한다.
+
+v1 EventFact에는 명시된 `MAJOR_SUPPLY_CONTRACT`도 포함한다. 이는 공시나 기사에 계약 체결 사실이 직접 명시되고 계약 당사 기업이 DIRECT로 식별된 경우에만 사용한다. 계약 규모·이행 가능성·미래 실적은 추가로 추론하지 않는다. 기본 catalog는 이 계약 체결 사실을 positive observation으로 해석한다.
+
+Direction은 versioned Impact Rule Catalog의 등록된 Fact, Direction, Reason Code 조합으로만 생성한다. Catalog는 모든 `EventFact`를 정확히 한 번씩 등록해야 하며 중복·누락은 fail-fast한다. v1에서 `CompanyRelation.DIRECT`만 direction 생성 대상이며 `INDIRECT`는 자동 전파 대상이 아니다. 각 Fact는 독립 observation을 만들고 상충 direction은 보존한다.
+
+`ImpactPolicy`는 observation의 허용·제외와 downstream 전달 여부만 결정하는 filtering 계층이다. `ImpactEvaluation`은 observation과 eligibility를 함께 보관하며, eligible이면 reason이 null, ineligible이면 하나의 Policy 전용 `exclusion_reason`을 가진다. 우선순위는 `EVENT_REJECTED` → `EVENT_REVIEW_NOT_VERIFIED` → `COMPANY_NOT_RESOLVED` → `COMPANY_IDENTITY_MISSING` → `UNSUPPORTED_SCOPE` → `UNKNOWN_DIRECTION`이다. Policy는 Strategy observation의 identity와 순서를 유지하며 `direction`, `scope`, `reason_code`, `uncertainty`, company reference를 수정·교체·삭제하지 않는다. Aggregation adapter는 eligible evaluation의 observation 하나를 CompanyImpact 하나로 변환하며 병합·상쇄하지 않는다.
+
+## Stock Scoring 계약
+
+Scoring은 `EvidenceAggregation`의 `CompanyImpact(company, direction)`만 소비한다. immutable
+`DirectionScoreCatalog`는 모든 `ImpactDirection`을 정확히 한 번 등록하고, `ScoringPolicyConfig`는
+policy version, finite weight range, Catalog를 소유하는 유일한 정책 입력이다. Catalog 중복·누락,
+non-finite 또는 범위 밖 weight는 fail-fast한다.
+
+`ScoreContribution`은 원본 CompanyImpact와 factor, weight, value, reason code를 원자적으로 보존한다.
+v1에서 value는 weight와 같으며 모든 evidence는 하나의 contribution으로 남는다. `CompanyScore`는
+company, score, contributions만 저장하고, `evidences`는 contribution impact를 원래 순서·객체 identity로
+노출하는 read-only property다. score는 contribution value의 `math.fsum`과 일치해야 한다.
+
+`EvidenceAwareScoringStrategy`는 Config로부터 최종 immutable `ScoringResult`를 생성한다.
+policy version은 회사별 값이 아니라 실행 단위 provenance이므로 ScoringResult만 보관한다.
+`DefaultScoringEngine`은 Strategy 결과를 변경·복사·재조립하지 않고 동일 객체를 반환한다.
+
+## Recommendation 계약
+
+`RecommendationThresholdSnapshot`은 strong-buy, buy, sell, strong-sell 네 threshold를 가진 immutable
+Domain Value다. 모든 값은 finite float이고 `strong_sell < sell < buy < strong_buy`를 Snapshot 단독 validator가
+강제한다. `RecommendationPolicyConfig`는 nonblank policy version과 검증된 Snapshot만 소유하는 단일 정책
+입력이다.
+
+`RecommendationDecision`은 Policy가 하나의 `CompanyScore`에 대해 만든 immutable 결과이며,
+`company_score`, action, action별 reason code, threshold snapshot을 원자적으로 보관한다. score는 중복 저장하지
+않고 `company_score.score` property로 노출한다. validator는 score 구간, action, reason code, snapshot이 실제
+ordered threshold 정책과 일치하는지 fail-fast한다. `RecommendationResult`는 실행 단위 policy version과
+decision tuple만 저장한다. 기존 `companies` access는 별도 legacy view가 아니라 동일한
+`RecommendationDecision` collection을 반환하는 read-only compatibility alias다.
+CLI는 이 내부 Decision을 기존 `companies[].score`/`companies[].recommendation` schema로만 투영한다.
+
+## Candidate Selection 계약
+
+`RecommendationRankCatalog`은 모든 `RecommendationAction`을 정확히 한 번씩 등록하고, action 중복·누락,
+negative/duplicate priority를 fail-fast한다. `eligible`은 교체 가능한 설정이 아니라 v1 제품 정책을 명시하는
+Catalog 사실이다. STRONG_BUY/BUY만 eligible이고 나머지는 not eligible이며, 이 조합을 바꾸는 Catalog는
+fail-fast한다. priority만 교체 가능한 ranking 요소이고 v1 ranking에는 eligible entry priority만 사용한다.
+`RankingPolicyConfig`는 nonblank version, `max_candidates >= 1`, Catalog를 단일 immutable policy input으로
+소유한다.
+
+`CandidateEvaluation`은 원본 `RecommendationDecision`, status, reason code, input index, optional rank를
+원자적으로 보존한다. SELECTED만 1 이상 rank를 가지고, NOT_ELIGIBLE과 OUTSIDE_LIMIT에는 rank가 없다.
+`CandidateSelectionResult.evaluations`는 input index ascending의 canonical audit trail이며, candidates는 rank
+ascending, excluded와 decisions는 input order로 계산한다. OUTSIDE_LIMIT reason은 action-independent하며 원래
+action은 Decision에 보존된다.
+
+action별 selected/not-eligible reason은 Candidate Domain helper가 유일하게 소유한다. helper는 해당 status를
+가질 수 없는 action에 대해 명시적 ValueError를 내며, Policy와 Evaluation validator는 같은 helper를 사용한다.
 
 ## Policy 경계
 

@@ -49,6 +49,11 @@ PromptBuilder는 immutable 입력 DTO를 ChatMessage로 조립하며, business r
 
 credibility는 extraction confidence와 다르다. 전자는 이벤트가 기사 근거상 신뢰할 만한지에 대한 screening 관측이고, 후자는 추출 자체의 확신을 표현할 수 있다. 두 수치를 서로 대신 사용하지 않는다.
 
+Event extraction은 모든 event에 하나의 상위 `EventType`을 반환한다. `EventFact`는 선택적 복수의
+독립 사건이며, LLM은 기사에 명시된 Fact만 원래 순서대로 반환하고 Fact를 합치거나 새 의미를 만들지
+않는다. EventType을 확신할 수 없는 event는 반환하지 않는다. EventFact를 확신할 수 없으면 빈 목록을
+반환하며, 이는 유효 event를 무효로 만들지 않는다.
+
 ## 부분 성공과 로그
 
 한 item의 malformed 결과 때문에 batch를 버리지 않는다. Parser는 안전한 error observation을 반환하고, caller는 batch/event/evidence index, internal candidate ID, 제한된 error kind만 structlog 경고로 남긴다. 기사 본문, prompt, raw SDK response, API key, 예외 전문은 로그에 넣지 않는다.

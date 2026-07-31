@@ -3,6 +3,7 @@
 from app.aggregators.base import EvidenceAggregator
 from app.aggregators.default import DefaultEvidenceAggregator
 from app.aggregators.default_strategy import DefaultAggregationStrategy
+from app.aggregators.impact_observation_adapter import ImpactObservationAdapter
 from app.aggregators.strategy import AggregationStrategy
 
 __all__ = [
@@ -10,4 +11,5 @@ __all__ = [
     "DefaultAggregationStrategy",
     "DefaultEvidenceAggregator",
     "EvidenceAggregator",
+    "ImpactObservationAdapter",
 ]

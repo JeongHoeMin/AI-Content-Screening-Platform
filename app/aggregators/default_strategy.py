@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 from app.aggregators.strategy import AggregationStrategy
+from app.aggregators.impact_observation_adapter import ImpactObservationAdapter
 from app.models.evidence import CompanyEvidence
 from app.models.impact_analysis import CompanyImpact, ImpactAnalysis
 from app.models.company_resolution import CompanyResolutionStatus
@@ -14,6 +15,8 @@ from app.models.resolved_news_event import ResolvedCompany
 class DefaultAggregationStrategy(AggregationStrategy):
     """Groups only canonical resolved impacts by stable company identity."""
 
+    adapter: ImpactObservationAdapter = ImpactObservationAdapter()
+
     def aggregate(
         self,
         analyses: List[ImpactAnalysis],
@@ -23,7 +26,12 @@ class DefaultAggregationStrategy(AggregationStrategy):
         grouped_impacts: List[List[CompanyImpact]] = []
 
         for analysis in analyses:
-            for impact in analysis.impacts:
+            for evaluation in analysis.evaluations:
+                if not evaluation.eligible:
+                    continue
+                impact: CompanyImpact = self.adapter.to_company_impact(
+                    evaluation.observation
+                )
                 company_id: Optional[str] = impact.company.company_id
                 if (
                     impact.company.resolution_status

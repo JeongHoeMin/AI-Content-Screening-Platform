@@ -1,115 +1,43 @@
 from __future__ import annotations
 
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import pytest
 
-from app.models import (
-    CompanyEvidence,
-    CompanyImpact,
-    CompanyRelation,
-    CompanyScore,
-    EvidenceAggregation,
-    ImpactDirection,
-    ResolvedCompany,
-    ResolvedTicker,
-    ScoringResult,
-)
+from app.models import EvidenceAggregation, ScoringResult
 from app.scorers import DefaultScoringEngine, ScoringEngine, ScoringStrategy
 
 
 class FakeScoringStrategy(ScoringStrategy):
-    def __init__(
-        self,
-        companies: Tuple[CompanyScore, ...],
-        error: Optional[Exception] = None,
-    ) -> None:
-        self.companies: Tuple[CompanyScore, ...] = companies
+    def __init__(self, result: ScoringResult, error: Optional[Exception] = None) -> None:
+        self.result: ScoringResult = result
         self.error: Optional[Exception] = error
         self.calls: List[EvidenceAggregation] = []
 
-    def score(
-        self,
-        aggregation: EvidenceAggregation,
-    ) -> Tuple[CompanyScore, ...]:
+    def score(self, aggregation: EvidenceAggregation) -> ScoringResult:
         self.calls.append(aggregation)
         if self.error is not None:
             raise self.error
-        return self.companies
+        return self.result
 
 
-def build_aggregation() -> EvidenceAggregation:
-    company: ResolvedCompany = ResolvedCompany(
-        name="Samsung Electronics",
-        relation=CompanyRelation.DIRECT,
-        ticker=ResolvedTicker(ticker="005930", exchange="KRX"),
-    )
-    impact: CompanyImpact = CompanyImpact(
-        company=company,
-        direction=ImpactDirection.POSITIVE,
-    )
-    evidence: CompanyEvidence = CompanyEvidence(
-        company=company,
-        impacts=(impact,),
-    )
-    return EvidenceAggregation(companies=(evidence,))
-
-
-def build_scores(aggregation: EvidenceAggregation) -> Tuple[CompanyScore, ...]:
-    evidence: CompanyEvidence = aggregation.companies[0]
-    return (
-        CompanyScore(
-            company=evidence.company,
-            score=1.0,
-            evidences=evidence.impacts,
-        ),
-    )
-
-
-def test_constructor_stores_strategy_without_side_effects() -> None:
-    aggregation: EvidenceAggregation = build_aggregation()
-    strategy: FakeScoringStrategy = FakeScoringStrategy(build_scores(aggregation))
-
-    engine: DefaultScoringEngine = DefaultScoringEngine(strategy)
-
-    assert engine._strategy is strategy
-    assert strategy.calls == []
-
-
-def test_engine_preserves_strategy_tuple_identity_without_copying() -> None:
-    aggregation: EvidenceAggregation = build_aggregation()
-    companies: Tuple[CompanyScore, ...] = build_scores(aggregation)
-    strategy: FakeScoringStrategy = FakeScoringStrategy(companies)
+def test_engine_returns_the_exact_strategy_result_without_reassembly() -> None:
+    aggregation: EvidenceAggregation = EvidenceAggregation(companies=())
+    strategy_result: ScoringResult = ScoringResult(policy_version="test-v1", companies=())
+    strategy: FakeScoringStrategy = FakeScoringStrategy(strategy_result)
     engine: ScoringEngine = DefaultScoringEngine(strategy)
 
-    result: ScoringResult = engine.score(aggregation)
-
-    assert result.companies is companies
-    assert strategy.calls == [aggregation]
-
-
-def test_engine_handles_empty_input() -> None:
-    aggregation: EvidenceAggregation = EvidenceAggregation(companies=())
-    strategy: FakeScoringStrategy = FakeScoringStrategy(())
-    engine: DefaultScoringEngine = DefaultScoringEngine(strategy)
-
-    result: ScoringResult = engine.score(aggregation)
-
-    assert result.companies == ()
+    assert engine.score(aggregation) is strategy_result
     assert strategy.calls == [aggregation]
 
 
 def test_engine_propagates_strategy_error_without_wrapping() -> None:
-    aggregation: EvidenceAggregation = build_aggregation()
+    aggregation: EvidenceAggregation = EvidenceAggregation(companies=())
     expected_error: RuntimeError = RuntimeError("scoring failed")
-    strategy: FakeScoringStrategy = FakeScoringStrategy(
-        companies=(),
-        error=expected_error,
-    )
-    engine: DefaultScoringEngine = DefaultScoringEngine(strategy)
+    strategy: FakeScoringStrategy = FakeScoringStrategy(ScoringResult(policy_version="test-v1", companies=()), expected_error)
 
     with pytest.raises(RuntimeError) as error_info:
-        engine.score(aggregation)
+        DefaultScoringEngine(strategy).score(aggregation)
 
     assert error_info.value is expected_error
     assert strategy.calls == [aggregation]

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Protocol, Tuple
+from typing import Protocol
 
-from app.models.recommendation import CompanyRecommendation
+from app.models.recommendation import RecommendationResult
 from app.models.scoring import ScoringResult
 
 
@@ -19,6 +19,6 @@ class RecommendationPolicy(Protocol):
     def recommend(
         self,
         scoring: ScoringResult,
-    ) -> Tuple[CompanyRecommendation, ...]:
-        """Return one recommendation for each score in input order."""
+    ) -> RecommendationResult:
+        """Return the final immutable policy result in input score order."""
         ...

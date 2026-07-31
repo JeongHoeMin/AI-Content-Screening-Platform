@@ -78,15 +78,15 @@ Cross-validation Parser/Policy, 연결 요소 기반 출처 계산, Resolve poli
 
 ## 완료 조건
 
-동명이인, ticker 변경, 미해결 회사를 명시적으로 다루고 가짜 ticker를 만들지 않는다. v1은 승인된 KRX 기반 versioned local CSV를 사용하며 다중 시장과 실시간 동기화는 후속 ADR의 범위다.
+동명이인, ticker 변경, 미해결 회사를 명시적으로 다루고 가짜 ticker를 만들지 않는다. v1은 approved KRX 기반 versioned local CSV와 KRX OpenAPI snapshot을 모두 지원하며, API mode는 KOSPI·KOSDAQ·KONEX을 실행 시작 시 동기화한다.
 
 ## 산출물
 
-KRX local master-data directory, 영구 company identity, resolution 관측 모델, provenance, 보수적 aggregation 정책 및 결정성 테스트.
+KRX local/API master-data directory, 영구 company identity, resolution 관측 모델, provenance, 보수적 aggregation 정책 및 결정성 테스트.
 
 # Phase 6 — Impact Analysis
 
-**Status:** Planned
+**Status:** Completed
 
 ## 목적
 
@@ -102,7 +102,7 @@ KRX local master-data directory, 영구 company identity, resolution 관측 모�
 
 # Phase 7 — Stock Scoring
 
-**Status:** Planned
+**Status:** Completed
 
 ## 목적
 
@@ -116,25 +116,25 @@ score factor, 가중치, 경계값이 명시적 Policy로 관리되고 같은 �
 
 scoring factor contract, aggregation strategy, 설정 가능한 Policy, 회귀 테스트와 설명 가능한 score breakdown.
 
-# Phase 8 — Portfolio Recommendation
+# Phase 8 — Explainable Recommendation & Candidate Selection
 
-**Status:** Planned
+**Status:** Completed
 
 ## 목적
 
-종목 점수를 사용자에게 이해 가능한 buy/watch/caution 관찰과 포트폴리오 수준 제약으로 연결한다.
+종목 점수를 기존 다섯 recommendation action으로 연결하고, 결정된 action의 정책 근거와 후보 선택 결과를 immutable Domain으로 보존한다.
 
 ## 완료 조건
 
-추천은 근거·불확실성·위험 제약을 함께 설명하고 자동 거래를 수행하지 않는다.
+기존 threshold boundary 및 CLI JSON schema를 유지하면서 action·reason code·threshold snapshot, deterministic candidate rank·exclusion을 설명 가능하게 보존한다.
 
 ## 산출물
 
-recommendation Policy, risk/profile input model, portfolio constraint strategy, 사용자 출력과 제품 고지.
+explainable recommendation policy, threshold snapshot, result-level provenance, exhaustive ranking catalog, candidate-selection audit trail, regression tests.
 
 # Phase 9 — 운영 안정성 및 자동화
 
-**Status:** Planned
+**Status:** Completed
 
 ## 목적
 
@@ -142,8 +142,12 @@ recommendation Policy, risk/profile input model, portfolio constraint strategy, 
 
 ## 완료 조건
 
-스케줄 실행, persistence, metrics, audit trail, alerting, 비용·latency·secret 관리가 Harness 중심으로 운영된다.
+UTC daily scheduler, JSONL persistence/audit·metrics·alerting, request-cap cost guard, latency threshold, secret-safe logging과 retention/recovery plan이 Harness 중심으로 운영된다.
 
 ## 산출물
 
 실행 scheduler, 보안 관측 체계, 품질 지표, 장애 대응 문서, 데이터 보존 정책.
+
+## v1 운영 범위 제한
+
+외부 notification provider, OS cron/service installation, distributed lock, token-price accounting, object storage, automatic deletion은 안정된 Harness 계약 위의 후속 운영 통합이다. v1은 안전한 JSONL adapter와 explicit configuration만 제공하며, 자동 삭제나 비밀값 전송을 하지 않는다.

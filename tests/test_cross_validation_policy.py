@@ -6,7 +6,7 @@ from typing import Tuple
 import pytest
 
 from app.cross_validators import DefaultCrossValidationPolicy
-from app.models import Article, CompanyRelation, CrossValidationAssessment, CrossValidationAssessmentEvidence, CrossValidationCandidate, CrossValidationStatus, EvidenceRelation, ExtractedCompany, NewsEvent, ScreeningDecision, ScreeningDecisionType
+from app.models import Article, CompanyRelation, CrossValidationAssessment, CrossValidationAssessmentEvidence, CrossValidationCandidate, CrossValidationStatus, EventType, EvidenceRelation, ExtractedCompany, NewsEvent, ScreeningDecision, ScreeningDecisionType
 
 
 def article(identifier: str, source: str, host: str | None = None) -> Article:
@@ -15,7 +15,7 @@ def article(identifier: str, source: str, host: str | None = None) -> Article:
 
 
 def candidate(related: Tuple[Article, ...]) -> CrossValidationCandidate:
-    event = NewsEvent(title="Event", summary="Summary", companies=[ExtractedCompany(name="Company", relation=CompanyRelation.DIRECT)], industries=["Industry"], keywords=["Keyword"], reasons=["Reason"])
+    event = NewsEvent(title="Event", summary="Summary", event_type=EventType.CORPORATE_EVENT, companies=[ExtractedCompany(name="Company", relation=CompanyRelation.DIRECT)], industries=["Industry"], keywords=["Keyword"], reasons=["Reason"])
     return CrossValidationCandidate(candidate_id="source:0", decision=ScreeningDecision(event=event, decision=ScreeningDecisionType.REVIEW, relevance=50, importance=50, credibility=50, requires_cross_validation=True, reasons=("Review",)), source_article=article("source", "Source"), related_articles=related)
 
 

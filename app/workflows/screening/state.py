@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Tuple, TypedDict
 
 from app.models.article import Article, ArticleEvaluationResult
+from app.models.candidate_selection import CandidateSelectionResult
 from app.models.evidence import EvidenceAggregation
 from app.models.impact_analysis import ImpactAnalysis
 from app.models.llm_inference import LLMInferenceResult
@@ -31,4 +32,5 @@ class ScreeningState(TypedDict, total=False):
     evidence: EvidenceAggregation
     scoring: ScoringResult
     recommendation: RecommendationResult
+    candidate_selection: CandidateSelectionResult
     statistics: WorkflowStatistics

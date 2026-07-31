@@ -1,0 +1,70 @@
+from __future__ import annotations
+
+from fastapi.testclient import TestClient
+
+from datetime import datetime, timezone
+
+from app.models import CommunityType, Post
+from app.web.app import DashboardRunManager, RecommendationRunRequest, create_web_app
+
+
+def test_dashboard_page_exposes_recommendation_controls() -> None:
+    client: TestClient = TestClient(create_web_app())
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "오늘의 뉴스를 기준으로 추천받기" in response.text
+    assert "실시간 작업" in response.text
+    assert "선택된 뉴스" in response.text
+    assert "매수 · 판매 추천" in response.text
+    assert "전체 수집 뉴스 분석" in response.text
+    assert "analysisById" in response.text
+    assert "JSON.stringify({limit:3})" in response.text
+    assert "추천 실행 후 선택된 뉴스를 표시합니다." in response.text
+
+
+def test_dashboard_uses_small_default_collection_limit() -> None:
+    request: RecommendationRunRequest = RecommendationRunRequest()
+
+    assert request.limit == 3
+
+
+def test_dashboard_analysis_cards_use_workflow_article_identity() -> None:
+    post: Post = Post(
+        id="post-1",
+        source=CommunityType.NAVER_NEWS,
+        title="News title",
+        content="News content",
+        created_at=datetime(2026, 7, 31, tzinfo=timezone.utc),
+        url="https://example.com/news",
+    )
+
+    analysis = DashboardRunManager._initial_analyses([post])[0]
+
+    assert analysis.id == "naver_news:post-1"
+
+
+def test_dashboard_rejects_unknown_run() -> None:
+    client: TestClient = TestClient(create_web_app())
+
+    response = client.get("/api/runs/not-found")
+
+    assert response.status_code == 404
+
+
+def test_dashboard_rejects_unknown_event_stream_before_response_starts() -> None:
+    client: TestClient = TestClient(create_web_app())
+
+    response = client.get("/api/runs/not-found/events")
+
+    assert response.status_code == 404
+
+
+def test_dashboard_health_endpoint_is_ready_without_credentials() -> None:
+    client: TestClient = TestClient(create_web_app())
+
+    response = client.get("/api/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}

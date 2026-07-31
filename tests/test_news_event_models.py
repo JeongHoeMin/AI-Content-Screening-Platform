@@ -11,6 +11,11 @@ from app.models import (
     Article,
     ArticleRejectReason,
     CompanyRelation,
+    DEFAULT_EVENT_TYPE_COMPATIBILITY,
+    EventFact,
+    EventType,
+    EventTypeCompatibility,
+    EventTypeCompatibilityEntry,
     ExtractedCompany,
     LLMInferenceResult,
     LLMExtractionResult,
@@ -52,6 +57,7 @@ def test_llm_inference_confidence_is_bounded() -> None:
     event: NewsEvent = NewsEvent(
         title="HBM production expansion",
         summary="Samsung Electronics expands HBM production.",
+        event_type=EventType.CORPORATE_EVENT,
         companies=[],
         industries=["Semiconductors"],
         keywords=["HBM"],
@@ -73,6 +79,7 @@ def test_news_event_rejects_empty_collection_items(field_name: str) -> None:
     values: Dict[str, Any] = {
         "title": "HBM production expansion",
         "summary": "Samsung Electronics expands HBM production.",
+        "event_type": EventType.CORPORATE_EVENT,
         "companies": [
             ExtractedCompany(
                 name="Samsung Electronics",
@@ -87,3 +94,145 @@ def test_news_event_rejects_empty_collection_items(field_name: str) -> None:
 
     with pytest.raises(ValidationError):
         NewsEvent.model_validate(values)
+
+
+def test_news_event_requires_event_type() -> None:
+    values: Dict[str, Any] = {
+        "title": "Event",
+        "summary": "Summary",
+        "companies": [],
+        "industries": [],
+        "keywords": [],
+        "reasons": [],
+    }
+
+    with pytest.raises(ValidationError):
+        NewsEvent.model_validate(values)
+
+
+def test_news_event_preserves_fact_order_and_deduplicates_facts() -> None:
+    event: NewsEvent = NewsEvent(
+        title="Expansion",
+        summary="Factory expansion and layoffs are announced.",
+        event_type=EventType.CORPORATE_EVENT,
+        event_facts=(
+            EventFact.FACTORY_EXPANSION,
+            EventFact.MASS_LAYOFF,
+            EventFact.FACTORY_EXPANSION,
+        ),
+        companies=[],
+        industries=[],
+        keywords=[],
+        reasons=[],
+    )
+
+    assert event.event_facts == (
+        EventFact.FACTORY_EXPANSION,
+        EventFact.MASS_LAYOFF,
+    )
+
+
+def test_event_type_compatibility_is_independent_of_event_fact_enum() -> None:
+    assert DEFAULT_EVENT_TYPE_COMPATIBILITY.is_compatible(
+        EventType.FINANCIAL_EVENT,
+        EventFact.BANKRUPTCY,
+    )
+    assert not DEFAULT_EVENT_TYPE_COMPATIBILITY.is_compatible(
+        EventType.PRODUCT_EVENT,
+        EventFact.FACTORY_EXPANSION,
+    )
+
+    event: NewsEvent = NewsEvent(
+        title="Product launch",
+        summary="A product is released.",
+        event_type=EventType.PRODUCT_EVENT,
+        event_facts=(EventFact.FACTORY_EXPANSION,),
+        companies=[],
+        industries=[],
+        keywords=[],
+        reasons=[],
+    )
+
+    assert event.event_facts == (EventFact.FACTORY_EXPANSION,)
+
+
+def test_compatibility_rejects_fact_assigned_to_multiple_event_types() -> None:
+    with pytest.raises(ValidationError):
+        EventTypeCompatibility(
+            entries=(
+                EventTypeCompatibilityEntry(
+                    event_type=EventType.CORPORATE_EVENT,
+                    event_facts=(EventFact.BANKRUPTCY,),
+                ),
+                EventTypeCompatibilityEntry(
+                    event_type=EventType.FINANCIAL_EVENT,
+                    event_facts=(EventFact.BANKRUPTCY,),
+                ),
+            )
+        )
+
+
+def test_compatibility_rejects_table_with_missing_event_facts() -> None:
+    with pytest.raises(ValidationError, match="Missing facts: MASS_LAYOFF, BANKRUPTCY, MAJOR_SUPPLY_CONTRACT"):
+        EventTypeCompatibility(
+            entries=(
+                EventTypeCompatibilityEntry(
+                    event_type=EventType.CORPORATE_EVENT,
+                    event_facts=(EventFact.FACTORY_EXPANSION, EventFact.CEO_INTERVIEW),
+                ),
+                EventTypeCompatibilityEntry(
+                    event_type=EventType.PRODUCT_EVENT,
+                    event_facts=(EventFact.PRODUCT_RELEASE,),
+                ),
+            )
+        )
+
+
+def test_compatibility_accepts_all_distinct_facts_for_distinct_event_types() -> None:
+    compatibility: EventTypeCompatibility = EventTypeCompatibility(
+        entries=(
+            EventTypeCompatibilityEntry(
+                event_type=EventType.CORPORATE_EVENT,
+                event_facts=(
+                    EventFact.FACTORY_EXPANSION,
+                    EventFact.MASS_LAYOFF,
+                    EventFact.CEO_INTERVIEW,
+                ),
+            ),
+            EventTypeCompatibilityEntry(
+                event_type=EventType.FINANCIAL_EVENT,
+                event_facts=(
+                    EventFact.BANKRUPTCY,
+                    EventFact.MAJOR_SUPPLY_CONTRACT,
+                ),
+            ),
+            EventTypeCompatibilityEntry(
+                event_type=EventType.PRODUCT_EVENT,
+                event_facts=(EventFact.PRODUCT_RELEASE,),
+            ),
+        )
+    )
+
+    assert compatibility.is_compatible(
+        EventType.CORPORATE_EVENT,
+        EventFact.FACTORY_EXPANSION,
+    )
+    assert compatibility.is_compatible(
+        EventType.FINANCIAL_EVENT,
+        EventFact.BANKRUPTCY,
+    )
+    assert compatibility.is_compatible(
+        EventType.PRODUCT_EVENT,
+        EventFact.PRODUCT_RELEASE,
+    )
+
+
+def test_default_compatibility_assigns_each_fact_once() -> None:
+    default_facts: Tuple[EventFact, ...] = tuple(
+        event_fact
+        for entry in DEFAULT_EVENT_TYPE_COMPATIBILITY.entries
+        for event_fact in entry.event_facts
+    )
+
+    assert len(default_facts) == len(set(default_facts))
+    assert set(default_facts) == set(EventFact)

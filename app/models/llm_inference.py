@@ -40,6 +40,7 @@ class ExtractionErrorKind(str, Enum):
     """Recoverable extraction failure categories safe for execution observation."""
 
     EVENT_VALIDATION = "event_validation"
+    FACT_VALIDATION = "fact_validation"
     API_CALL = "api_call"
     RESPONSE_PROCESSING = "response_processing"
 
@@ -53,6 +54,7 @@ class ExtractionError(BaseModel):
     message: str = Field(min_length=1)
     article_ids: Tuple[str, ...] = ()
     event_index: Optional[int] = Field(default=None, ge=0)
+    fact_index: Optional[int] = Field(default=None, ge=0)
 
 
 class NewsEventParseResult(BaseModel):

@@ -7,6 +7,7 @@ from app.models import (
     CompanyDirectoryEntry,
     CompanyRelation,
     CompanyResolutionStatus,
+    EventType,
     ExtractedCompany,
     KRXExchange,
     NewsEvent,
@@ -37,6 +38,7 @@ def build_event(companies: List[ExtractedCompany]) -> NewsEvent:
     return NewsEvent(
         title="Company event",
         summary="A company event",
+        event_type=EventType.CORPORATE_EVENT,
         companies=companies,
         industries=["Semiconductors"],
         keywords=["HBM"],

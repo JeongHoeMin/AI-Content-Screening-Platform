@@ -18,7 +18,20 @@ Policy · Resolver · Analyzer · Aggregator · Scorer · Recommender
 LangGraph ScreeningWorkflow / Harness / CLI Bootstrap
 ```
 
-`app/models/`는 외부 계층을 모르는 immutable Pydantic Domain 모델을 둔다. `app/core/`는 Skill request/result/error/metadata와 공통 예외 계약을 둔다. 상위 계층은 하위의 추상 인터페이스에 의존하며, Domain 모델은 OpenAI SDK, LangGraph, CLI를 import하지 않는다.
+`app/models/`는 외부 계층을 모르는 immutable Pydantic Domain 모델을 둔다. `NewsEvent`는 필수 상위 EventType과 선택적 독립 EventFact tuple을 보존하며, Parser가 LLM transport를 검증한다. `app/analyzers/`의 exhaustive Rule Catalog는 Fact별 direction/reason을 소유하고, Policy는 eligibility만 소유한다. `app/aggregators/`의 adapter가 eligible observation을 하나씩 기존 scoring evidence로 변환한다. `app/scorers/`의 Config/Catalog는 direction weight를 소유하고 Strategy는 contribution provenance가 포함된 final ScoringResult를 만든다. `app/core/`는 Skill request/result/error/metadata와 공통 예외 계약을 둔다. 상위 계층은 하위의 추상 인터페이스에 의존하며, Domain 모델은 OpenAI SDK, LangGraph, CLI를 import하지 않는다.
+
+`app/recommenders/`는 `RecommendationPolicyConfig` 하나를 주입받아 score threshold를 해석한다. threshold 값의
+유효성은 `RecommendationThresholdSnapshot` Domain Value가 소유하고, Policy는 `RecommendationDecision`과
+result-level policy version을 생성한다. Engine은 Policy 결과를 재조립하지 않는다. CLI adapter만 내부 explainability
+필드를 legacy JSON schema로 변환하므로 Domain policy와 외부 표현의 책임이 분리된다.
+
+`app/candidates/`는 `RecommendationResult` 이후의 deterministic candidate-selection policy와 Engine을 둔다.
+`RankingPolicyConfig`와 exhaustive Catalog가 action eligibility, priority, candidate limit을 소유하며 Policy는
+candidate audit trail만 만든다. Workflow는 이 internal result를 보존하지만 CLI adapter는 candidate status, rank,
+reason code, policy version을 출력하지 않는다. v1 action eligibility는 Catalog가 명시·검증하는 고정 제품
+정책이고, priority만 교체 가능한 ranking policy 값이다.
+
+`app/harness/`는 Phase 9의 실행 상태와 운영 side effect를 소유한다. `ScreeningExecutionHarness`는 terminal audit를 만들고 optional JSONL sink에 저장한다. audit reader는 metrics report를 만들며, alert decorator는 durable audit 저장 뒤에만 best-effort delivery를 시도한다. daily scheduler는 주입된 Harness job을 UTC 기준으로 호출하고, retention은 archive rotation 및 review-only prune plan으로 로그 보존을 관리한다. 이 계층 밖의 Workflow·Policy·LLM은 파일 I/O, scheduler, alert delivery를 알지 않는다.
 
 ## 주요 구성 요소
 
@@ -42,6 +55,8 @@ LLM은 Extractor, Screener, Cross Validator에서만 구조화된 관측 결과�
 
 OpenAI mode에서는 하나의 `AsyncOpenAI`와 `OpenAIResponsesStructuredOutputClient`, 그리고 stateless `OpenAIResponsesStructuredOutputLLM` gateway를 Extractor·Screener·Cross Validator가 공유한다. 각 호출은 `response_model`을 인자로 전달하므로 현재 gateway는 작업별 상태를 보유하지 않는다. 이 전제가 바뀌면 client만 공유하고 작업별 gateway를 분리한다.
 
+OpenAI 실행은 `ProviderRequestBudget`을 통해 context-local request cap을 공유한다. `ScreeningExecutionHarness`가 scope를 열고 budgeted gateway가 SDK 호출 전에 slot을 claim하므로, 한 실행이 설정된 provider request 상한을 넘기지 않는다. 이 cap은 token-price accounting이 아닌 보수적 비용 상한이다.
+
 ```text
 AsyncOpenAI
     ↓
@@ -55,7 +70,7 @@ OpenAIResponsesStructuredOutputLLM
 
 Mock mode는 같은 Workflow·Policy·후속 단계를 사용하고 LLM 관측 부분만 결정적 구현으로 교체한다. 따라서 Mock은 단순한 별도 제품이 아니라 빠르고 재현 가능한 계약 검증 경로다.
 
-Company Directory mode는 LLM execution mode와 독립적이다. `empty` mode는 version `empty`의 후보 없는 immutable directory를 사용하며, `local_csv` mode는 versioned KRX CSV를 한 번 읽어 immutable name index를 만든다. Directory는 후보만 제공하고 Company Resolution Policy가 canonical ID 기반 status를 결정한다.
+Company Directory mode는 LLM execution mode와 독립적이다. `empty` mode는 version `empty`의 후보 없는 immutable directory를 사용하며, `local_csv` mode는 versioned KRX CSV를 한 번 읽어 immutable name index를 만든다. `krx_api` mode는 실행 시작 시 KOSPI·KOSDAQ·KONEX KRX OpenAPI를 병렬 조회해 하나의 날짜 기반 immutable snapshot을 만든다. 이후 Directory는 네트워크를 호출하지 않고 후보만 제공하며 Company Resolution Policy가 canonical ID 기반 status를 결정한다.
 
 ## 실패와 관측성
 
