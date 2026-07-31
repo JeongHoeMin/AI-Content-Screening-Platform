@@ -5,7 +5,8 @@ import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from math import ceil
+from typing import Any, Dict, List, Literal, Optional
 from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException
@@ -33,7 +34,7 @@ class RecommendationRunRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     category: str = Field(default="국내 증시", min_length=1, max_length=100)
-    limit: int = Field(default=3, ge=1, le=100)
+    limit: Literal[10, 25, 50, 100] = 10
     period_hours: int = Field(default=24, ge=1, le=168)
 
 
@@ -46,6 +47,9 @@ class DashboardEvent(BaseModel):
     message: str = Field(min_length=1)
     node: Optional[str] = None
     completed_node_count: Optional[int] = Field(default=None, ge=1)
+    active_stage: Optional[str] = None
+    completed_stage_count: int = Field(default=0, ge=0)
+    total_stage_count: int = Field(default=12, ge=1)
     error_type: Optional[str] = None
     analyses: List["NewsAnalysisCard"] = Field(default_factory=list)
 
@@ -105,7 +109,7 @@ class DashboardRunResult(BaseModel):
     news_cards: List[NewsCard]
     analyses: List[NewsAnalysisCard]
     recommendations: List[RecommendationCard]
-    statistics: Dict[str, int]
+    statistics: Dict[str, Any]
 
 
 @dataclass
@@ -115,6 +119,8 @@ class _RunState:
     error_type: Optional[str] = None
     completed: bool = False
     analyses: Dict[str, NewsAnalysisCard] = field(default_factory=dict)
+    active_stage: str = "collect"
+    completed_stage_count: int = 0
 
 
 class DashboardRunManager:
@@ -122,6 +128,20 @@ class DashboardRunManager:
 
     def __init__(self) -> None:
         self._runs: Dict[str, _RunState] = {}
+
+    _WORKFLOW_NODES: tuple[str, ...] = (
+        "evaluate",
+        "extract",
+        "screen",
+        "cross_validate",
+        "resolve",
+        "analyze",
+        "aggregate",
+        "score",
+        "recommend",
+        "select_candidates",
+    )
+    _TOTAL_STAGE_COUNT: int = 12
 
     async def start(self, request: RecommendationRunRequest) -> str:
         run_id: str = uuid4().hex
@@ -158,18 +178,34 @@ class DashboardRunManager:
         state: _RunState,
         request: RecommendationRunRequest,
     ) -> None:
+        heartbeat_task: asyncio.Task[None] = asyncio.create_task(
+            self._emit_heartbeats(state)
+        )
         try:
-            await self._emit(state, "collecting", "오늘의 뉴스와 공시를 수집하고 있습니다.")
+            await self._emit(
+                state,
+                "collecting",
+                "오늘의 뉴스와 공시를 수집하고 있습니다.",
+                active_stage="collect",
+            )
+            collection_sources: tuple[CommunityType, ...] = (
+                CommunityType.NAVER_NEWS,
+                CommunityType.DART,
+            )
+            per_source_limit: int = self._per_source_collection_limit(
+                request.limit,
+                len(collection_sources),
+            )
             collect_result = await Harness().run(
                 create_market_collect_posts_skill(),
                 CollectPostsRequest(
-                    sources=[CommunityType.NAVER_NEWS, CommunityType.DART],
-                    limit=request.limit,
+                    sources=list(collection_sources),
+                    limit=per_source_limit,
                     period=timedelta(hours=request.period_hours),
                     category=request.category,
                 ),
             )
-            posts: List[Post] = collect_result.data.posts
+            posts: List[Post] = collect_result.data.posts[: request.limit]
             articles = posts_to_articles(posts)
             initial_analyses: List[NewsAnalysisCard] = self._initial_analyses(posts)
             state.analyses = {analysis.id: analysis for analysis in initial_analyses}
@@ -177,10 +213,24 @@ class DashboardRunManager:
                 state,
                 "collected",
                 f"{len(posts)}건을 수집하고 {len(articles)}건을 분석 대상으로 선택했습니다.",
+                completed_stage_count=1,
                 analyses=initial_analyses,
             )
-            await self._emit(state, "directory", "KRX 종목 스냅샷을 준비하고 있습니다.")
+            await self._emit(
+                state,
+                "directory",
+                "KRX 종목 스냅샷을 준비하고 있습니다.",
+                active_stage="directory",
+                completed_stage_count=1,
+            )
             workflow = await create_market_screening_workflow(ExecutionMode.OPENAI)
+            await self._emit(
+                state,
+                "workflow_started",
+                "분석 워크플로우를 시작했습니다.",
+                active_stage="evaluate",
+                completed_stage_count=2,
+            )
 
             async def on_progress(event: WorkflowProgressEvent) -> None:
                 changed_analyses: List[NewsAnalysisCard] = self._apply_progress_analyses(
@@ -190,9 +240,11 @@ class DashboardRunManager:
                 await self._emit(
                     state,
                     "workflow",
-                    f"LangGraph 단계 완료: {event.node}",
+                    f"{event.node} 단계를 완료했습니다.",
                     node=event.node,
                     completed_node_count=event.completed_node_count,
+                    active_stage=self._next_workflow_stage(event.node),
+                    completed_stage_count=event.completed_node_count + 2,
                     analyses=changed_analyses,
                 )
 
@@ -204,7 +256,12 @@ class DashboardRunManager:
             )
             state.result = self._build_result(run_id, posts, result, state.analyses)
             state.completed = True
-            await self._emit(state, "completed", "추천 분석이 완료되었습니다.")
+            await self._emit(
+                state,
+                "completed",
+                "추천 분석이 완료되었습니다.",
+                completed_stage_count=self._TOTAL_STAGE_COUNT,
+            )
         except Exception as error:
             state.error_type = type(error).__name__
             state.completed = True
@@ -212,7 +269,46 @@ class DashboardRunManager:
                 state,
                 "failed",
                 "추천 실행에 실패했습니다. 실행 환경 설정을 확인하세요.",
+                completed_stage_count=state.completed_stage_count,
                 error_type=state.error_type,
+            )
+        finally:
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
+
+    @classmethod
+    def _next_workflow_stage(cls, node: str) -> Optional[str]:
+        """Return the next graph stage after a completed node."""
+        try:
+            node_index: int = cls._WORKFLOW_NODES.index(node)
+        except ValueError:
+            return None
+        next_index: int = node_index + 1
+        if next_index >= len(cls._WORKFLOW_NODES):
+            return None
+        return cls._WORKFLOW_NODES[next_index]
+
+    @staticmethod
+    def _per_source_collection_limit(total_limit: int, source_count: int) -> int:
+        """Request enough from each source to fill the public total limit."""
+        if source_count <= 0:
+            raise ValueError("Collection source count must be positive")
+        return ceil(total_limit / source_count)
+
+    async def _emit_heartbeats(self, state: _RunState) -> None:
+        """Confirm long-running work without exposing provider or LLM internals."""
+        while True:
+            await asyncio.sleep(5)
+            if state.completed:
+                return
+            await self._emit(
+                state,
+                "heartbeat",
+                "현재 단계를 계속 처리하고 있습니다.",
+                completed_stage_count=state.completed_stage_count,
             )
 
     def _build_result(
@@ -247,7 +343,7 @@ class DashboardRunManager:
                     reason_code=decision.reason_code.value,
                 )
             )
-        statistics: Dict[str, int] = result.statistics.model_dump()
+        statistics: Dict[str, Any] = result.statistics.model_dump()
         return DashboardRunResult(
             run_id=run_id,
             news_cards=news_cards,
@@ -329,13 +425,22 @@ class DashboardRunManager:
         completed_node_count: Optional[int] = None,
         error_type: Optional[str] = None,
         analyses: Optional[List[NewsAnalysisCard]] = None,
+        active_stage: Optional[str] = None,
+        completed_stage_count: Optional[int] = None,
     ) -> None:
+        if active_stage is not None:
+            state.active_stage = active_stage
+        if completed_stage_count is not None:
+            state.completed_stage_count = completed_stage_count
         await state.queue.put(
             DashboardEvent(
                 type=event_type,
                 message=message,
                 node=node,
                 completed_node_count=completed_node_count,
+                active_stage=state.active_stage,
+                completed_stage_count=state.completed_stage_count,
+                total_stage_count=self._TOTAL_STAGE_COUNT,
                 error_type=error_type,
                 analyses=analyses or [],
             )
