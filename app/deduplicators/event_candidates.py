@@ -28,16 +28,18 @@ class EventCandidateGenerator:
 
     _MAX_AGE: timedelta = timedelta(days=7)
     _SIMILARITY: float = 0.5
+    _MAX_CANDIDATES: int = 100
 
     def generate(
         self,
         events: Tuple[DeduplicationEvent, ...],
     ) -> Tuple[EventComparisonCandidate, ...]:
-        return tuple(
+        candidates: Tuple[EventComparisonCandidate, ...] = tuple(
             EventComparisonCandidate(left, right)
             for left, right in combinations(events, 2)
             if self._is_candidate(left, right)
         )
+        return candidates[: self._MAX_CANDIDATES]
 
     def _is_candidate(self, left: DeduplicationEvent, right: DeduplicationEvent) -> bool:
         if abs(left.published_at - right.published_at) > self._MAX_AGE:
