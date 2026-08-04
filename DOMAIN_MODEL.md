@@ -41,6 +41,8 @@ catalog version, 수집/통과/제외 수, 이유 집계, UTC 시각만 보관�
 
 `ScreeningAssessment`는 `relevance`, `importance`, `credibility`의 0–100 실제 Python `int`, `requires_cross_validation`, 최대 3개의 정규화된 reasons로 구성된다. `ScreeningDecision`은 assessment와 원본 `NewsEvent`를 묶고 `ScreeningPolicy`가 낸 `ACCEPT`, `REVIEW`, `REJECT` 상태를 갖는다.
 
+`ScreeningScorecard`는 LLM이 관측하는 9개 세부 점수와 영역별 근거를 보존한다. 관련성은 테마 직접성·주제 일치도·시장 전파 경로, 중요도는 영향 크기·범위/파급도·시간 민감도, 신뢰도는 출처 권위·근거 구체성·교차 확인/불확실성으로 구성한다. LLM은 총점을 반환하지 않으며 `ScreeningScorecardPolicy`가 versioned 가중 평균과 half-up 정수 반올림으로 세 총점을 계산한다. scorecard의 누락·범위 밖·비정수 값은 해당 event만 Parser가 제외하고 sibling을 보존한다.
+
 LLM DTO에서 `50`과 `50.0`은 Domain int `50`으로 변환할 수 있다. `50.5`, 문자열 숫자, boolean, `NaN`, `Infinity`, 범위 밖 값은 event 오류이며 fallback score를 만들지 않는다.
 
 ## Cross validation 계약

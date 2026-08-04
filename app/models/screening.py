@@ -40,15 +40,64 @@ class ScreeningCandidate(BaseModel):
     event: NewsEvent
 
 
+class _ScorecardDimension(BaseModel):
+    """Shared immutable shape for one LLM-observed screening dimension."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    reason: str = Field(min_length=1, max_length=280)
+    total: Optional[int] = Field(default=None, ge=0, le=100)
+
+    @field_validator("reason")
+    @classmethod
+    def _validate_reason(cls, value: str) -> str:
+        normalized: str = " ".join(value.split())
+        if not normalized:
+            raise ValueError("Scorecard reason must not be blank")
+        return normalized
+
+
+class RelevanceScorecard(_ScorecardDimension):
+    """Detailed relevance observations before deterministic aggregation."""
+
+    theme_directness: int = Field(ge=0, le=100)
+    topic_match: int = Field(ge=0, le=100)
+    market_transmission_path: int = Field(ge=0, le=100)
+
+
+class ImportanceScorecard(_ScorecardDimension):
+    """Detailed importance observations before deterministic aggregation."""
+
+    impact_magnitude: int = Field(ge=0, le=100)
+    scope_and_spillover: int = Field(ge=0, le=100)
+    time_sensitivity: int = Field(ge=0, le=100)
+
+
+class CredibilityScorecard(_ScorecardDimension):
+    """Detailed credibility observations before deterministic aggregation."""
+
+    source_authority: int = Field(ge=0, le=100)
+    evidence_specificity: int = Field(ge=0, le=100)
+    corroboration_and_uncertainty: int = Field(ge=0, le=100)
+
+
+class ScreeningScorecard(BaseModel):
+    """All detailed LLM observations and Policy-calculated screening totals."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    relevance: RelevanceScorecard
+    importance: ImportanceScorecard
+    credibility: CredibilityScorecard
+
+
 class ScreeningAssessment(BaseModel):
     """Immutable structured LLM assessment without a final policy decision."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     candidate_id: str = Field(min_length=1)
-    relevance: int = Field(ge=0, le=100)
-    importance: int = Field(ge=0, le=100)
-    credibility: int = Field(ge=0, le=100)
+    scorecard: ScreeningScorecard
     requires_cross_validation: bool
     reasons: Tuple[str, ...] = Field(min_length=1, max_length=3)
 
@@ -58,6 +107,27 @@ class ScreeningAssessment(BaseModel):
         if any(not reason.strip() for reason in reasons):
             raise ValueError("Screening assessment reasons must not be blank")
         return reasons
+
+    @property
+    def relevance(self) -> int:
+        """Return the Policy-calculated relevance total."""
+        if self.scorecard.relevance.total is None:
+            raise ValueError("Screening scorecard relevance total is missing")
+        return self.scorecard.relevance.total
+
+    @property
+    def importance(self) -> int:
+        """Return the Policy-calculated importance total."""
+        if self.scorecard.importance.total is None:
+            raise ValueError("Screening scorecard importance total is missing")
+        return self.scorecard.importance.total
+
+    @property
+    def credibility(self) -> int:
+        """Return the Policy-calculated credibility total."""
+        if self.scorecard.credibility.total is None:
+            raise ValueError("Screening scorecard credibility total is missing")
+        return self.scorecard.credibility.total
 
 
 class ScreeningAssessmentResponse(BaseModel):
@@ -74,15 +144,32 @@ BooleanValue = Union[StrictBool, StrictInt, StrictStr, None]
 ReasonValue = Union[StrictStr, StrictInt, StrictFloat, StrictBool, None]
 
 
+class ScreeningScorecardResponseItem(BaseModel):
+    """Strict transport DTO containing all scorecard observations, not totals."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    theme_directness: ScoreValue = None
+    topic_match: ScoreValue = None
+    market_transmission_path: ScoreValue = None
+    relevance_reason: ReasonValue = None
+    impact_magnitude: ScoreValue = None
+    scope_and_spillover: ScoreValue = None
+    time_sensitivity: ScoreValue = None
+    importance_reason: ReasonValue = None
+    source_authority: ScoreValue = None
+    evidence_specificity: ScoreValue = None
+    corroboration_and_uncertainty: ScoreValue = None
+    credibility_reason: ReasonValue = None
+
+
 class ScreeningAssessmentResponseItem(BaseModel):
     """One loose-score LLM response correlated by request-local event index."""
 
     model_config = ConfigDict(extra="forbid")
 
     event_index: IndexValue = None
-    relevance: ScoreValue = None
-    importance: ScoreValue = None
-    credibility: ScoreValue = None
+    scorecard: Optional[ScreeningScorecardResponseItem] = None
     requires_cross_validation: BooleanValue = None
     reasons: List[ReasonValue] = Field(default_factory=list)
 
@@ -94,6 +181,7 @@ class ScreeningParseErrorKind(str, Enum):
     DUPLICATE_EVENT_INDEX = "duplicate_event_index"
     MISSING_EVENT_INDEX = "missing_event_index"
     INVALID_SCORE = "invalid_score"
+    INVALID_SCORECARD = "invalid_scorecard"
     INVALID_CROSS_VALIDATION_FLAG = "invalid_cross_validation_flag"
     INVALID_REASONS = "invalid_reasons"
     DOMAIN_CONVERSION = "domain_conversion"
@@ -125,6 +213,7 @@ class ScreeningDecision(BaseModel):
 
     event: NewsEvent
     decision: ScreeningDecisionType
+    scorecard: Optional[ScreeningScorecard] = None
     relevance: int = Field(ge=0, le=100)
     importance: int = Field(ge=0, le=100)
     credibility: int = Field(ge=0, le=100)

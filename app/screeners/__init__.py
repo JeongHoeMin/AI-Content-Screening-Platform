@@ -13,6 +13,7 @@ from app.screeners.policy import (
     ScreeningPolicy,
     ScreeningPolicyConfig,
 )
+from app.screeners.scorecard_policy import ScreeningScorecardPolicy
 
 __all__ = [
     "DefaultScreeningAssessmentParser",
@@ -24,4 +25,5 @@ __all__ = [
     "ScreeningAssessmentValidationError",
     "ScreeningPolicy",
     "ScreeningPolicyConfig",
+    "ScreeningScorecardPolicy",
 ]

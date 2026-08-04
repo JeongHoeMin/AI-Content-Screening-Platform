@@ -159,6 +159,7 @@ Input → Output → Failure → Retry → Owner → Responsibility
 ### Responsibility
 
 - LLM은 relevance, importance, credibility, 근거, cross-validation 필요성을 관측한다.
+- LLM은 9개 scorecard criterion과 영역별 근거만 반환하며, `ScreeningScorecardPolicy`가 총점을 결정적으로 계산한다.
 - Parser는 0–100 정수 Domain 계약을 보장한다.
 - Policy만 `ACCEPT/REVIEW/REJECT`를 결정한다.
 

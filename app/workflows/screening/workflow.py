@@ -38,6 +38,7 @@ from app.workflows.screening.result import (
     WorkflowEvidenceQuote,
     WorkflowEventEvidenceProgress,
     WorkflowProgressEvent,
+    WorkflowScorecardProgress,
     WorkflowScreeningAnalysisProgress,
     WorkflowStatistics,
     WorkflowValidationAnalysisProgress,
@@ -251,6 +252,20 @@ class ScreeningWorkflow:
                         importance=item.importance,
                         credibility=item.credibility,
                         reasons=item.reasons,
+                        scorecard=(WorkflowScorecardProgress(
+                            theme_directness=item.scorecard.relevance.theme_directness,
+                            topic_match=item.scorecard.relevance.topic_match,
+                            market_transmission_path=item.scorecard.relevance.market_transmission_path,
+                            relevance_reason=item.scorecard.relevance.reason,
+                            impact_magnitude=item.scorecard.importance.impact_magnitude,
+                            scope_and_spillover=item.scorecard.importance.scope_and_spillover,
+                            time_sensitivity=item.scorecard.importance.time_sensitivity,
+                            importance_reason=item.scorecard.importance.reason,
+                            source_authority=item.scorecard.credibility.source_authority,
+                            evidence_specificity=item.scorecard.credibility.evidence_specificity,
+                            corroboration_and_uncertainty=item.scorecard.credibility.corroboration_and_uncertainty,
+                            credibility_reason=item.scorecard.credibility.reason,
+                        ) if item.scorecard is not None else None),
                     )
                 )
             return (), tuple(screening_analyses), ()

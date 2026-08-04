@@ -139,6 +139,9 @@ from app.models.scoring import (
 )
 from app.models.screening import (
     BatchScreeningConfig,
+    CredibilityScorecard,
+    ImportanceScorecard,
+    RelevanceScorecard,
     ScreeningAssessment,
     ScreeningAssessmentResponse,
     ScreeningAssessmentResponseItem,
@@ -148,6 +151,8 @@ from app.models.screening import (
     ScreeningParseError,
     ScreeningParseErrorKind,
     ScreeningParseResult,
+    ScreeningScorecard,
+    ScreeningScorecardResponseItem,
 )
 from app.models.cross_validation import (
     BatchCrossValidationConfig, CrossValidationAssessment, CrossValidationAssessmentEvidence,
@@ -182,6 +187,7 @@ __all__ = [
     "FilterRejectionReason",
     "InvestmentTheme",
     "CompanyImpact",
+    "CredibilityScorecard",
     "CompanyEvidence",
     "CanonicalCompany",
     "CompanyDirectoryEntry",
@@ -224,6 +230,7 @@ __all__ = [
     "ImpactReasonCode",
     "ImpactScope",
     "ImpactUncertainty",
+    "ImportanceScorecard",
     "KRXExchange",
     "LLMInferenceResult",
     "LLMExtractionResult",
@@ -260,6 +267,7 @@ __all__ = [
     "RecommendationRankEntry",
     "RecommendationResult",
     "RecommendationThresholdSnapshot",
+    "RelevanceScorecard",
     "RankingPolicyConfig",
     "ScreeningResult",
     "ScreenPostsData",
@@ -278,6 +286,8 @@ __all__ = [
     "ScreeningParseError",
     "ScreeningParseErrorKind",
     "ScreeningParseResult",
+    "ScreeningScorecard",
+    "ScreeningScorecardResponseItem",
     "CrossValidationAssessment",
     "CrossValidationAssessmentEvidence",
     "CrossValidationAssessmentResponse",

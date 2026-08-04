@@ -17,12 +17,17 @@ from app.models.llm_inference import LLMExtractionResult, LLMInferenceResult
 from app.models.news_event import EventType, NewsEvent
 from app.models.screening import (
     ScreeningAssessment,
+    CredibilityScorecard,
+    ImportanceScorecard,
+    RelevanceScorecard,
+    ScreeningScorecard,
     ScreeningDecision,
     ScreeningCandidate,
 )
 from app.mock_grouping import build_mock_grouping_key
 from app.screeners.base import EventScreener
 from app.screeners.policy import ScreeningPolicy
+from app.screeners.scorecard_policy import ScreeningScorecardPolicy
 
 
 class DeterministicMockExtractor(NewsEventExtractor):
@@ -86,9 +91,22 @@ class DeterministicMockScreener(EventScreener):
                 candidate.event,
                 ScreeningAssessment(
                     candidate_id=candidate.candidate_id,
-                    relevance=60,
-                    importance=60,
-                    credibility=60,
+                    scorecard=ScreeningScorecardPolicy().calculate(
+                        ScreeningScorecard(
+                            relevance=RelevanceScorecard(
+                                theme_directness=60, topic_match=60,
+                                market_transmission_path=60, reason="Mock relevance.",
+                            ),
+                            importance=ImportanceScorecard(
+                                impact_magnitude=60, scope_and_spillover=60,
+                                time_sensitivity=60, reason="Mock importance.",
+                            ),
+                            credibility=CredibilityScorecard(
+                                source_authority=60, evidence_specificity=60,
+                                corroboration_and_uncertainty=60, reason="Mock credibility.",
+                            ),
+                        )
+                    ),
                     requires_cross_validation=True,
                     reasons=("Deterministic mock review assessment.",),
                 ),
