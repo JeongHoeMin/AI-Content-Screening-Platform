@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
 from alembic import context
 from sqlalchemy.engine import Connection
@@ -10,6 +11,9 @@ from sqlalchemy.pool import NullPool
 from app.persistence.schema import metadata
 
 config = context.config
+database_url: str = os.environ.get("DATABASE_URL", "").strip()
+if database_url:
+    config.set_main_option("sqlalchemy.url", database_url)
 target_metadata = metadata
 
 

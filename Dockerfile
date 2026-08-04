@@ -7,6 +7,8 @@ RUN uv sync --frozen --no-install-project
 
 COPY app ./app
 COPY main.py ./main.py
+COPY alembic ./alembic
+COPY alembic.ini ./alembic.ini
 RUN uv sync --frozen
 
 EXPOSE 8000
