@@ -10,8 +10,8 @@ from app.aggregators import DefaultAggregationStrategy, DefaultEvidenceAggregato
 from app.deduplicators import (
     DeterministicEventComparator,
     EventDeduplicator,
-    LLMEventComparator,
 )
+from app.deduplicators.llm_comparator import LLMEventComparator
 from app.candidates import DefaultCandidateSelectionEngine, RuleCandidateSelectionPolicy
 from app.analyzers import (
     DEFAULT_IMPACT_RULE_CATALOG,

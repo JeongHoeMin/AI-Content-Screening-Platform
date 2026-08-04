@@ -9,7 +9,6 @@ from app.deduplicators.event_deduplicator import (
     EventDeduplicator,
     EventDeduplicationResult,
 )
-from app.deduplicators.llm_comparator import LLMEventComparator
 from app.deduplicators.rule_strategy import RuleDuplicateStrategy
 from app.deduplicators.strategy import DuplicateStrategy
 
@@ -21,7 +20,6 @@ __all__ = [
     "EventComparisonObservation",
     "EventDeduplicator",
     "EventDeduplicationResult",
-    "LLMEventComparator",
     "DuplicateStrategy",
     "RuleDuplicateStrategy",
 ]
