@@ -34,3 +34,12 @@ def test_collection_filter_snapshot_migration_extends_the_initial_schema() -> No
 
     assert 'down_revision = "20260804_01"' in migration
     assert "collection_filter_snapshots" in migration
+
+
+def test_execution_audit_migration_follows_collection_filter_snapshot() -> None:
+    migration: str = Path(
+        "alembic/versions/20260805_02_execution_run_observations.py"
+    ).read_text(encoding="utf-8")
+
+    assert 'down_revision = "20260805_01"' in migration
+    assert "workflow_execution_audits" in migration

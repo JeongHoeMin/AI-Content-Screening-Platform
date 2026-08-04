@@ -34,7 +34,10 @@ from app.harness.execution_audit import (
     calculate_workflow_execution_metrics,
 )
 from app.models.article import Article
-from app.persistence import create_document_persistence
+from app.persistence import (
+    create_document_persistence,
+    create_workflow_execution_audit_persistence,
+)
 from app.models.collect_posts import CollectPostsRequest
 from app.models.community import CommunityType
 from app.market_data import (
@@ -322,6 +325,11 @@ async def run(arguments: Sequence[str] | None = None) -> int:
         harness = ScreeningExecutionHarness(
             audit_sink=audit_sink,
             document_persistence=(create_document_persistence(database_config) if database_config else None),
+            execution_audit_persistence=(
+                create_workflow_execution_audit_persistence(database_config)
+                if database_config
+                else None
+            ),
         )
         result = await harness.run(workflow, articles, execution_mode=mode.value)
     except Exception as error:

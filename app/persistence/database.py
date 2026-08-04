@@ -6,6 +6,7 @@ from app.config.persistence import DatabaseConfig
 from app.persistence.harness_adapter import (
     SqlAlchemyCollectionFilterPersistence,
     SqlAlchemyDocumentPersistence,
+    SqlAlchemyWorkflowExecutionAuditPersistence,
 )
 
 
@@ -27,3 +28,10 @@ def create_collection_filter_persistence(
 ) -> SqlAlchemyCollectionFilterPersistence:
     """Assemble the Harness-owned collection-filter persistence adapter."""
     return SqlAlchemyCollectionFilterPersistence(create_session_factory(config))
+
+
+def create_workflow_execution_audit_persistence(
+    config: DatabaseConfig,
+) -> SqlAlchemyWorkflowExecutionAuditPersistence:
+    """Assemble durable safe workflow audit persistence for a Harness."""
+    return SqlAlchemyWorkflowExecutionAuditPersistence(create_session_factory(config))

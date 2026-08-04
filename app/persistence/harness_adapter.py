@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Protocol, Tuple
+from typing import TYPE_CHECKING, Protocol, Tuple
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -14,6 +14,12 @@ from app.persistence.repository import (
     StoredDocument,
 )
 from app.persistence.filter_repository import SqlAlchemyCollectionFilterRepository
+from app.persistence.execution_audit_repository import (
+    SqlAlchemyWorkflowExecutionAuditRepository,
+)
+
+if TYPE_CHECKING:
+    from app.harness.execution_audit import WorkflowExecutionAudit
 
 
 class DocumentPersistence(Protocol):
@@ -28,6 +34,13 @@ class CollectionFilterPersistence(Protocol):
 
     async def persist(self, snapshot: CollectionFilterSnapshot) -> None:
         """Store one safe collection-filter snapshot."""
+
+
+class WorkflowExecutionAuditPersistence(Protocol):
+    """Harness boundary for durable safe workflow terminal observations."""
+
+    async def persist(self, audit: "WorkflowExecutionAudit") -> None:
+        """Store one terminal observation without input content or prompts."""
 
 
 class SqlAlchemyDocumentPersistence:
@@ -74,3 +87,17 @@ class SqlAlchemyCollectionFilterPersistence:
                 SqlAlchemyCollectionFilterRepository(session)
             )
             await repository.store(snapshot)
+
+
+class SqlAlchemyWorkflowExecutionAuditPersistence:
+    """Write safe terminal workflow observations through the Harness boundary."""
+
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self._session_factory: async_sessionmaker[AsyncSession] = session_factory
+
+    async def persist(self, audit: "WorkflowExecutionAudit") -> None:
+        async with self._session_factory.begin() as session:
+            repository: SqlAlchemyWorkflowExecutionAuditRepository = (
+                SqlAlchemyWorkflowExecutionAuditRepository(session)
+            )
+            await repository.store(audit)
