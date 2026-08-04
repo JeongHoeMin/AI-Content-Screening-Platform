@@ -22,8 +22,8 @@ def test_candidate_generator_selects_same_company_and_keyword_overlap() -> None:
     created_at = datetime(2026, 8, 4, tzinfo=timezone.utc)
     candidates = EventCandidateGenerator().generate(
         (
-            DeduplicationEvent("a", event("Samsung supply deal", ["HBM", "supply"]), created_at),
-            DeduplicationEvent("b", event("Samsung signs supply contract", ["HBM", "supply"]), created_at),
+            DeduplicationEvent(id="a", event=event("Samsung supply deal", ["HBM", "supply"]), published_at=created_at),
+            DeduplicationEvent(id="b", event=event("Samsung signs supply contract", ["HBM", "supply"]), published_at=created_at),
         )
     )
 

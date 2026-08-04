@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Dict, Protocol, Tuple
+from types import MappingProxyType
+from typing import Dict, Mapping, Protocol, Tuple
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.deduplicators.canonical_selector import CanonicalEventSelector, CanonicalEventSnapshot
 from app.deduplicators.event_candidates import (
@@ -12,8 +14,7 @@ from app.deduplicators.event_candidates import (
 from app.deduplicators.event_policy import DeduplicationRelation, EventDeduplicationPolicy
 
 
-@dataclass(frozen=True)
-class EventComparisonObservation:
+class EventComparisonObservation(BaseModel):
     """One validated same-event observation; policy retains decision ownership."""
 
     left_event_id: str
@@ -33,13 +34,19 @@ class EventComparator(Protocol):
         """Return at most one observation for each requested candidate pair."""
 
 
-@dataclass(frozen=True)
-class EventDeduplicationResult:
+class EventDeduplicationResult(BaseModel):
     """Canonical projection plus durable observations for harness persistence."""
 
+    model_config = ConfigDict(frozen=True)
+
     canonical_events: Tuple[DeduplicationEvent, ...]
-    canonical_by_event_id: Dict[str, str]
+    canonical_memberships: Tuple[Tuple[str, str], ...]
     observations: Tuple[EventComparisonObservation, ...]
+
+    @property
+    def canonical_by_event_id(self) -> Mapping[str, str]:
+        """Expose an immutable read view without retaining a mutable dictionary."""
+        return MappingProxyType(dict(self.canonical_memberships))
 
 
 class EventDeduplicator:
@@ -92,7 +99,7 @@ class EventDeduplicator:
                 canonical_by_event_id[event.id] = canonical.id
         return EventDeduplicationResult(
             canonical_events=tuple(canonical_events),
-            canonical_by_event_id=canonical_by_event_id,
+            canonical_memberships=tuple(canonical_by_event_id.items()),
             observations=observations,
         )
 
@@ -149,3 +156,4 @@ class DeterministicEventComparator:
             )
             for candidate in candidates
         )
+    model_config = ConfigDict(frozen=True)

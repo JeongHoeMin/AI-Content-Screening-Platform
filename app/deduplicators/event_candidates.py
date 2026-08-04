@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import datetime, timedelta
 from itertools import combinations
 from typing import Tuple
 
 from app.models.news_event import NewsEvent
+from pydantic import BaseModel, ConfigDict, Field
 
 
-@dataclass(frozen=True)
-class DeduplicationEvent:
+class DeduplicationEvent(BaseModel):
     id: str
     event: NewsEvent
     published_at: datetime
@@ -17,8 +16,7 @@ class DeduplicationEvent:
     content_length: int = 0
 
 
-@dataclass(frozen=True)
-class EventComparisonCandidate:
+class EventComparisonCandidate(BaseModel):
     left: DeduplicationEvent
     right: DeduplicationEvent
 
@@ -35,7 +33,7 @@ class EventCandidateGenerator:
         events: Tuple[DeduplicationEvent, ...],
     ) -> Tuple[EventComparisonCandidate, ...]:
         candidates: Tuple[EventComparisonCandidate, ...] = tuple(
-            EventComparisonCandidate(left, right)
+            EventComparisonCandidate(left=left, right=right)
             for left, right in combinations(events, 2)
             if self._is_candidate(left, right)
         )
@@ -70,3 +68,6 @@ class EventCandidateGenerator:
         if not left or not right:
             return 0.0
         return len(left & right) / len(left | right)
+    model_config = ConfigDict(frozen=True)
+
+    model_config = ConfigDict(frozen=True)
