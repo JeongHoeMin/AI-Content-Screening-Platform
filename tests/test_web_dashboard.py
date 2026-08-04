@@ -33,10 +33,22 @@ def test_dashboard_page_exposes_recommendation_controls() -> None:
     assert "중간 · 25건" in response.text
     assert "많이 · 50건" in response.text
     assert "최대 · 100건" in response.text
-    assert "JSON.stringify({limit:selectedSize})" in response.text
+    assert "JSON.stringify({limit:selectedSize,themes:selectedThemes,topics:selectedTopics})" in response.text
     assert "추천 실행 후 선택된 뉴스를 표시합니다." in response.text
     assert "문단 ${escapeHtml(quote.paragraph_index)}" in response.text
     assert "event_evidence" in response.text
+
+
+def test_dashboard_exposes_theme_and_news_topic_filters() -> None:
+    client: TestClient = TestClient(create_web_app())
+
+    response = client.get("/")
+
+    assert "투자 테마" in response.text
+    assert "반도체" in response.text
+    assert "뉴스 주제" in response.text
+    assert "themes:selectedThemes" in response.text
+    assert "topics:selectedTopics" in response.text
 
 
 def test_dashboard_uses_low_default_collection_limit() -> None:
