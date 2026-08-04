@@ -116,7 +116,7 @@ class IrRssProvider(CommunityProvider):
             published_at = published_at.replace(tzinfo=timezone.utc)
         try:
             return RawIrRssPost(
-                raw_id=external_id,
+                raw_id=f"{feed.id}:{external_id}",
                 fetched_at=datetime.now(timezone.utc),
                 feed_id=feed.id,
                 company_name=feed.company_name,

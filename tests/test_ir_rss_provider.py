@@ -58,7 +58,7 @@ def test_ir_rss_provider_collects_guid_and_full_content() -> None:
 
     assert len(raw_posts) == 1
     assert isinstance(raw_posts[0], RawIrRssPost)
-    assert raw_posts[0].raw_id == "release-2026-08-04"
+    assert raw_posts[0].raw_id == "example-ir:release-2026-08-04"
     assert raw_posts[0].feed_id == "example-ir"
 
     normalized = asyncio.run(IrRssNormalizer().normalize(raw_posts[0]))
@@ -92,4 +92,4 @@ def test_ir_rss_provider_collects_atom_entry_with_link_href() -> None:
     raw_posts = asyncio.run(provider.collect(request))
 
     assert len(raw_posts) == 1
-    assert raw_posts[0].raw_id == "atom-release-1"
+    assert raw_posts[0].raw_id == "example-atom:atom-release-1"
