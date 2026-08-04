@@ -52,3 +52,8 @@ event deduplication in three independently reviewable feature branches.
   without numbered paragraphs is rejected before LLM extraction; discovery-only
   Naver results remain ineligible. This is a structural policy only and does not
   infer relevance or importance.
+- 2026-08-04: The deduplication node now generates deterministic candidates,
+  invokes a bounded Structured Output same-event comparator only for those
+  pairs, validates candidate indexes and observations, then lets Policy merge
+  only `same` observations at confidence 80 or above. Mock mode remains
+  conservative and returns `uncertain` rather than asserting event identity.
