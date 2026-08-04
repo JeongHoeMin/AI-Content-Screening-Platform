@@ -14,7 +14,7 @@ from app.models.collection_filter import (
     NewsTopic,
     ThemeMatch,
 )
-from app.models.collection_filter_result import CollectionFilterResult
+from app.models.collection_filter_result import CollectionFilterResult, CollectionFilterSnapshot
 from app.models.candidate_selection import (
     DEFAULT_RANKING_POLICY_CONFIG,
     DEFAULT_RECOMMENDATION_RANK_CATALOG,
@@ -175,6 +175,7 @@ __all__ = [
     "CollectPostsRequest",
     "CollectionFilter",
     "CollectionFilterResult",
+    "CollectionFilterSnapshot",
     "ContentPipelineRequest",
     "ContentPipelineResult",
     "CommunityType",

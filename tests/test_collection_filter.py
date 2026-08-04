@@ -92,3 +92,6 @@ def test_article_filter_preserves_matching_article_identity() -> None:
     assert result.accepted_articles == (matching,)
     assert result.rejected_article_ids == ("dart:2",)
     assert result.rejection_counts == {FilterRejectionReason.THEME_MISMATCH: 1}
+    assert result.rejected_article_reasons == {
+        "dart:2": FilterRejectionReason.THEME_MISMATCH
+    }

@@ -84,3 +84,18 @@ canonical_event_memberships: Table = Table(
     Column("canonical_event_id", String(36), ForeignKey("extracted_events.id"), nullable=False),
     Column("reason", String(64), nullable=False),
 )
+
+collection_filter_snapshots: Table = Table(
+    "collection_filter_snapshots",
+    metadata,
+    Column("run_id", String(64), primary_key=True),
+    Column("themes", JSON, nullable=False),
+    Column("topics", JSON, nullable=False),
+    Column("catalog_version", String(64), nullable=False),
+    Column("collected_count", Integer, nullable=False),
+    Column("accepted_count", Integer, nullable=False),
+    Column("excluded_count", Integer, nullable=False),
+    Column("rejection_counts", JSON, nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    CheckConstraint("collected_count = accepted_count + excluded_count"),
+)

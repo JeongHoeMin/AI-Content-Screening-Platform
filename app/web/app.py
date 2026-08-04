@@ -5,7 +5,7 @@ import json
 import os
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from math import ceil
 from typing import Any, Dict, List, Literal, Optional
 from uuid import uuid4
@@ -15,6 +15,8 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.bootstrap import ExecutionMode
+from app.config import load_optional_database_config
+from app.persistence import CollectionFilterPersistence, create_collection_filter_persistence
 from app.harness import Harness
 from app.harness.execution_audit import ScreeningExecutionHarness
 from app.harness.execution_audit import JsonLinesWorkflowExecutionAuditSink
@@ -26,7 +28,10 @@ from app.market_data import (
 )
 from app.models.collect_posts import CollectPostsRequest
 from app.models.collection_filter import CollectionFilter, FilterRejectionReason, InvestmentTheme, NewsTopic
-from app.models.collection_filter_result import CollectionFilterResult
+from app.models.collection_filter_result import (
+    CollectionFilterResult,
+    CollectionFilterSnapshot,
+)
 from app.models.community import CommunityType
 from app.models.post import Post
 from app.workflows import ScreeningResult, WorkflowProgressEvent
@@ -181,8 +186,12 @@ class _RunState:
 class DashboardRunManager:
     """Harness-owned in-memory state for bounded live dashboard executions."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        filter_persistence: Optional[CollectionFilterPersistence] = None,
+    ) -> None:
         self._runs: Dict[str, _RunState] = {}
+        self._filter_persistence: Optional[CollectionFilterPersistence] = filter_persistence
 
     _WORKFLOW_NODES: tuple[str, ...] = (
         "evaluate",
@@ -267,6 +276,12 @@ class DashboardRunManager:
             ).filter(
                 articles,
                 CollectionFilter(themes=request.themes, topics=request.topics),
+            )
+            await self._persist_filter_snapshot(
+                run_id,
+                request,
+                len(posts),
+                filter_result,
             )
             initial_analyses: List[NewsAnalysisCard] = self._initial_analyses(
                 posts,
@@ -595,10 +610,46 @@ class DashboardRunManager:
             raise HTTPException(status_code=404, detail="Recommendation run was not found")
         return state
 
+    async def _persist_filter_snapshot(
+        self,
+        run_id: str,
+        request: RecommendationRunRequest,
+        collected_count: int,
+        filter_result: CollectionFilterResult,
+    ) -> None:
+        """Persist reproducible safe filter conditions through the harness boundary."""
+        if self._filter_persistence is None:
+            return
+        snapshot: CollectionFilterSnapshot = CollectionFilterSnapshot(
+            run_id=run_id,
+            themes=request.themes,
+            topics=request.topics,
+            catalog_version=filter_result.catalog_version,
+            collected_count=collected_count,
+            accepted_count=len(filter_result.accepted_articles),
+            excluded_count=len(filter_result.rejected_article_ids),
+            rejection_counts={
+                reason.value: count
+                for reason, count in filter_result.rejection_counts.items()
+            },
+            created_at=datetime.now(timezone.utc),
+        )
+        await self._filter_persistence.persist(snapshot)
+
+
+def _create_optional_filter_persistence() -> Optional[CollectionFilterPersistence]:
+    """Configure dashboard filter persistence only when PostgreSQL is configured."""
+    database_config = load_optional_database_config()
+    if database_config is None:
+        return None
+    return create_collection_filter_persistence(database_config)
+
 
 def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
     """Create the dashboard API and its static single-page client."""
-    run_manager: DashboardRunManager = manager or DashboardRunManager()
+    run_manager: DashboardRunManager = manager or DashboardRunManager(
+        filter_persistence=_create_optional_filter_persistence()
+    )
     app = FastAPI(title="AI Content Screening Dashboard")
 
     @app.get("/", response_class=HTMLResponse)
