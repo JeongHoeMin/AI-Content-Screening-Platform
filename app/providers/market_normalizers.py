@@ -61,7 +61,12 @@ class DartDisclosureNormalizer(CommunityNormalizer):
             f"공시 제목: {raw_post.report_name}. "
             f"공시 접수일: {raw_post.receipt_date.date().isoformat()}."
         )
-        content: str = "\n".join(raw_post.document_paragraphs) or fallback_content
+        document_content: str = "\n".join(raw_post.document_paragraphs)
+        content: str = (
+            f"{fallback_content}\n{document_content}"
+            if document_content
+            else fallback_content
+        )
         return NormalizeResult(
             post=Post(
                 id=raw_post.raw_id,
