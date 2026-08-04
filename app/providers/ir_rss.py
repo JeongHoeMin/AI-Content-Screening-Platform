@@ -37,29 +37,31 @@ class IrRssProvider(CommunityProvider):
         self._timeout_seconds: float = timeout_seconds
 
     async def collect(self, request: CollectPostsRequest) -> List[RawPost]:
-        results: Tuple[List[RawIrRssPost], ...] = tuple(
+        collected: Tuple[object, ...] = tuple(
             await asyncio.gather(
-                *(self._collect_feed(feed, request) for feed in self._feeds)
+                *(self._collect_feed(feed, request) for feed in self._feeds),
+                return_exceptions=True,
             )
         )
-        return [post for posts in results for post in posts][: request.limit]
+        successful_results: Tuple[List[RawIrRssPost], ...] = tuple(
+            result for result in collected if isinstance(result, list)
+        )
+        if self._feeds and not successful_results:
+            raise ExternalServiceError("All configured IR RSS feeds failed")
+        return [post for posts in successful_results for post in posts][: request.limit]
 
     async def _collect_feed(
         self,
         feed: IrRssFeedConfig,
         request: CollectPostsRequest,
     ) -> List[RawIrRssPost]:
-        try:
-            payload: str = await self._http_client.get(
-                url=str(feed.url),
-                headers={"Accept": "application/rss+xml, application/atom+xml, application/xml"},
-                query={},
-                timeout_seconds=self._timeout_seconds,
-            )
-            return self._parse_feed(feed, payload, request)
-        except (ElementTree.ParseError, ExternalServiceError, ValueError):
-            logger.warning("ir_rss_feed_unavailable", feed_id=feed.id, error_kind="feed_unavailable")
-            return []
+        payload: str = await self._http_client.get(
+            url=str(feed.url),
+            headers={"Accept": "application/rss+xml, application/atom+xml, application/xml"},
+            query={},
+            timeout_seconds=self._timeout_seconds,
+        )
+        return self._parse_feed(feed, payload, request)
 
     @staticmethod
     def _parse_feed(
