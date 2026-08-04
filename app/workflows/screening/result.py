@@ -75,6 +75,26 @@ class WorkflowScreeningAnalysisProgress(BaseModel):
     importance: int = Field(ge=0, le=100)
     credibility: int = Field(ge=0, le=100)
     reasons: Tuple[str, ...] = ()
+    scorecard: "WorkflowScorecardProgress"
+
+
+class WorkflowScorecardProgress(BaseModel):
+    """Safe detailed scorecard values used by dashboard progress consumers."""
+
+    model_config = ConfigDict(frozen=True)
+
+    theme_directness: int = Field(ge=0, le=100)
+    topic_match: int = Field(ge=0, le=100)
+    market_transmission_path: int = Field(ge=0, le=100)
+    relevance_reason: str = Field(min_length=1, max_length=280)
+    impact_magnitude: int = Field(ge=0, le=100)
+    scope_and_spillover: int = Field(ge=0, le=100)
+    time_sensitivity: int = Field(ge=0, le=100)
+    importance_reason: str = Field(min_length=1, max_length=280)
+    source_authority: int = Field(ge=0, le=100)
+    evidence_specificity: int = Field(ge=0, le=100)
+    corroboration_and_uncertainty: int = Field(ge=0, le=100)
+    credibility_reason: str = Field(min_length=1, max_length=280)
 
 
 class WorkflowValidationAnalysisProgress(BaseModel):
