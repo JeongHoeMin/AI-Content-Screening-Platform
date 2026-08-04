@@ -57,3 +57,6 @@ event deduplication in three independently reviewable feature branches.
   pairs, validates candidate indexes and observations, then lets Policy merge
   only `same` observations at confidence 80 or above. Mock mode remains
   conservative and returns `uncertain` rather than asserting event identity.
+- 2026-08-04: Workflow progress, dashboard cards, and CLI JSON now project at
+  most two Parser-validated quotes per event with the paragraph number and
+  source URL. The projection does not add raw article text to JSONL audit logs.
