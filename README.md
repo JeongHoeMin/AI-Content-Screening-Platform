@@ -10,10 +10,14 @@ OPENAI_API_KEY=...
 IR_RSS_FEEDS=[{"id":"company-ir","url":"https://ir.example.com/rss.xml","company_name":"회사명"}]
 ```
 
-`.env` 파일에 위 환경변수를 넣은 다음 Docker 서버에서 실행합니다.
+환경변수 파일을 준비한 다음 Docker 서버에서 실행합니다. 기본 파일명은 `.env`이며, 다른 보안 경로의 파일은
+Compose 표준 `--env-file` 옵션으로 지정합니다.
 
 ```bash
 docker compose up --build -d
+
+# 예: 별도 보안 경로의 환경 파일
+docker compose --env-file /secure/screening.env up --build -d
 ```
 
 `http://<server>:8000`에서 **오늘의 뉴스를 기준으로 추천받기**를 누르면 운영자가 등록한 기업 IR RSS 전문 수집, KRX OpenAPI 종목 snapshot, LangGraph 노드 진행 상태, 뉴스 카드, Policy 기반 매수·판매 추천을 확인할 수 있습니다. `IR_RSS_FEEDS`에는 승인한 기업·기관의 전문 RSS/Atom URL만 등록합니다. KRX snapshot은 실행마다 `KRX_API_KEY`로 API를 호출해 생성하며 CSV를 마운트하거나 읽지 않습니다.
