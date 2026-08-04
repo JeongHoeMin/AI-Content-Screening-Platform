@@ -13,6 +13,8 @@ class DeduplicationEvent:
     id: str
     event: NewsEvent
     published_at: datetime
+    source: str = ""
+    content_length: int = 0
 
 
 @dataclass(frozen=True)
