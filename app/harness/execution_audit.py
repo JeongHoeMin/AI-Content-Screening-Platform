@@ -12,7 +12,10 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.article import Article
-from app.persistence.harness_adapter import DocumentPersistence
+from app.persistence.harness_adapter import (
+    DocumentPersistence,
+    WorkflowExecutionAuditPersistence,
+)
 from app.workflows import (
     ScreeningResult,
     ScreeningWorkflow,
@@ -197,11 +200,15 @@ class ScreeningExecutionHarness:
         clock: Clock = lambda: datetime.now(timezone.utc),
         execution_id_factory: ExecutionIdFactory = lambda: uuid4().hex,
         document_persistence: Optional[DocumentPersistence] = None,
+        execution_audit_persistence: Optional[WorkflowExecutionAuditPersistence] = None,
     ) -> None:
         self._audit_sink: Optional[WorkflowExecutionAuditSink] = audit_sink
         self._clock: Clock = clock
         self._execution_id_factory: ExecutionIdFactory = execution_id_factory
         self._document_persistence: Optional[DocumentPersistence] = document_persistence
+        self._execution_audit_persistence: Optional[WorkflowExecutionAuditPersistence] = (
+            execution_audit_persistence
+        )
 
     async def run(
         self,
@@ -310,6 +317,8 @@ class ScreeningExecutionHarness:
         return result
 
     async def _append(self, audit: WorkflowExecutionAudit) -> None:
+        if self._execution_audit_persistence is not None:
+            await self._execution_audit_persistence.persist(audit)
         if self._audit_sink is not None:
             await self._audit_sink.append(audit)
 

@@ -3,12 +3,17 @@ from __future__ import annotations
 import io
 import zipfile
 from typing import Tuple
+from xml.etree import ElementTree
 
 from bs4 import BeautifulSoup
 
 
 class DartDocumentExtractionError(ValueError):
     """Raised when an OpenDART original-document archive is unsafe or unusable."""
+
+    def __init__(self, kind: str) -> None:
+        self.kind: str = kind
+        super().__init__(kind)
 
 
 class DartDocumentExtractor:
@@ -22,23 +27,23 @@ class DartDocumentExtractor:
             with zipfile.ZipFile(io.BytesIO(payload)) as archive:
                 members = archive.infolist()
                 if len(members) > self._MAX_ARCHIVE_MEMBERS:
-                    raise DartDocumentExtractionError("Archive contains too many files")
+                    raise DartDocumentExtractionError("too_many_members")
                 if sum(member.file_size for member in members) > self._MAX_UNCOMPRESSED_BYTES:
-                    raise DartDocumentExtractionError("Archive content exceeds size limit")
+                    raise DartDocumentExtractionError("content_too_large")
                 if any(self._is_unsafe_path(member.filename) for member in members):
-                    raise DartDocumentExtractionError("Archive contains an unsafe path")
+                    raise DartDocumentExtractionError("unsafe_path")
                 selected = next(
                     (member for member in members if self._is_supported(member.filename)),
                     None,
                 )
                 if selected is None:
-                    raise DartDocumentExtractionError("Archive contains no supported document")
+                    raise DartDocumentExtractionError("unsupported_document")
                 content: str = archive.read(selected).decode("utf-8", errors="replace")
         except zipfile.BadZipFile as error:
-            raise DartDocumentExtractionError("Response was not a ZIP archive") from error
+            raise DartDocumentExtractionError(self._non_zip_error_kind(payload)) from error
         paragraphs: Tuple[str, ...] = self._paragraphs(content)
         if not paragraphs:
-            raise DartDocumentExtractionError("Document contains no text paragraphs")
+            raise DartDocumentExtractionError("no_text_paragraphs")
         return paragraphs
 
     @staticmethod
@@ -49,6 +54,19 @@ class DartDocumentExtractor:
     def _is_unsafe_path(name: str) -> bool:
         parts: Tuple[str, ...] = tuple(part for part in name.replace("\\", "/").split("/") if part)
         return name.startswith(("/", "\\")) or ".." in parts
+
+    @staticmethod
+    def _non_zip_error_kind(payload: bytes) -> str:
+        """Classify only OpenDART's safe response status, never its message body."""
+        try:
+            root: ElementTree.Element = ElementTree.fromstring(payload)
+        except ElementTree.ParseError:
+            return "not_zip_archive"
+        status: ElementTree.Element | None = root.find(".//status")
+        status_value: str = "" if status is None or status.text is None else status.text.strip()
+        if status_value.isdigit() and len(status_value) <= 8:
+            return f"opendart_status_{status_value}"
+        return "not_zip_archive"
 
     @staticmethod
     def _paragraphs(content: str) -> Tuple[str, ...]:

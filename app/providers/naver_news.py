@@ -49,14 +49,15 @@ class NaverNewsProvider(CommunityProvider):
         if not isinstance(items, list):
             raise ValueError("Naver News response items must be a list")
 
-        cutoff: datetime = datetime.now(timezone.utc) - request.period
+        ended_at: datetime = request.ended_at or datetime.now(timezone.utc)
+        cutoff: datetime = ended_at - request.period
         raw_posts: List[RawPost] = []
         for index, item in enumerate(items):
             raw_post: Optional[RawNaverNewsPost] = self._parse_item(item, index)
             if raw_post is None:
                 continue
             published_at: datetime = raw_post.published_at.astimezone(timezone.utc)
-            if published_at >= cutoff:
+            if cutoff <= published_at < ended_at:
                 raw_posts.append(raw_post)
         return raw_posts
 

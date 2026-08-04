@@ -12,6 +12,7 @@ def test_persistence_schema_defines_required_audit_tables() -> None:
         "deduplication_comparisons",
         "canonical_event_memberships",
         "collection_filter_snapshots",
+        "workflow_execution_audits",
     }
 
 
@@ -25,3 +26,19 @@ def test_source_document_schema_prevents_reprocessing_by_source_or_url() -> None
 
     assert ("source", "external_id") in unique_columns
     assert ("canonical_url",) in unique_columns
+
+
+def test_workflow_execution_audit_schema_contains_only_safe_terminal_fields() -> None:
+    table = metadata.tables["workflow_execution_audits"]
+
+    assert set(table.columns.keys()) == {
+        "execution_id",
+        "execution_mode",
+        "status",
+        "started_at",
+        "finished_at",
+        "duration_seconds",
+        "input_article_count",
+        "statistics",
+        "error_type",
+    }

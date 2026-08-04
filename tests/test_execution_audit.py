@@ -67,6 +67,14 @@ class RecordingAuditSink:
         self.audits.append(audit)
 
 
+class RecordingAuditPersistence:
+    def __init__(self) -> None:
+        self.audits: list[WorkflowExecutionAudit] = []
+
+    async def persist(self, audit: WorkflowExecutionAudit) -> None:
+        self.audits.append(audit)
+
+
 class SuccessfulWorkflow:
     def __init__(self, result: ScreeningResult) -> None:
         self.result: ScreeningResult = result
@@ -134,6 +142,26 @@ async def test_screening_execution_harness_records_safe_success_observation() ->
     assert audit.input_article_count == 1
     assert audit.statistics == build_statistics()
     assert audit.error_type is None
+
+
+@pytest.mark.anyio
+async def test_screening_execution_harness_persists_the_same_safe_terminal_audit() -> None:
+    clock, _ = build_clock()
+    persistence: RecordingAuditPersistence = RecordingAuditPersistence()
+    harness: ScreeningExecutionHarness = ScreeningExecutionHarness(
+        clock=clock,
+        execution_id_factory=lambda: "execution-persisted",
+        execution_audit_persistence=persistence,
+    )
+
+    await harness.run(SuccessfulWorkflow(build_result()), (build_article(),), execution_mode="mock")
+
+    assert len(persistence.audits) == 1
+    audit: WorkflowExecutionAudit = persistence.audits[0]
+    assert audit.execution_id == "execution-persisted"
+    assert audit.statistics == build_statistics()
+    assert "content" not in audit.model_dump(mode="json")
+    assert "url" not in audit.model_dump(mode="json")
 
 
 @pytest.mark.anyio

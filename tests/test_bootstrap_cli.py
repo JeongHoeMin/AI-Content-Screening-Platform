@@ -4,6 +4,7 @@ import json
 import asyncio
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -80,6 +81,12 @@ def test_mock_grouping_normalizes_only_whitespace_and_case() -> None:
     assert (
         normalize_mock_title("Samsung, launches AI chip")
         != normalize_mock_title("Samsung launches AI chip")
+    )
+
+
+def test_cli_converts_historical_kst_day_to_exclusive_utc_boundary() -> None:
+    assert cli._parse_as_of_kst("2026-07-31") == datetime(
+        2026, 7, 31, 15, 0, tzinfo=timezone.utc
     )
 
 

@@ -38,3 +38,19 @@ def test_dart_document_extractor_rejects_traversal_in_unselected_archive_member(
 
     with pytest.raises(DartDocumentExtractionError):
         DartDocumentExtractor().extract(buffer.getvalue())
+
+
+def test_dart_document_extractor_classifies_non_zip_payload_without_content() -> None:
+    with pytest.raises(DartDocumentExtractionError) as error:
+        DartDocumentExtractor().extract(b"not-a-zip")
+
+    assert error.value.kind == "not_zip_archive"
+
+
+def test_dart_document_extractor_classifies_opendart_error_status_without_payload() -> None:
+    payload = b"<?xml version='1.0'?><result><status>020</status><message>safe</message></result>"
+
+    with pytest.raises(DartDocumentExtractionError) as error:
+        DartDocumentExtractor().extract(payload)
+
+    assert error.value.kind == "opendart_status_020"

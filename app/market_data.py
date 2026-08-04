@@ -3,7 +3,12 @@ from __future__ import annotations
 from typing import List, Sequence, Tuple
 
 from app.bootstrap import ExecutionMode, create_screening_workflow_async
-from app.config import load_dart_config, load_naver_news_config, load_trusted_source_config
+from app.config import (
+    ConfigurationError,
+    load_dart_config,
+    load_naver_news_config,
+    load_trusted_source_config,
+)
 from app.evaluators import RuleArticleEvaluatorConfig
 from app.models.article import Article, ArticleContentOrigin, ArticleParagraph
 from app.models.post import Post
@@ -26,6 +31,10 @@ def create_market_collect_posts_skill(
 ) -> CollectPostsSkill:
     """Assemble the real-news and disclosure collection skill from environment config."""
     trusted_config = load_trusted_source_config()
+    if CommunityType.IR_RSS in sources and not trusted_config.ir_rss_feeds:
+        raise ConfigurationError(
+            "IR_RSS_FEEDS must contain at least one approved full-text RSS feed"
+        )
     providers: dict[CommunityType, object] = {}
     normalizers: dict[CommunityType, object] = {}
     if CommunityType.NAVER_NEWS in sources:

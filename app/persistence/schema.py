@@ -99,3 +99,19 @@ collection_filter_snapshots: Table = Table(
     Column("created_at", DateTime(timezone=True), nullable=False),
     CheckConstraint("collected_count = accepted_count + excluded_count"),
 )
+
+workflow_execution_audits: Table = Table(
+    "workflow_execution_audits",
+    metadata,
+    Column("execution_id", String(64), primary_key=True),
+    Column("execution_mode", String(32), nullable=False),
+    Column("status", String(16), nullable=False),
+    Column("started_at", DateTime(timezone=True), nullable=False),
+    Column("finished_at", DateTime(timezone=True), nullable=False),
+    Column("duration_seconds", Float, nullable=False),
+    Column("input_article_count", Integer, nullable=False),
+    Column("statistics", JSON, nullable=True),
+    Column("error_type", String(128), nullable=True),
+    CheckConstraint("duration_seconds >= 0"),
+    CheckConstraint("input_article_count >= 0"),
+)

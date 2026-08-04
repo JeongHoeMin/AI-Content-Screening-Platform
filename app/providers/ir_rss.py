@@ -73,11 +73,15 @@ class IrRssProvider(CommunityProvider):
         item_nodes: List[ElementTree.Element] = list(root.findall(".//item"))
         if not item_nodes:
             item_nodes = list(root.findall(".//{*}entry"))
-        cutoff: datetime = datetime.now(timezone.utc) - request.period
+        ended_at: datetime = request.ended_at or datetime.now(timezone.utc)
+        cutoff: datetime = ended_at - request.period
         posts: List[RawIrRssPost] = []
         for item in item_nodes:
             post: Optional[RawIrRssPost] = IrRssProvider._parse_item(feed, item)
-            if post is not None and post.published_at.astimezone(timezone.utc) >= cutoff:
+            if (
+                post is not None
+                and cutoff <= post.published_at.astimezone(timezone.utc) < ended_at
+            ):
                 posts.append(post)
         return posts[: request.limit]
 

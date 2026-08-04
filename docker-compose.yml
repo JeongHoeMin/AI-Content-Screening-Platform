@@ -17,13 +17,16 @@ services:
     build: .
     ports:
       - "8000:8000"
-    env_file:
-      - .env
     environment:
       COMPANY_DIRECTORY_MODE: krx_api
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-screening}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-screening}
       APP_LOG_PATH: /app/runtime/logs/application.jsonl
       WORKFLOW_AUDIT_LOG_PATH: /app/runtime/logs/execution-audit.jsonl
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
+      KRX_API_KEY: ${KRX_API_KEY:?KRX_API_KEY is required}
+      IR_RSS_FEEDS: "${IR_RSS_FEEDS:-[]}"
+      ARTICLE_MIN_BODY_LENGTH: ${ARTICLE_MIN_BODY_LENGTH:-300}
+      ARTICLE_MAX_BODY_LENGTH: ${ARTICLE_MAX_BODY_LENGTH:-50000}
     depends_on:
       postgres:
         condition: service_healthy

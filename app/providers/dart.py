@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, List, Mapping, Optional
+from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError
 import structlog
@@ -23,6 +24,7 @@ logger = structlog.get_logger(__name__)
 
 _DART_DISCLOSURE_LIST_URL: str = "https://opendart.fss.or.kr/api/list.json"
 _DART_DOCUMENT_URL: str = "https://opendart.fss.or.kr/api/document.xml"
+_KST: ZoneInfo = ZoneInfo("Asia/Seoul")
 
 
 class DartDisclosureProvider(CommunityProvider):
@@ -43,14 +45,17 @@ class DartDisclosureProvider(CommunityProvider):
         )
 
     async def collect(self, request: CollectPostsRequest) -> List[RawPost]:
-        now: datetime = datetime.now(timezone.utc)
+        now: datetime = request.ended_at or datetime.now(timezone.utc)
+        ended_at_kst: datetime = now.astimezone(_KST)
+        start_at_kst: datetime = ended_at_kst - request.period
+        end_inclusive_kst: datetime = ended_at_kst - timedelta(microseconds=1)
         payload: Mapping[str, Any] = await self._http_client.get(
             url=_DART_DISCLOSURE_LIST_URL,
             headers={},
             query={
                 "crtfc_key": self._config.api_key.get_secret_value(),
-                "bgn_de": (now - request.period).strftime("%Y%m%d"),
-                "end_de": now.strftime("%Y%m%d"),
+                "bgn_de": start_at_kst.strftime("%Y%m%d"),
+                "end_de": end_inclusive_kst.strftime("%Y%m%d"),
                 "page_no": "1",
                 "page_count": str(min(request.limit, 100)),
                 "sort": "date",
@@ -124,13 +129,20 @@ class DartDisclosureProvider(CommunityProvider):
                 timeout_seconds=self._config.timeout_seconds,
             )
             paragraphs: tuple[str, ...] = self._document_extractor.extract(archive)
-        except (DartDocumentExtractionError, ExternalServiceError):
+        except DartDocumentExtractionError as error:
             logger.warning(
                 "dart_document_unavailable",
                 item_index=index,
-                error_kind="document_unavailable",
+                error_kind=error.kind,
             )
-            return raw_post
+            return raw_post.model_copy(update={"document_error_kind": error.kind})
+        except ExternalServiceError:
+            logger.warning(
+                "dart_document_unavailable",
+                item_index=index,
+                error_kind="transport_failure",
+            )
+            return raw_post.model_copy(update={"document_error_kind": "transport_failure"})
         return raw_post.model_copy(update={"document_paragraphs": paragraphs})
 
     def _optional_string(self, value: object) -> Optional[str]:

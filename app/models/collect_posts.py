@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.metadata import SkillMetadata
 from app.core.request import SkillRequest
@@ -18,6 +18,17 @@ class CollectPostsRequest(SkillRequest):
     limit: int = Field(gt=0)
     period: timedelta
     category: Optional[str] = None
+    ended_at: Optional[datetime] = None
+
+    @field_validator("ended_at")
+    @classmethod
+    def _normalize_ended_at(cls, value: Optional[datetime]) -> Optional[datetime]:
+        """Require a timezone-aware historical collection boundary in UTC."""
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            raise ValueError("ended_at must include a timezone")
+        return value.astimezone(timezone.utc)
 
 
 class CollectPostsData(BaseModel):

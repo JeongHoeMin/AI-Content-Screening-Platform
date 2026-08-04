@@ -70,6 +70,7 @@ class RawDartDisclosurePost(RawPost):
     filer_name: Optional[str] = None
     disclosure_url: HttpUrl
     document_paragraphs: Tuple[str, ...] = ()
+    document_error_kind: Optional[str] = Field(default=None, min_length=1, max_length=64)
 
 
 class RawIrRssPost(RawPost):
