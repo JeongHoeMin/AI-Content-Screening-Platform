@@ -40,6 +40,57 @@ class ScreeningCandidate(BaseModel):
     event: NewsEvent
 
 
+class _ScorecardDimension(BaseModel):
+    """Shared immutable shape for one LLM-observed screening dimension."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    reason: str = Field(min_length=1, max_length=280)
+    total: Optional[int] = Field(default=None, ge=0, le=100)
+
+    @field_validator("reason")
+    @classmethod
+    def _validate_reason(cls, value: str) -> str:
+        normalized: str = " ".join(value.split())
+        if not normalized:
+            raise ValueError("Scorecard reason must not be blank")
+        return normalized
+
+
+class RelevanceScorecard(_ScorecardDimension):
+    """Detailed relevance observations before deterministic aggregation."""
+
+    theme_directness: int = Field(ge=0, le=100)
+    topic_match: int = Field(ge=0, le=100)
+    market_transmission_path: int = Field(ge=0, le=100)
+
+
+class ImportanceScorecard(_ScorecardDimension):
+    """Detailed importance observations before deterministic aggregation."""
+
+    impact_magnitude: int = Field(ge=0, le=100)
+    scope_and_spillover: int = Field(ge=0, le=100)
+    time_sensitivity: int = Field(ge=0, le=100)
+
+
+class CredibilityScorecard(_ScorecardDimension):
+    """Detailed credibility observations before deterministic aggregation."""
+
+    source_authority: int = Field(ge=0, le=100)
+    evidence_specificity: int = Field(ge=0, le=100)
+    corroboration_and_uncertainty: int = Field(ge=0, le=100)
+
+
+class ScreeningScorecard(BaseModel):
+    """All detailed LLM observations and Policy-calculated screening totals."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    relevance: RelevanceScorecard
+    importance: ImportanceScorecard
+    credibility: CredibilityScorecard
+
+
 class ScreeningAssessment(BaseModel):
     """Immutable structured LLM assessment without a final policy decision."""
 
