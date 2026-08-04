@@ -29,6 +29,17 @@ class NewsEventResponseItem(BaseModel):
     industries: List[str] = Field(default_factory=list)
     keywords: List[str] = Field(default_factory=list)
     reasons: List[str] = Field(default_factory=list)
+    evidence: List["EventEvidenceResponseItem"] = Field(default_factory=list)
+
+
+class EventEvidenceResponseItem(BaseModel):
+    """LLM transport DTO for one event evidence quote."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    article_id: str
+    paragraph_index: int
+    quote: str
 
 
 class ArticleInferenceResponseItem(BaseModel):
