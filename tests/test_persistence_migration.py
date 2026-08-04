@@ -17,3 +17,11 @@ def test_initial_persistence_migration_creates_all_schema_tables() -> None:
         "canonical_event_memberships",
     ):
         assert table_name in migration
+
+
+def test_alembic_environment_uses_asyncpg_migration_connection() -> None:
+    """The runtime database URL uses asyncpg, including during migration."""
+    environment: str = Path("alembic/env.py").read_text(encoding="utf-8")
+
+    assert "async_engine_from_config" in environment
+    assert "connection.run_sync" in environment

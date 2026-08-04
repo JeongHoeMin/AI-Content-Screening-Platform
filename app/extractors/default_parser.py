@@ -20,6 +20,7 @@ from app.models.llm_inference import (
 from app.models.news_event import (
     CompanyRelation,
     EventFact,
+    EventEvidence,
     EventType,
     ExtractedCompany,
     NewsEvent,
@@ -117,6 +118,7 @@ class DefaultNewsEventParser(NewsEventParser):
             try:
                 mapped_event, fact_errors = self._map_event(
                     event,
+                    article=article,
                     article_id=article.id,
                     event_index=event_index,
                 )
@@ -144,6 +146,7 @@ class DefaultNewsEventParser(NewsEventParser):
         self,
         response_item: NewsEventResponseItem,
         *,
+        article: Article,
         article_id: str,
         event_index: int,
     ) -> tuple[NewsEvent, Tuple[ExtractionError, ...]]:
@@ -177,8 +180,36 @@ class DefaultNewsEventParser(NewsEventParser):
             industries=DefaultNewsEventParser._normalize_unique(response_item.industries, True),
             keywords=DefaultNewsEventParser._normalize_unique(response_item.keywords, True),
             reasons=DefaultNewsEventParser._normalize_unique(response_item.reasons, False),
+            evidence=self._map_evidence(response_item.evidence, article),
         )
         return event, tuple(fact_errors)
+
+    @staticmethod
+    def _map_evidence(
+        evidence_items: List[object],
+        article: Article,
+    ) -> Tuple[EventEvidence, ...]:
+        paragraphs: Dict[int, str] = {
+            paragraph.index: paragraph.content for paragraph in article.paragraphs
+        }
+        mapped: List[EventEvidence] = []
+        for item in evidence_items:
+            article_id: str = str(getattr(item, "article_id", ""))
+            paragraph_index: int = int(getattr(item, "paragraph_index", 0))
+            quote: str = " ".join(str(getattr(item, "quote", "")).split())
+            paragraph: str | None = paragraphs.get(paragraph_index)
+            if article_id != article.id or paragraph is None or quote not in paragraph:
+                raise ValueError("Event evidence must quote its named article paragraph")
+            mapped.append(
+                EventEvidence(
+                    article_id=article_id,
+                    paragraph_index=paragraph_index,
+                    quote=quote,
+                )
+            )
+        if len(mapped) > 2:
+            raise ValueError("Event evidence must contain at most two quotes")
+        return tuple(mapped)
 
     def _map_event_facts(
         self,

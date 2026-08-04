@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
@@ -16,6 +16,23 @@ class Article(BaseModel):
     source: str = Field(min_length=1)
     published_at: datetime
     url: HttpUrl
+    content_origin: "ArticleContentOrigin" = "snippet"
+    paragraphs: Tuple["ArticleParagraph", ...] = ()
+    analysis_eligible: bool = True
+
+
+class ArticleContentOrigin(str, Enum):
+    """Provenance of text supplied to an LLM extraction request."""
+
+    OFFICIAL_FULL_TEXT = "official_full_text"
+    SNIPPET = "snippet"
+
+
+class ArticleParagraph(BaseModel):
+    """One numbered paragraph retained for evidence validation."""
+
+    index: int = Field(ge=1)
+    content: str = Field(min_length=1)
 
 
 class ArticleRejectReason(str, Enum):

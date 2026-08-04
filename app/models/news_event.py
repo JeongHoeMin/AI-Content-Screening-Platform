@@ -41,6 +41,16 @@ class ExtractedCompany(BaseModel):
     relation: CompanyRelation
 
 
+class EventEvidence(BaseModel):
+    """A short source-grounded quote supporting one extracted event."""
+
+    model_config = ConfigDict(frozen=True)
+
+    article_id: str = Field(min_length=1)
+    paragraph_index: int = Field(ge=1)
+    quote: str = Field(min_length=1, max_length=280)
+
+
 class NewsEvent(BaseModel):
     """Non-persistent value object extracted from an evaluated article."""
 
@@ -54,6 +64,7 @@ class NewsEvent(BaseModel):
     industries: List[Annotated[str, Field(min_length=1)]]
     keywords: List[Annotated[str, Field(min_length=1)]]
     reasons: List[Annotated[str, Field(min_length=1)]]
+    evidence: Tuple[EventEvidence, ...] = ()
 
     @field_validator("event_facts")
     @classmethod

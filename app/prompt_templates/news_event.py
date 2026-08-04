@@ -8,7 +8,9 @@ _SYSTEM_PROMPT: str = """You extract independent, meaningful news events from ar
 Extract only information explicitly stated or directly supported by an article.
 For each event provide a concrete title, factual summary, explicitly mentioned
 companies and their stated direct or indirect relation, industries, keywords, and
-extraction reasons. For every event, classify exactly one event_type from
+extraction reasons. For every event, return one or two evidence entries using the
+given Article ID, Paragraph number, and a short exact quote from that paragraph.
+For every event, classify exactly one event_type from
 corporate_event, legal_event, financial_event, product_event, or macro_event.
 Optionally provide independent event_facts from factory_expansion, mass_layoff,
 bankruptcy, product_release, ceo_interview, or major_supply_contract. Use
@@ -47,6 +49,10 @@ def build_news_event_user_prompt(articles: Tuple[Article, ...]) -> str:
     """Render accepted source articles with explicit fields and data boundaries."""
     sections: list[str] = []
     for article in articles:
+        paragraph_lines: str = "\n".join(
+            f"Paragraph {paragraph.index}: {json.dumps(paragraph.content, ensure_ascii=False)}"
+            for paragraph in article.paragraphs
+        )
         sections.append(
             "<article-data>\n"
             f"Article ID: {json.dumps(article.id, ensure_ascii=False)}\n"
@@ -54,6 +60,7 @@ def build_news_event_user_prompt(articles: Tuple[Article, ...]) -> str:
             f"Title: {json.dumps(article.title, ensure_ascii=False)}\n"
             f"Published at: {json.dumps(article.published_at.isoformat(), ensure_ascii=False)}\n"
             f"Content: {json.dumps(article.content, ensure_ascii=False)}\n"
+            f"{paragraph_lines}\n"
             "</article-data>"
         )
     return "Extract news events from the following article data:\n\n" + "\n\n".join(sections)

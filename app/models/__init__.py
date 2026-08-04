@@ -70,6 +70,7 @@ from app.models.company_resolution import (
 from app.models.news_event_response import (
     ArticleInferenceResponseItem,
     ExtractedCompanyResponseItem,
+    EventEvidenceResponseItem,
     NewsEventExtractionResponse,
     NewsEventResponseItem,
 )
@@ -188,6 +189,7 @@ __all__ = [
     "DEFAULT_EVENT_TYPE_COMPATIBILITY",
     "ExtractedCompany",
     "ExtractedCompanyResponseItem",
+    "EventEvidenceResponseItem",
     "GeneratedScript",
     "GenerateScriptData",
     "GenerateScriptMetadata",
