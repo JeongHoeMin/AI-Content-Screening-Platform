@@ -2,12 +2,15 @@ from __future__ import annotations
 
 import json
 
+from datetime import datetime, timezone
+
 from app.cli import _serialize_result
 from app.models import (
     DEFAULT_RECOMMENDATION_POLICY_CONFIG,
     CompanyRelation,
     CompanyResolutionStatus,
     EventType,
+    EventEvidence,
     ExtractedCompany,
     KRXExchange,
     NewsEvent,
@@ -19,6 +22,7 @@ from app.models import (
     ScreeningDecision,
     ScreeningDecisionType,
     ScoringResult,
+    Article,
 )
 from app.candidates import RuleCandidateSelectionPolicy
 from app.recommenders import RuleRecommendationPolicy
@@ -94,6 +98,89 @@ def test_cli_serialization_excludes_internal_company_resolution_fields() -> None
     assert "resolution_status" not in company_payload
     assert "directory_version" not in company_payload
     assert payload["recommendation"] == {"companies": []}
+
+
+def test_cli_serialization_includes_evidence_quotes_with_source_url() -> None:
+    event = NewsEvent(
+        title="Samsung event",
+        summary="Samsung event summary",
+        event_type=EventType.CORPORATE_EVENT,
+        companies=[],
+        industries=[],
+        keywords=[],
+        reasons=[],
+        evidence=(
+            EventEvidence(
+                article_id="article-1",
+                paragraph_index=2,
+                quote="계약 금액은 1조원입니다.",
+            ),
+        ),
+    )
+    decision = ScreeningDecision(
+        event=event,
+        decision=ScreeningDecisionType.REVIEW,
+        relevance=50,
+        importance=50,
+        credibility=50,
+        requires_cross_validation=True,
+        reasons=("Screening evidence",),
+    )
+    result = ScreeningResult(
+        recommendation=RecommendationResult(
+            policy_version=DEFAULT_RECOMMENDATION_POLICY_CONFIG.policy_version,
+            decisions=(),
+        ),
+        candidate_selection=RuleCandidateSelectionPolicy().select(
+            RecommendationResult(
+                policy_version=DEFAULT_RECOMMENDATION_POLICY_CONFIG.policy_version,
+                decisions=(),
+            )
+        ),
+        decisions=(decision,),
+        cross_validation_results=(),
+        resolved_events=(),
+        statistics=WorkflowStatistics(
+            total_articles=1,
+            accepted_articles=1,
+            rejected_articles=0,
+            extracted_events=1,
+            successful_batches=1,
+            accepted_events=0,
+            review_events=1,
+            rejected_events=0,
+            verified_events=0,
+            partially_verified_events=0,
+            conflicted_events=0,
+            insufficient_evidence_events=0,
+            resolved_accept_count=0,
+            resolved_review_count=0,
+            resolved_reject_count=0,
+        ),
+    )
+    article = Article(
+        id="article-1",
+        title="공시",
+        content="본문",
+        source="dart",
+        published_at=datetime(2026, 8, 4, tzinfo=timezone.utc),
+        url="https://dart.fss.or.kr/dsaf001/main.do?rcpNo=1",
+    )
+
+    payload: dict[str, object] = json.loads(_serialize_result(result, (article,)))
+
+    assert payload["event_evidence"] == [
+        {
+            "event_title": "Samsung event",
+            "evidence": [
+                {
+                    "paragraph_index": 2,
+                    "quote": "계약 금액은 1조원입니다.",
+                    "source_url": "https://dart.fss.or.kr/dsaf001/main.do?rcpNo=1",
+                }
+            ],
+        }
+    ]
 
 
 def test_cli_serialization_preserves_legacy_recommendation_shape() -> None:

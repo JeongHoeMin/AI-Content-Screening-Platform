@@ -174,7 +174,10 @@ def _parse_sources(value: str) -> List[CommunityType]:
     return sources
 
 
-def _serialize_result(result: ScreeningResult) -> str:
+def _serialize_result(
+    result: ScreeningResult,
+    articles: Tuple[Article, ...] = (),
+) -> str:
     """Keep internal metadata and explainability fields out of the CLI schema."""
     payload: dict[str, Any] = result.model_dump(
         mode="json",
@@ -189,6 +192,24 @@ def _serialize_result(result: ScreeningResult) -> str:
             for decision in result.recommendation.decisions
         ]
     }
+    article_url_by_id: dict[str, str] = {
+        article.id: str(article.url) for article in articles
+    }
+    payload["event_evidence"] = [
+        {
+            "event_title": decision.event.title,
+            "evidence": [
+                {
+                    "paragraph_index": evidence.paragraph_index,
+                    "quote": evidence.quote,
+                    "source_url": article_url_by_id.get(evidence.article_id),
+                }
+                for evidence in decision.event.evidence[:2]
+            ],
+        }
+        for decision in result.decisions
+        if decision.event.evidence
+    ]
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
@@ -281,7 +302,7 @@ async def run(arguments: Sequence[str] | None = None) -> int:
             error_type=type(error).__name__,
         )
         return int(ExitCode.EXECUTION_ERROR)
-    serialized_result: str = _serialize_result(result)
+    serialized_result: str = _serialize_result(result, articles)
     if collection_metadata is not None:
         serialized_payload: dict[str, Any] = json.loads(serialized_result)
         serialized_payload["collection"] = collection_metadata

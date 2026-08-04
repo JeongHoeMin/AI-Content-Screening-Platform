@@ -35,6 +35,8 @@ from app.workflows.screening.result import (
     ScreeningResult,
     WorkflowArticleAnalysisProgress,
     WorkflowContext,
+    WorkflowEvidenceQuote,
+    WorkflowEventEvidenceProgress,
     WorkflowProgressEvent,
     WorkflowScreeningAnalysisProgress,
     WorkflowStatistics,
@@ -192,6 +194,20 @@ class ScreeningWorkflow:
                         summary=item.summary,
                         reasoning=item.reasoning,
                         event_titles=tuple(event.title for event in item.events),
+                        event_evidence=tuple(
+                            WorkflowEventEvidenceProgress(
+                                event_title=event.title,
+                                source_url=str(item.article.url),
+                                quotes=tuple(
+                                    WorkflowEvidenceQuote(
+                                        paragraph_index=evidence.paragraph_index,
+                                        quote=evidence.quote,
+                                    )
+                                    for evidence in event.evidence[:2]
+                                ),
+                            )
+                            for event in item.events
+                        ),
                     )
                 )
             evaluations = cast(

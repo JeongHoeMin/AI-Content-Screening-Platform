@@ -106,12 +106,32 @@ class NewsAnalysisCard(BaseModel):
     summary: Optional[str] = None
     reasoning: Optional[str] = None
     event_titles: List[str] = Field(default_factory=list)
+    event_evidence: List["EventEvidenceCard"] = Field(default_factory=list)
     decision: Optional[str] = None
     relevance: Optional[int] = Field(default=None, ge=0, le=100)
     importance: Optional[int] = Field(default=None, ge=0, le=100)
     credibility: Optional[int] = Field(default=None, ge=0, le=100)
     reasons: List[str] = Field(default_factory=list)
     validation_status: Optional[str] = None
+
+
+class EvidenceQuoteCard(BaseModel):
+    """Display-safe quote projection for an extracted event."""
+
+    model_config = ConfigDict(frozen=True)
+
+    paragraph_index: int = Field(ge=1)
+    quote: str = Field(min_length=1, max_length=280)
+
+
+class EventEvidenceCard(BaseModel):
+    """Display-safe source evidence projection for an extracted event."""
+
+    model_config = ConfigDict(frozen=True)
+
+    event_title: str = Field(min_length=1)
+    source_url: str = Field(min_length=1)
+    quotes: List[EvidenceQuoteCard] = Field(default_factory=list, max_length=2)
 
 
 class DashboardRunResult(BaseModel):
@@ -427,6 +447,20 @@ class DashboardRunManager:
                     "summary": analysis.summary,
                     "reasoning": analysis.reasoning,
                     "event_titles": list(analysis.event_titles),
+                    "event_evidence": [
+                        EventEvidenceCard(
+                            event_title=evidence.event_title,
+                            source_url=evidence.source_url,
+                            quotes=[
+                                EvidenceQuoteCard(
+                                    paragraph_index=quote.paragraph_index,
+                                    quote=quote.quote,
+                                )
+                                for quote in evidence.quotes
+                            ],
+                        )
+                        for evidence in analysis.event_evidence
+                    ],
                 }
             )
             state.analyses[updated.id] = updated

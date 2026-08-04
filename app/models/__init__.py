@@ -61,6 +61,7 @@ from app.models.llm_inference import (
 from app.models.normalize import NormalizeResult
 from app.models.news_event import (
     CompanyRelation,
+    EventEvidence,
     EventFact,
     EventType,
     ExtractedCompany,
@@ -189,6 +190,7 @@ __all__ = [
     "EvaluationResponse",
     "EvaluationResponseItem",
     "EvidenceAggregation",
+    "EventEvidence",
     "EventTypeCompatibility",
     "EventTypeCompatibilityEntry",
     "EventFact",
