@@ -20,9 +20,11 @@ from app.models import (
     EventTypeCompatibilityEntry,
     ExtractionErrorKind,
     ExtractedCompanyResponseItem,
+    EventEvidenceResponseItem,
     NewsEventExtractionResponse,
     NewsEventResponseItem,
 )
+from app.models.article import ArticleParagraph
 
 
 def build_article(index: int) -> Article:
@@ -88,6 +90,31 @@ def test_parser_preserves_input_article_order_and_event_identity() -> None:
     assert result.inferences[0].events[0].title == "First event"
     assert result.inferences[1].events[0].companies[0].relation is CompanyRelation.DIRECT
     assert result.inferences[0].confidence == 0.8
+
+
+def test_parser_maps_evidence_only_when_quote_is_in_the_named_paragraph() -> None:
+    article: Article = build_article(1).model_copy(
+        update={
+                "paragraphs": (
+                    ArticleParagraph(index=1, content="삼성전자가 공급 계약을 체결했다."),
+            )
+        }
+    )
+    item: ArticleInferenceResponseItem = build_item(article.id, "Supply contract")
+    item.events[0].evidence = [
+        EventEvidenceResponseItem(
+            article_id=article.id,
+            paragraph_index=1,
+            quote="공급 계약을 체결했다",
+        )
+    ]
+
+    result = DefaultNewsEventParser().parse(
+        NewsEventExtractionResponse(articles=[item]),
+        (article,),
+    )
+
+    assert result.inferences[0].events[0].evidence[0].quote == "공급 계약을 체결했다"
 
 
 @pytest.mark.parametrize(
