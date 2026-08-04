@@ -28,3 +28,13 @@ def test_dart_document_extractor_rejects_archive_path_traversal() -> None:
 
     with pytest.raises(DartDocumentExtractionError):
         DartDocumentExtractor().extract(payload)
+
+
+def test_dart_document_extractor_rejects_traversal_in_unselected_archive_member() -> None:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("report.html", "<p>정상 문단</p>")
+        archive.writestr("../unexpected.txt", "unsafe")
+
+    with pytest.raises(DartDocumentExtractionError):
+        DartDocumentExtractor().extract(buffer.getvalue())

@@ -92,7 +92,7 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--mode", default=ExecutionMode.MOCK.value)
     parser.add_argument(
         "--sources",
-        default="naver_news,dart",
+        default="naver_news,dart,ir_rss",
         help="Comma-separated real collection sources for --collect.",
     )
     parser.add_argument("--category", help="Naver News search query for --collect.")
@@ -164,9 +164,13 @@ def _parse_sources(value: str) -> List[CommunityType]:
         sources: List[CommunityType] = [CommunityType(item) for item in values]
     except ValueError as error:
         raise CliInputError("--sources contains an unsupported source") from error
-    supported_sources: set[CommunityType] = {CommunityType.NAVER_NEWS, CommunityType.DART}
+    supported_sources: set[CommunityType] = {
+        CommunityType.NAVER_NEWS,
+        CommunityType.DART,
+        CommunityType.IR_RSS,
+    }
     if any(source not in supported_sources for source in sources):
-        raise CliInputError("--collect supports only naver_news and dart")
+        raise CliInputError("--collect supports only naver_news, dart, and ir_rss")
     return sources
 
 
@@ -230,11 +234,12 @@ async def run(arguments: Sequence[str] | None = None) -> int:
     collection_metadata: object = None
     try:
         if args.collect:
-            collect_skill: CollectPostsSkill = create_market_collect_posts_skill()
+            sources: List[CommunityType] = _parse_sources(args.sources)
+            collect_skill: CollectPostsSkill = create_market_collect_posts_skill(sources)
             collect_result = await Harness().run(
                 collect_skill,
                 CollectPostsRequest(
-                    sources=_parse_sources(args.sources),
+                    sources=sources,
                     limit=args.limit,
                     period=timedelta(hours=args.period_hours),
                     category=args.category,

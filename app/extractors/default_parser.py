@@ -209,6 +209,8 @@ class DefaultNewsEventParser(NewsEventParser):
             )
         if len(mapped) > 2:
             raise ValueError("Event evidence must contain at most two quotes")
+        if paragraphs and not mapped:
+            raise ValueError("Event evidence is required when article paragraphs are available")
         return tuple(mapped)
 
     def _map_event_facts(

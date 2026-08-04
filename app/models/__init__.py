@@ -1,6 +1,12 @@
 """Domain models."""
 
-from app.models.article import Article, ArticleEvaluationResult, ArticleRejectReason
+from app.models.article import (
+    Article,
+    ArticleContentOrigin,
+    ArticleEvaluationResult,
+    ArticleParagraph,
+    ArticleRejectReason,
+)
 from app.models.candidate_selection import (
     DEFAULT_RANKING_POLICY_CONFIG,
     DEFAULT_RECOMMENDATION_RANK_CATALOG,
@@ -85,6 +91,7 @@ from app.models.resolved_news_event import (
 from app.models.resolve import ResolveDecision
 from app.models.raw_post import (
     RawDartDisclosurePost,
+    RawIrRssPost,
     RawDcInsidePost,
     RawNaverNewsPost,
     RawPost,
@@ -217,6 +224,7 @@ __all__ = [
     "ProviderResultMetadata",
     "RawDcInsidePost",
     "RawDartDisclosurePost",
+    "RawIrRssPost",
     "RawNaverNewsPost",
     "RawPost",
     "RawRedditPost",

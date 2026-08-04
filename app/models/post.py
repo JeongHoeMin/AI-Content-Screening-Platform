@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Tuple
 
 from pydantic import BaseModel, Field, HttpUrl
 
@@ -21,3 +21,4 @@ class Post(BaseModel):
     view_count: int = Field(default=0, ge=0)
     like_count: int = Field(default=0, ge=0)
     comment_count: int = Field(default=0, ge=0)
+    paragraphs: Tuple[str, ...] = ()

@@ -2,6 +2,7 @@
 
 from app.providers.base import CommunityNormalizer, CommunityProvider
 from app.providers.dart import DartDisclosureProvider
+from app.providers.ir_rss import IrRssNormalizer, IrRssProvider
 from app.providers.market_normalizers import DartDisclosureNormalizer, NaverNewsNormalizer
 from app.providers.mock import (
     MockDcInsideNormalizer,
@@ -17,6 +18,8 @@ __all__ = [
     "CommunityProvider",
     "DartDisclosureNormalizer",
     "DartDisclosureProvider",
+    "IrRssNormalizer",
+    "IrRssProvider",
     "MockDcInsideNormalizer",
     "MockDcInsideProvider",
     "MockRedditNormalizer",

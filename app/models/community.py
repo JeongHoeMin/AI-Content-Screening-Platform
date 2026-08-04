@@ -12,3 +12,4 @@ class CommunityType(str, Enum):
     MOCK = "mock"
     NAVER_NEWS = "naver_news"
     DART = "dart"
+    IR_RSS = "ir_rss"

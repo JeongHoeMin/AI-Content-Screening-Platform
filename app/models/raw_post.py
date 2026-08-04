@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Tuple
 
 from pydantic import BaseModel, Field, HttpUrl
 
@@ -69,3 +69,16 @@ class RawDartDisclosurePost(RawPost):
     receipt_date: datetime
     filer_name: Optional[str] = None
     disclosure_url: HttpUrl
+    document_paragraphs: Tuple[str, ...] = ()
+
+
+class RawIrRssPost(RawPost):
+    """A full-text corporate IR item obtained from an operator-configured feed."""
+
+    source: CommunityType = CommunityType.IR_RSS
+    feed_id: str = Field(min_length=1)
+    company_name: Optional[str] = None
+    title: str = Field(min_length=1)
+    content_html: str = Field(min_length=1)
+    published_at: datetime
+    link: HttpUrl

@@ -8,8 +8,10 @@ _SYSTEM_PROMPT: str = """You extract independent, meaningful news events from ar
 Extract only information explicitly stated or directly supported by an article.
 For each event provide a concrete title, factual summary, explicitly mentioned
 companies and their stated direct or indirect relation, industries, keywords, and
-extraction reasons. For every event, return one or two evidence entries using the
-given Article ID, Paragraph number, and a short exact quote from that paragraph.
+extraction reasons. For every event from an article with numbered paragraphs,
+return one or two evidence entries using the given Article ID, Paragraph number,
+and a short exact quote from that paragraph. If no numbered paragraphs are
+present, return an empty evidence list rather than inventing a reference.
 For every event, classify exactly one event_type from
 corporate_event, legal_event, financial_event, product_event, or macro_event.
 Optionally provide independent event_facts from factory_expansion, mass_layoff,

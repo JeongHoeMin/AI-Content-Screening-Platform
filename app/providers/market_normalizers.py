@@ -56,10 +56,16 @@ class DartDisclosureNormalizer(CommunityNormalizer):
                 )
             )
         stock_suffix: str = f" (종목코드: {raw_post.stock_code})" if raw_post.stock_code else ""
-        content: str = (
+        fallback_content: str = (
             f"{raw_post.corporation_name}{stock_suffix}의 공시입니다. "
             f"공시 제목: {raw_post.report_name}. "
             f"공시 접수일: {raw_post.receipt_date.date().isoformat()}."
+        )
+        document_content: str = "\n".join(raw_post.document_paragraphs)
+        content: str = (
+            f"{fallback_content}\n{document_content}"
+            if document_content
+            else fallback_content
         )
         return NormalizeResult(
             post=Post(
@@ -70,6 +76,7 @@ class DartDisclosureNormalizer(CommunityNormalizer):
                 author=raw_post.filer_name,
                 created_at=raw_post.receipt_date,
                 url=raw_post.disclosure_url,
+                paragraphs=raw_post.document_paragraphs,
             )
         )
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import io
+import zipfile
 from datetime import datetime, timedelta, timezone
 from typing import Any, List, Mapping
 
@@ -16,7 +18,7 @@ from app.providers import (
     NaverNewsNormalizer,
     NaverNewsProvider,
 )
-from app.providers.http import JsonHttpClient
+from app.providers.http import BytesHttpClient, JsonHttpClient
 
 
 class JsonHttpClientDouble(JsonHttpClient):
@@ -39,6 +41,31 @@ class JsonHttpClientDouble(JsonHttpClient):
         self.query = query
         self.timeout_seconds = timeout_seconds
         return self.payload
+
+
+class BytesHttpClientDouble(BytesHttpClient):
+    def __init__(self, payload: bytes) -> None:
+        self.payload: bytes = payload
+        self.url: str = ""
+        self.query: Mapping[str, str] = {}
+
+    async def get(
+        self,
+        url: str,
+        headers: Mapping[str, str],
+        query: Mapping[str, str],
+        timeout_seconds: float,
+    ) -> bytes:
+        self.url = url
+        self.query = query
+        return self.payload
+
+
+def build_document_zip() -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("report.html", "<p>첫 공시 문단</p><p>둘째 공시 문단</p>")
+    return buffer.getvalue()
 
 
 def build_request(category: str = "반도체") -> CollectPostsRequest:
@@ -131,7 +158,10 @@ def test_dart_provider_uses_requested_period_and_preserves_disclosure_metadata()
             ],
         }
     )
-    provider: DartDisclosureProvider = DartDisclosureProvider(DartConfig(api_key="dart-key"), client)
+    document_client: BytesHttpClientDouble = BytesHttpClientDouble(build_document_zip())
+    provider: DartDisclosureProvider = DartDisclosureProvider(
+        DartConfig(api_key="dart-key"), client, document_client
+    )
     request: CollectPostsRequest = CollectPostsRequest(
         sources=[CommunityType.DART], limit=5, period=timedelta(days=3)
     )
@@ -144,12 +174,19 @@ def test_dart_provider_uses_requested_period_and_preserves_disclosure_metadata()
     assert len(raw_posts) == 1
     assert isinstance(raw_posts[0], RawDartDisclosurePost)
     assert raw_posts[0].stock_code == "005930"
+    assert raw_posts[0].document_paragraphs == ("첫 공시 문단", "둘째 공시 문단")
+    assert document_client.url == "https://opendart.fss.or.kr/api/document.xml"
+    assert document_client.query["rcept_no"] == "20260730000001"
 
     result = asyncio.run(DartDisclosureNormalizer().normalize(raw_posts[0]))
 
     assert result.post is not None
     assert result.post.title == "[기재정정]반기보고서"
-    assert "삼성전자" in (result.post.content or "")
+    assert result.post.content == (
+        "삼성전자 (종목코드: 005930)의 공시입니다. "
+        "공시 제목: [기재정정]반기보고서. 공시 접수일: 2026-07-30.\n"
+        "첫 공시 문단\n둘째 공시 문단"
+    )
     assert str(result.post.url).endswith("20260730000001")
 
 
