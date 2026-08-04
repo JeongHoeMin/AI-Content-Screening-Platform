@@ -8,7 +8,7 @@ recover 가능한 오류는 item 또는 batch 단위로 격리하고, 예상하�
 
 ```text
 Article
-  → Evaluate → Extract → Screen → Cross Validate → Resolve
+  → Evaluate → Extract → Deduplicate → Screen → Cross Validate → Resolve
   → Analyze → Aggregate → Score → Recommend → WorkflowResult / CLI JSON
 ```
 
@@ -41,6 +41,7 @@ Input → Output → Failure → Retry → Owner → Responsibility
 | --- | --- | --- | --- | --- | --- |
 | Evaluate | `Article[]` | `ArticleEvaluationResult[]` | 실행 오류 | 없음 | Evaluator |
 | Extract | 허용된 `Article[]` | inference, `NewsEvent[]` | event, batch | SDK transport만 | LLM, Parser |
+| Deduplicate | extracted `NewsEvent[]` | canonical event set, comparison observations | candidate batch | SDK transport만 | Comparator, Parser, Policy |
 | Screen | inference | `ScreeningDecision[]` | event, batch | SDK transport만 | LLM, Parser, Policy |
 | Cross Validate | REVIEW decision, article evidence | `CrossValidationResult[]` | evidence, event, batch | SDK transport만 | LLM, Parser, Policy |
 | Resolve | decision, validation, company snapshot | `ResolvedNewsEvent[]` | identity 불변식 | 없음 | Company Resolver, Policy |
