@@ -47,6 +47,19 @@ class BytesHttpClient(Protocol):
         """Fetch one response body without exposing it to provider logs."""
 
 
+class TextHttpClient(Protocol):
+    """Minimal injected transport for trusted RSS or Atom feed text."""
+
+    async def get(
+        self,
+        url: str,
+        headers: Mapping[str, str],
+        query: Mapping[str, str],
+        timeout_seconds: float,
+    ) -> str:
+        """Fetch one feed response without logging the full payload."""
+
+
 class StdlibJsonHttpClient:
     """Async wrapper around the standard-library HTTP client."""
 
@@ -153,6 +166,40 @@ class StdlibBytesHttpClient:
         try:
             with urlopen(request, timeout=timeout_seconds) as response:
                 return response.read()
+        except HTTPError as exc:
+            raise ExternalServiceError(f"HTTP status {exc.code}") from exc
+        except (URLError, TimeoutError, OSError) as exc:
+            raise ExternalServiceError("Network request failed") from exc
+
+
+class StdlibTextHttpClient:
+    """Async standard-library transport for configured RSS and Atom feeds."""
+
+    async def get(
+        self,
+        url: str,
+        headers: Mapping[str, str],
+        query: Mapping[str, str],
+        timeout_seconds: float,
+    ) -> str:
+        request_url: str = f"{url}?{urlencode(dict(query))}" if query else url
+        return await asyncio.to_thread(
+            self._get_sync,
+            request_url,
+            dict(headers),
+            timeout_seconds,
+        )
+
+    @staticmethod
+    def _get_sync(
+        request_url: str,
+        headers: Mapping[str, str],
+        timeout_seconds: float,
+    ) -> str:
+        request: Request = Request(request_url, headers=dict(headers), method="GET")
+        try:
+            with urlopen(request, timeout=timeout_seconds) as response:
+                return response.read().decode("utf-8", errors="replace")
         except HTTPError as exc:
             raise ExternalServiceError(f"HTTP status {exc.code}") from exc
         except (URLError, TimeoutError, OSError) as exc:

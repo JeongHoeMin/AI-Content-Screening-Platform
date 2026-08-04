@@ -85,6 +85,7 @@ from app.models.resolved_news_event import (
 from app.models.resolve import ResolveDecision
 from app.models.raw_post import (
     RawDartDisclosurePost,
+    RawIrRssPost,
     RawDcInsidePost,
     RawNaverNewsPost,
     RawPost,
@@ -217,6 +218,7 @@ __all__ = [
     "ProviderResultMetadata",
     "RawDcInsidePost",
     "RawDartDisclosurePost",
+    "RawIrRssPost",
     "RawNaverNewsPost",
     "RawPost",
     "RawRedditPost",

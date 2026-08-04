@@ -71,6 +71,7 @@ class DartDisclosureNormalizer(CommunityNormalizer):
                 author=raw_post.filer_name,
                 created_at=raw_post.receipt_date,
                 url=raw_post.disclosure_url,
+                paragraphs=raw_post.document_paragraphs,
             )
         )
 

@@ -43,3 +43,7 @@ event deduplication in three independently reviewable feature branches.
 - 2026-08-04: `IR_RSS_FEEDS`, `ARTICLE_MIN_BODY_LENGTH`, and
   `ARTICLE_MAX_BODY_LENGTH` now have a Pydantic configuration contract. RSS
   transport and runtime registration remain in the next trusted-input commit.
+- 2026-08-04: Configured IR RSS and Atom feeds are now collected through an
+  injected text transport. GUID or Atom ID is retained as the external identity,
+  and only the configured feed endpoint is read; HTML bodies are normalized into
+  numbered paragraph candidates before Article conversion.

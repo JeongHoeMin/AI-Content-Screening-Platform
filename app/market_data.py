@@ -3,13 +3,15 @@ from __future__ import annotations
 from typing import List, Tuple
 
 from app.bootstrap import ExecutionMode, create_screening_workflow_async
-from app.config import load_dart_config, load_naver_news_config
+from app.config import load_dart_config, load_naver_news_config, load_trusted_source_config
 from app.evaluators import RuleArticleEvaluatorConfig
-from app.models.article import Article
+from app.models.article import Article, ArticleContentOrigin, ArticleParagraph
 from app.models.post import Post
 from app.providers import (
     DartDisclosureNormalizer,
     DartDisclosureProvider,
+    IrRssNormalizer,
+    IrRssProvider,
     NaverNewsNormalizer,
     NaverNewsProvider,
     NormalizerRegistry,
@@ -26,17 +28,20 @@ _MARKET_DATA_EVALUATOR_CONFIG: RuleArticleEvaluatorConfig = RuleArticleEvaluator
 
 def create_market_collect_posts_skill() -> CollectPostsSkill:
     """Assemble the real-news and disclosure collection skill from environment config."""
+    trusted_config = load_trusted_source_config()
     return CollectPostsSkill(
         provider_registry=ProviderRegistry(
             {
                 CommunityType.NAVER_NEWS: NaverNewsProvider(load_naver_news_config()),
                 CommunityType.DART: DartDisclosureProvider(load_dart_config()),
+                CommunityType.IR_RSS: IrRssProvider(trusted_config.ir_rss_feeds),
             }
         ),
         normalizer_registry=NormalizerRegistry(
             {
                 CommunityType.NAVER_NEWS: NaverNewsNormalizer(),
                 CommunityType.DART: DartDisclosureNormalizer(),
+                CommunityType.IR_RSS: IrRssNormalizer(),
             }
         ),
     )
@@ -64,6 +69,15 @@ def posts_to_articles(posts: List[Post]) -> Tuple[Article, ...]:
                 published_at=post.created_at,
                 url=post.url,
                 analysis_eligible=post.source is not CommunityType.NAVER_NEWS,
+                content_origin=(
+                    ArticleContentOrigin.OFFICIAL_FULL_TEXT
+                    if post.source in {CommunityType.DART, CommunityType.IR_RSS}
+                    else ArticleContentOrigin.SNIPPET
+                ),
+                paragraphs=tuple(
+                    ArticleParagraph(index=index, content=paragraph)
+                    for index, paragraph in enumerate(post.paragraphs, start=1)
+                ),
             )
         )
     return tuple(articles)
