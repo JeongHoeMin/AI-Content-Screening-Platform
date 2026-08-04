@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Tuple
 
 from pydantic import BaseModel, Field, HttpUrl
 
@@ -69,3 +69,4 @@ class RawDartDisclosurePost(RawPost):
     receipt_date: datetime
     filer_name: Optional[str] = None
     disclosure_url: HttpUrl
+    document_paragraphs: Tuple[str, ...] = ()

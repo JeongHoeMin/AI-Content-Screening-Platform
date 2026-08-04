@@ -25,14 +25,14 @@ class DartDocumentExtractor:
                     raise DartDocumentExtractionError("Archive contains too many files")
                 if sum(member.file_size for member in members) > self._MAX_UNCOMPRESSED_BYTES:
                     raise DartDocumentExtractionError("Archive content exceeds size limit")
+                if any(self._is_unsafe_path(member.filename) for member in members):
+                    raise DartDocumentExtractionError("Archive contains an unsafe path")
                 selected = next(
                     (member for member in members if self._is_supported(member.filename)),
                     None,
                 )
                 if selected is None:
                     raise DartDocumentExtractionError("Archive contains no supported document")
-                if self._is_unsafe_path(selected.filename):
-                    raise DartDocumentExtractionError("Archive contains an unsafe path")
                 content: str = archive.read(selected).decode("utf-8", errors="replace")
         except zipfile.BadZipFile as error:
             raise DartDocumentExtractionError("Response was not a ZIP archive") from error

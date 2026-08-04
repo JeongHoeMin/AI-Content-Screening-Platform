@@ -56,11 +56,12 @@ class DartDisclosureNormalizer(CommunityNormalizer):
                 )
             )
         stock_suffix: str = f" (종목코드: {raw_post.stock_code})" if raw_post.stock_code else ""
-        content: str = (
+        fallback_content: str = (
             f"{raw_post.corporation_name}{stock_suffix}의 공시입니다. "
             f"공시 제목: {raw_post.report_name}. "
             f"공시 접수일: {raw_post.receipt_date.date().isoformat()}."
         )
+        content: str = "\n".join(raw_post.document_paragraphs) or fallback_content
         return NormalizeResult(
             post=Post(
                 id=raw_post.raw_id,

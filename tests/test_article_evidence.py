@@ -22,3 +22,16 @@ def test_article_preserves_numbered_full_text_paragraphs() -> None:
 
     assert article.analysis_eligible is True
     assert article.paragraphs[1].index == 2
+
+
+def test_article_default_content_origin_is_typed_enum() -> None:
+    article = Article(
+        id="naver:1",
+        title="탐색 결과",
+        content="짧은 요약",
+        source="naver_news",
+        published_at=datetime(2026, 8, 4, tzinfo=timezone.utc),
+        url="https://news.example.com/1",
+    )
+
+    assert article.content_origin is ArticleContentOrigin.SNIPPET

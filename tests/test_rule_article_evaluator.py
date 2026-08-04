@@ -56,3 +56,17 @@ def test_evaluator_rejects_empty_and_short_bodies() -> None:
         ArticleRejectReason.EMPTY_BODY,
         ArticleRejectReason.BODY_TOO_SHORT,
     )
+
+
+def test_evaluator_rejects_discovery_only_article_before_llm_input() -> None:
+    article: Article = build_article("Title", "본문 " * 100).model_copy(
+        update={"analysis_eligible": False}
+    )
+    evaluator: RuleArticleEvaluator = RuleArticleEvaluator(
+        RuleArticleEvaluatorConfig(min_body_length=10)
+    )
+
+    result = evaluator.evaluate((article,))
+
+    assert result[0].accepted is False
+    assert result[0].rejection_reason is ArticleRejectReason.ANALYSIS_INELIGIBLE

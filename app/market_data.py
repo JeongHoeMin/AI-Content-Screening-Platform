@@ -63,6 +63,7 @@ def posts_to_articles(posts: List[Post]) -> Tuple[Article, ...]:
                 source=post.source.value,
                 published_at=post.created_at,
                 url=post.url,
+                analysis_eligible=post.source is not CommunityType.NAVER_NEWS,
             )
         )
     return tuple(articles)

@@ -36,3 +36,10 @@ event deduplication in three independently reviewable feature branches.
   declares migration dependencies. Alembic prefers the runtime `DATABASE_URL`;
   a fresh Compose PostgreSQL smoke run reached revision `20260804_01` after its
   healthcheck succeeded.
+- 2026-08-04: OpenDART original-document collection now retrieves the bounded
+  ZIP response per receipt number and rejects any archive containing an unsafe
+  member path. Naver search responses remain discovery-only and are rejected
+  before extraction through `analysis_eligible=False`.
+- 2026-08-04: `IR_RSS_FEEDS`, `ARTICLE_MIN_BODY_LENGTH`, and
+  `ARTICLE_MAX_BODY_LENGTH` now have a Pydantic configuration contract. RSS
+  transport and runtime registration remain in the next trusted-input commit.

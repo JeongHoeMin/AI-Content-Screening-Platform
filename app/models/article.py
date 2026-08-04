@@ -7,6 +7,13 @@ from typing import Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 
 
+class ArticleContentOrigin(str, Enum):
+    """Provenance of text supplied to an LLM extraction request."""
+
+    OFFICIAL_FULL_TEXT = "official_full_text"
+    SNIPPET = "snippet"
+
+
 class Article(BaseModel):
     """News article used by the news analysis domain."""
 
@@ -16,16 +23,9 @@ class Article(BaseModel):
     source: str = Field(min_length=1)
     published_at: datetime
     url: HttpUrl
-    content_origin: "ArticleContentOrigin" = "snippet"
+    content_origin: ArticleContentOrigin = ArticleContentOrigin.SNIPPET
     paragraphs: Tuple["ArticleParagraph", ...] = ()
     analysis_eligible: bool = True
-
-
-class ArticleContentOrigin(str, Enum):
-    """Provenance of text supplied to an LLM extraction request."""
-
-    OFFICIAL_FULL_TEXT = "official_full_text"
-    SNIPPET = "snippet"
 
 
 class ArticleParagraph(BaseModel):
@@ -41,6 +41,7 @@ class ArticleRejectReason(str, Enum):
     EMPTY_TITLE = "empty_title"
     EMPTY_BODY = "empty_body"
     BODY_TOO_SHORT = "body_too_short"
+    ANALYSIS_INELIGIBLE = "analysis_ineligible"
 
 
 class ArticleEvaluationResult(BaseModel):

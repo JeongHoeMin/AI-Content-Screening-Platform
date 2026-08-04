@@ -34,6 +34,12 @@ class RuleArticleEvaluator(ArticleEvaluator):
         return tuple(self._evaluate_article(article) for article in articles)
 
     def _evaluate_article(self, article: Article) -> ArticleEvaluationResult:
+        if not article.analysis_eligible:
+            return ArticleEvaluationResult(
+                article=article,
+                accepted=False,
+                rejection_reason=ArticleRejectReason.ANALYSIS_INELIGIBLE,
+            )
         normalized_title: str = self._normalize(article.title)
         normalized_body: str = self._normalize(article.content)
         rejection_reason: Optional[ArticleRejectReason] = self._rejection_reason(
