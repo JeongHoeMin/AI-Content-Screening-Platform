@@ -32,3 +32,7 @@ event deduplication in three independently reviewable feature branches.
 
 - 2026-08-04: Plan approved. Split into dependency-ordered feature branches so
   each branch can be verified, committed, and reviewed independently.
+- 2026-08-04: The dashboard image now includes Alembic artifacts and the lockfile
+  declares migration dependencies. Alembic prefers the runtime `DATABASE_URL`;
+  a fresh Compose PostgreSQL smoke run reached revision `20260804_01` after its
+  healthcheck succeeded.
