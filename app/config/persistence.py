@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import Optional
 from urllib.parse import urlsplit, urlunsplit
 
 from app.config.errors import ConfigurationError
@@ -31,3 +32,10 @@ def load_database_config() -> DatabaseConfig:
     if not url.startswith("postgresql+asyncpg://"):
         raise ConfigurationError("DATABASE_URL must use postgresql+asyncpg://")
     return DatabaseConfig(url=url)
+
+
+def load_optional_database_config() -> Optional[DatabaseConfig]:
+    """Load database settings only when persistence is configured for this run."""
+    if not os.environ.get("DATABASE_URL", "").strip():
+        return None
+    return load_database_config()

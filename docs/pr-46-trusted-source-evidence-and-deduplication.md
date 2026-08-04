@@ -60,3 +60,7 @@ event deduplication in three independently reviewable feature branches.
 - 2026-08-04: Workflow progress, dashboard cards, and CLI JSON now project at
   most two Parser-validated quotes per event with the paragraph number and
   source URL. The projection does not add raw article text to JSONL audit logs.
+- 2026-08-04: `ScreeningExecutionHarness` now owns an optional SQLAlchemy
+  document-persistence adapter. It stores only previously unseen document
+  identities before workflow execution; Provider, Parser, Policy, and Workflow
+  remain free of database calls.

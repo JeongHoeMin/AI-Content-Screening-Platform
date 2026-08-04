@@ -18,7 +18,7 @@ from app.bootstrap import (
     create_screening_workflow,
     create_screening_workflow_async,
 )
-from app.config import ConfigurationError
+from app.config import ConfigurationError, load_optional_database_config
 from app.harness.alerts import (
     AlertingWorkflowExecutionAuditSink,
     JsonLinesOperationalAlertSink,
@@ -33,6 +33,7 @@ from app.harness.execution_audit import (
     calculate_workflow_execution_metrics,
 )
 from app.models.article import Article
+from app.persistence import create_document_persistence
 from app.models.collect_posts import CollectPostsRequest
 from app.models.community import CommunityType
 from app.market_data import (
@@ -294,7 +295,11 @@ async def run(arguments: Sequence[str] | None = None) -> int:
                 ),
                 alert_sink=JsonLinesOperationalAlertSink(args.alert_log),
             )
-        harness = ScreeningExecutionHarness(audit_sink=audit_sink)
+        database_config = load_optional_database_config()
+        harness = ScreeningExecutionHarness(
+            audit_sink=audit_sink,
+            document_persistence=(create_document_persistence(database_config) if database_config else None),
+        )
         result = await harness.run(workflow, articles, execution_mode=mode.value)
     except Exception as error:
         logger.error(
