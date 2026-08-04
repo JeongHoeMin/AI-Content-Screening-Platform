@@ -7,8 +7,9 @@ import logging
 import sys
 from enum import IntEnum
 from pathlib import Path
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, List, Sequence, Tuple
+from zoneinfo import ZoneInfo
 
 import structlog
 from pydantic import ValidationError
@@ -46,6 +47,8 @@ from app.skills import CollectPostsSkill
 from app.workflows import ScreeningResult
 
 logger = structlog.get_logger(__name__)
+
+_KST: ZoneInfo = ZoneInfo("Asia/Seoul")
 
 _INTERNAL_RESOLUTION_FIELDS: dict[str, object] = {
     "resolved_events": {
@@ -104,6 +107,10 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
         help="Positive collection lookback period in hours for --collect.",
     )
     parser.add_argument(
+        "--as-of-kst",
+        help="Optional historical KST date (YYYY-MM-DD); collects the period ending at its next midnight.",
+    )
+    parser.add_argument(
         "--limit",
         type=int,
         default=50,
@@ -139,6 +146,15 @@ def _parse_mode(value: str) -> ExecutionMode:
         return ExecutionMode(value)
     except ValueError as error:
         raise CliInputError(f"Unsupported execution mode: {value}") from error
+
+
+def _parse_as_of_kst(value: str) -> datetime:
+    """Convert one KST calendar day to its exclusive UTC collection boundary."""
+    try:
+        historical_day: datetime = datetime.strptime(value, "%Y-%m-%d")
+    except ValueError as error:
+        raise CliInputError("--as-of-kst must use YYYY-MM-DD") from error
+    return (historical_day.replace(tzinfo=_KST) + timedelta(days=1)).astimezone(timezone.utc)
 
 
 def _load_articles(path: Path) -> Tuple[Article, ...]:
@@ -248,6 +264,8 @@ async def run(arguments: Sequence[str] | None = None) -> int:
         if args.collect:
             if args.period_hours <= 0 or args.limit <= 0 or args.limit > 100:
                 raise CliInputError("--period-hours and --limit must be positive; limit is at most 100")
+            if args.as_of_kst is not None:
+                _parse_as_of_kst(args.as_of_kst)
         else:
             articles = _load_articles(args.input)
     except CliInputError as error:
@@ -265,6 +283,11 @@ async def run(arguments: Sequence[str] | None = None) -> int:
                     limit=args.limit,
                     period=timedelta(hours=args.period_hours),
                     category=args.category,
+                    ended_at=(
+                        _parse_as_of_kst(args.as_of_kst)
+                        if args.as_of_kst is not None
+                        else None
+                    ),
                 ),
             )
             articles = posts_to_articles(collect_result.data.posts)

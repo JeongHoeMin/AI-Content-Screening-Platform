@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, List, Mapping, Optional
 
 from pydantic import ValidationError
@@ -43,14 +43,15 @@ class DartDisclosureProvider(CommunityProvider):
         )
 
     async def collect(self, request: CollectPostsRequest) -> List[RawPost]:
-        now: datetime = datetime.now(timezone.utc)
+        now: datetime = request.ended_at or datetime.now(timezone.utc)
+        end_inclusive: datetime = now - timedelta(microseconds=1)
         payload: Mapping[str, Any] = await self._http_client.get(
             url=_DART_DISCLOSURE_LIST_URL,
             headers={},
             query={
                 "crtfc_key": self._config.api_key.get_secret_value(),
                 "bgn_de": (now - request.period).strftime("%Y%m%d"),
-                "end_de": now.strftime("%Y%m%d"),
+                "end_de": end_inclusive.strftime("%Y%m%d"),
                 "page_no": "1",
                 "page_count": str(min(request.limit, 100)),
                 "sort": "date",
