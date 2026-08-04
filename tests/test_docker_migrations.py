@@ -19,4 +19,4 @@ def test_alembic_prefers_the_runtime_database_url() -> None:
     )
 
     assert 'os.environ.get("DATABASE_URL", "").strip()' in environment
-    assert 'config.set_main_option("sqlalchemy.url", database_url)' in environment
+    assert 'config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))' in environment

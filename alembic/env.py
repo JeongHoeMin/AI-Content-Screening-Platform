@@ -13,7 +13,7 @@ from app.persistence.schema import metadata
 config = context.config
 database_url: str = os.environ.get("DATABASE_URL", "").strip()
 if database_url:
-    config.set_main_option("sqlalchemy.url", database_url)
+    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 target_metadata = metadata
 
 
