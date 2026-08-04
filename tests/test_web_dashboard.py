@@ -5,7 +5,9 @@ from fastapi.testclient import TestClient
 from datetime import datetime, timezone
 
 import pytest
-from app.models import CommunityType, Post
+from app.filters import ArticleFilter, DefaultThemeCatalog
+from app.market_data import posts_to_articles
+from app.models import CollectionFilter, CommunityType, InvestmentTheme, NewsTopic, Post
 from app.web.app import (
     DashboardEvent,
     DashboardRunManager,
@@ -33,16 +35,77 @@ def test_dashboard_page_exposes_recommendation_controls() -> None:
     assert "중간 · 25건" in response.text
     assert "많이 · 50건" in response.text
     assert "최대 · 100건" in response.text
-    assert "JSON.stringify({limit:selectedSize})" in response.text
+    assert "JSON.stringify({limit:selectedSize,themes:selectedThemes,topics:selectedTopics})" in response.text
     assert "추천 실행 후 선택된 뉴스를 표시합니다." in response.text
     assert "문단 ${escapeHtml(quote.paragraph_index)}" in response.text
     assert "event_evidence" in response.text
+
+
+def test_dashboard_exposes_theme_and_news_topic_filters() -> None:
+    client: TestClient = TestClient(create_web_app())
+
+    response = client.get("/")
+
+    assert "투자 테마" in response.text
+    assert "반도체" in response.text
+    assert "뉴스 주제" in response.text
+    assert "themes:selectedThemes" in response.text
+    assert "topics:selectedTopics" in response.text
 
 
 def test_dashboard_uses_low_default_collection_limit() -> None:
     request: RecommendationRunRequest = RecommendationRunRequest()
 
     assert request.limit == 10
+
+
+def test_dashboard_request_accepts_theme_and_news_topic_filters() -> None:
+    request: RecommendationRunRequest = RecommendationRunRequest(
+        themes=(InvestmentTheme.SEMICONDUCTOR,),
+        topics=(NewsTopic.SUPPLY_CHAIN,),
+    )
+
+    assert request.themes == (InvestmentTheme.SEMICONDUCTOR,)
+    assert request.topics == (NewsTopic.SUPPLY_CHAIN,)
+
+
+def test_dashboard_filter_snapshot_counts_analysis_articles_not_empty_posts() -> None:
+    posts = [
+        Post(
+            id="with-content",
+            source=CommunityType.DART,
+            title="반도체 공급 계약",
+            content="HBM 메모리 공급 계약을 체결했다.",
+            created_at=datetime(2026, 8, 5, tzinfo=timezone.utc),
+            url="https://example.com/with-content",
+        ),
+        Post(
+            id="without-content",
+            source=CommunityType.DART,
+            title="본문 없는 공시",
+            content=None,
+            created_at=datetime(2026, 8, 5, tzinfo=timezone.utc),
+            url="https://example.com/without-content",
+        ),
+    ]
+    articles = posts_to_articles(posts)
+    filter_result = ArticleFilter(DefaultThemeCatalog()).filter(
+        articles,
+        CollectionFilter(themes=(InvestmentTheme.SEMICONDUCTOR,)),
+    )
+
+    snapshot = DashboardRunManager._build_filter_snapshot(
+        run_id="run-1",
+        request=RecommendationRunRequest(
+            themes=(InvestmentTheme.SEMICONDUCTOR,),
+        ),
+        articles=articles,
+        filter_result=filter_result,
+    )
+
+    assert snapshot.collected_count == 1
+    assert snapshot.accepted_count == 1
+    assert snapshot.excluded_count == 0
 
 
 @pytest.mark.parametrize(

@@ -11,6 +11,7 @@ def test_persistence_schema_defines_required_audit_tables() -> None:
         "event_evidence",
         "deduplication_comparisons",
         "canonical_event_memberships",
+        "collection_filter_snapshots",
     }
 
 

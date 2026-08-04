@@ -25,3 +25,12 @@ def test_alembic_environment_uses_asyncpg_migration_connection() -> None:
 
     assert "async_engine_from_config" in environment
     assert "connection.run_sync" in environment
+
+
+def test_collection_filter_snapshot_migration_extends_the_initial_schema() -> None:
+    migration: str = Path(
+        "alembic/versions/20260805_01_collection_filter_snapshots.py"
+    ).read_text(encoding="utf-8")
+
+    assert 'down_revision = "20260804_01"' in migration
+    assert "collection_filter_snapshots" in migration
