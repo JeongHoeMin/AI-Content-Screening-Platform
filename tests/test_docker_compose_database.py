@@ -15,3 +15,8 @@ def test_compose_defines_healthy_postgres_with_persistent_volume() -> None:
     assert "OPENAI_API_KEY:" in compose
     assert "KRX_API_KEY:" in compose
     assert "IR_RSS_FEEDS:" in compose
+    assert "schedule-worker:" in compose
+    assert "app.scheduled_worker" in compose
+    assert "SCHEDULE_SETTINGS_PASSWORD:" in compose
+    assert "db-migrate:" in compose
+    assert "service_completed_successfully" in compose

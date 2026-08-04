@@ -568,3 +568,21 @@ Accepted
 실시간 관측은 LangGraph 경계에서 안전한 callback 계약을 별도로 설계한 후에만 추가한다. 허용 기사가 없는
 정상 조건 분기처럼 실행하지 않은 노드는 완료가 아닌 `미실행`으로 표시한다. 이 분기는 Workflow가 evaluator
 결과로 계산한 bounded `next_node`를 사용하므로 대시보드가 수집 필터 결과로 실제 graph edge를 추정하지 않는다.
+
+# ADR-024
+
+## Title
+
+정기 추천은 KST cron과 PostgreSQL lease로 실행하고 Telegram은 terminal observer로 분리한다.
+
+## Status
+
+Accepted
+
+## Decision
+
+작업 시간은 사용자 입력·화면에서 `Asia/Seoul`로 해석하되 DB에는 UTC를 저장한다. `schedule-worker`가 due slot을 DB transaction으로 claim해 다음 slot과 execution status를 기록한다. Telegram은 성공한 recommendation terminal 상태 뒤에만 best-effort로 동작한다. 설정 변경은 32자 이상의 environment-only password를 확인하고 HttpOnly session cookie를 발급한 브라우저에만 허용한다.
+
+## Consequences
+
+worker 재시작과 dashboard 재시작은 shell cron 상태에 의존하지 않는다. 원문, prompt, Telegram secret과 설정 비밀번호는 정기 설정·실행 테이블과 logs에서 제외한다. HTTPS 운영에서는 secure cookie를 유지하고, 로컬 HTTP 검증 때만 명시적으로 secure cookie를 끈다.

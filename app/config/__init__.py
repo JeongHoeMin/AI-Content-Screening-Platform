@@ -9,6 +9,8 @@ from app.config.persistence import (
     load_database_config,
     load_optional_database_config,
 )
+from app.config.telegram import TelegramConfig, load_optional_telegram_config
+from app.config.schedule_security import load_schedule_settings_password
 from app.config.trusted_sources import (
     IrRssFeedConfig,
     TrustedSourceConfig,
@@ -41,6 +43,9 @@ __all__ = [
     "load_openai_config",
     "load_database_config",
     "load_optional_database_config",
+    "TelegramConfig",
+    "load_optional_telegram_config",
+    "load_schedule_settings_password",
     "IrRssFeedConfig",
     "TrustedSourceConfig",
     "load_trusted_source_config",

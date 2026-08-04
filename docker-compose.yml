@@ -27,9 +27,44 @@ services:
       IR_RSS_FEEDS: "${IR_RSS_FEEDS:-[]}"
       ARTICLE_MIN_BODY_LENGTH: ${ARTICLE_MIN_BODY_LENGTH:-300}
       ARTICLE_MAX_BODY_LENGTH: ${ARTICLE_MAX_BODY_LENGTH:-50000}
+      SCHEDULE_SETTINGS_PASSWORD: ${SCHEDULE_SETTINGS_PASSWORD:-}
+      SCHEDULE_COOKIE_SECURE: ${SCHEDULE_COOKIE_SECURE:-true}
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+    volumes:
+      - ./runtime/logs:/app/runtime/logs
+    restart: unless-stopped
+
+  db-migrate:
+    build: .
+    command: ["/app/.venv/bin/alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-screening}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-screening}
     depends_on:
       postgres:
         condition: service_healthy
+    restart: "no"
+
+  schedule-worker:
+    build: .
+    command: ["/app/.venv/bin/python", "-m", "app.scheduled_worker"]
+    environment:
+      COMPANY_DIRECTORY_MODE: krx_api
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-screening}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-screening}
+      APP_LOG_PATH: /app/runtime/logs/schedule-worker.jsonl
+      WORKFLOW_AUDIT_LOG_PATH: /app/runtime/logs/execution-audit.jsonl
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
+      KRX_API_KEY: ${KRX_API_KEY:?KRX_API_KEY is required}
+      IR_RSS_FEEDS: "${IR_RSS_FEEDS:-[]}"
+      ARTICLE_MIN_BODY_LENGTH: ${ARTICLE_MIN_BODY_LENGTH:-300}
+      ARTICLE_MAX_BODY_LENGTH: ${ARTICLE_MAX_BODY_LENGTH:-50000}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      SCHEDULE_WORKER_ID: ${SCHEDULE_WORKER_ID:-schedule-worker}
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
     volumes:
       - ./runtime/logs:/app/runtime/logs
     restart: unless-stopped

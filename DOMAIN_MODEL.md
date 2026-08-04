@@ -147,3 +147,7 @@ action별 selected/not-eligible reason은 Candidate Domain helper가 유일하�
 ## Policy 경계
 
 Policy는 검증된 Domain 입력을 받아 결정만 반환한다. Policy는 Prompt·LLM·DB·네트워크를 호출하지 않는다. 점수 임계값, cross-validation 상태, resolve 결론, stock score, recommendation은 Policy/strategy가 소유하며 transport 오류나 model 편차에 의해 직접 바뀌지 않아야 한다.
+
+## 정기 추천 설정
+
+`ScheduledRecommendationJob`은 id, active, 5필드 cron, 고정 `Asia/Seoul`, 투자 테마·뉴스 주제, 25/50/100 제한, Telegram 활성 여부와 version을 immutable하게 보관한다. cron validator는 `*`, 숫자, 쉼표, 범위, step을 제한 범위에서만 해석한다. 실행 시간은 UTC로 저장하지만 다음 slot은 한국시간으로 계산한다. `ScheduledRecommendationExecution`은 DB 저장 모델로 job slot, started/finished time, bounded status/error type만 보관하며 원문·prompt·secret은 포함하지 않는다.

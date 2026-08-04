@@ -29,3 +29,7 @@ screening --collect --mode openai --period-hours 24 --limit 25
 ```
 
 `--collect`는 `ir_rss`를 기본 source로 사용한다. DART는 전문 파일이 존재하는 경우에만 보조 진단 source로 명시적으로 선택할 수 있으며, Naver 검색 결과는 분석 입력으로 사용하지 않는다. KRX API를 사용할 때는 `COMPANY_DIRECTORY_MODE=krx_api`와 `KRX_API_KEY`를 설정한다.
+
+## 정기 실행과 텔레그램
+
+Compose는 `schedule-worker`를 함께 기동한다. 설정과 실행 상태는 PostgreSQL에 저장되며 cron 표현식은 한국시간 기준이다. `/settings`는 `.env`의 32자 이상 `SCHEDULE_SETTINGS_PASSWORD`가 일치할 때만 접근할 수 있고, 성공하면 HttpOnly 세션 쿠키를 발급한다. Telegram은 `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`를 모두 설정하고 설정에서 전송을 켠 경우에만 실행 완료 후 요약을 보낸다. 자세한 운영 방법은 [정기 추천 및 텔레그램 운영](docs/정기-추천-및-텔레그램-운영.md)을 참고한다.

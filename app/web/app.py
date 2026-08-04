@@ -10,18 +10,28 @@ from math import ceil
 from typing import Any, Dict, List, Literal, Optional
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.bootstrap import ExecutionMode
-from app.config import load_optional_database_config
+from app.config import load_optional_database_config, load_schedule_settings_password
+from app.config.schedule_security import (
+    SCHEDULE_SESSION_COOKIE,
+    has_valid_schedule_session,
+    issue_schedule_session,
+    passwords_match,
+    schedule_cookie_uses_secure_transport,
+)
 from app.persistence import (
     CollectionFilterPersistence,
+    ScheduledRecommendationPersistence,
     WorkflowExecutionAuditPersistence,
     create_collection_filter_persistence,
+    create_scheduled_recommendation_persistence,
     create_workflow_execution_audit_persistence,
 )
+from app.persistence.schedule_repository import ScheduleVersionConflictError
 from app.harness import Harness
 from app.harness.execution_audit import ScreeningExecutionHarness
 from app.harness.execution_audit import JsonLinesWorkflowExecutionAuditSink
@@ -34,6 +44,7 @@ from app.market_data import (
 from app.models.collect_posts import CollectPostsRequest
 from app.models.article import Article
 from app.models.collection_filter import CollectionFilter, FilterRejectionReason, InvestmentTheme, NewsTopic
+from app.models.scheduled_recommendation import ScheduledRecommendationJob
 from app.models.collection_filter_result import (
     CollectionFilterResult,
     CollectionFilterSnapshot,
@@ -43,6 +54,7 @@ from app.models.post import Post
 from app.workflows import ScreeningResult, WorkflowProgressEvent
 from app.workflows.screening.errors import WorkflowStageRetriesExhaustedError
 from app.web.dashboard_html import DASHBOARD_HTML
+from app.web.settings_html import SCHEDULE_SETTINGS_HTML
 from app.observability import configure_application_logging
 
 import structlog
@@ -76,6 +88,44 @@ class RecommendationRunRequest(BaseModel):
     period_hours: int = Field(default=24, ge=1, le=168)
     themes: tuple[InvestmentTheme, ...] = ()
     topics: tuple[NewsTopic, ...] = ()
+
+
+class ScheduleSettingsRequest(BaseModel):
+    """KST schedule input; delivery credentials are server environment only."""
+
+    model_config = ConfigDict(frozen=True)
+
+    active: bool = True
+    cron_expression: str = Field(min_length=9, max_length=128)
+    themes: tuple[InvestmentTheme, ...] = ()
+    topics: tuple[NewsTopic, ...] = ()
+    limit: Literal[25, 50, 100] = 25
+    telegram_enabled: bool = False
+    version: Optional[int] = Field(default=None, ge=1)
+
+
+class ScheduleLoginRequest(BaseModel):
+    """Bounded password input used only to issue an HttpOnly settings session."""
+
+    model_config = ConfigDict(frozen=True)
+
+    password: str = Field(min_length=1, max_length=512)
+
+
+class ScheduleSettingsResponse(BaseModel):
+    """Persisted schedule projection without delivery secrets."""
+
+    model_config = ConfigDict(frozen=True)
+
+    active: bool
+    cron_expression: str
+    timezone: Literal["Asia/Seoul"]
+    themes: tuple[InvestmentTheme, ...]
+    topics: tuple[NewsTopic, ...]
+    limit: Literal[25, 50, 100]
+    telegram_enabled: bool
+    version: int
+    next_run_at: datetime
 
 
 class DashboardEvent(BaseModel):
@@ -208,11 +258,15 @@ class DashboardRunManager:
         self,
         filter_persistence: Optional[CollectionFilterPersistence] = None,
         execution_audit_persistence: Optional[WorkflowExecutionAuditPersistence] = None,
+        schedule_persistence: Optional[ScheduledRecommendationPersistence] = None,
     ) -> None:
         self._runs: Dict[str, _RunState] = {}
         self._filter_persistence: Optional[CollectionFilterPersistence] = filter_persistence
         self._execution_audit_persistence: Optional[WorkflowExecutionAuditPersistence] = (
             execution_audit_persistence
+        )
+        self._schedule_persistence: Optional[ScheduledRecommendationPersistence] = (
+            schedule_persistence
         )
 
     _WORKFLOW_NODES: tuple[str, ...] = (
@@ -236,6 +290,81 @@ class DashboardRunManager:
         self._runs[run_id] = state
         asyncio.create_task(self._execute(run_id, state, request))
         return run_id
+
+    async def run_scheduled(
+        self,
+        request: RecommendationRunRequest,
+    ) -> DashboardRunResult:
+        """Run one background schedule with the same Harness-owned pipeline as the UI."""
+        run_id: str = uuid4().hex
+        state: _RunState = _RunState()
+        self._runs[run_id] = state
+        try:
+            await self._execute(run_id, state, request)
+            if state.error_type is not None:
+                raise RuntimeError(state.error_type)
+            if state.result is None:
+                raise RuntimeError("Scheduled recommendation produced no result")
+            return state.result
+        finally:
+            self._runs.pop(run_id, None)
+
+    async def get_schedule(self) -> Optional[ScheduleSettingsResponse]:
+        """Read the single durable schedule without disclosing any secret."""
+        if self._schedule_persistence is None:
+            return None
+        job: Optional[ScheduledRecommendationJob] = await self._schedule_persistence.get(
+            "default"
+        )
+        if job is None:
+            return None
+        return self._schedule_response(job, job.next_run_at(datetime.now(timezone.utc)))
+
+    async def save_schedule(
+        self,
+        request: ScheduleSettingsRequest,
+    ) -> ScheduleSettingsResponse:
+        """Persist the validated KST cron configuration through the Harness boundary."""
+        if self._schedule_persistence is None:
+            raise RuntimeError("Scheduled recommendations require DATABASE_URL")
+        previous: Optional[ScheduledRecommendationJob] = await self._schedule_persistence.get(
+            "default"
+        )
+        if previous is not None and request.version != previous.version:
+            raise ScheduleVersionConflictError("Schedule version is stale")
+        if previous is None and request.version is not None:
+            raise ScheduleVersionConflictError("Schedule does not exist yet")
+        version: int = 1 if previous is None else previous.version + 1
+        job = ScheduledRecommendationJob(
+            id="default",
+            active=request.active,
+            cron_expression=request.cron_expression,
+            themes=request.themes,
+            topics=request.topics,
+            limit=request.limit,
+            telegram_enabled=request.telegram_enabled,
+            version=version,
+        )
+        next_run_at: datetime = job.next_run_at(datetime.now(timezone.utc))
+        await self._schedule_persistence.save(job, next_run_at, request.version)
+        return self._schedule_response(job, next_run_at)
+
+    @staticmethod
+    def _schedule_response(
+        job: ScheduledRecommendationJob,
+        next_run_at: datetime,
+    ) -> ScheduleSettingsResponse:
+        return ScheduleSettingsResponse(
+            active=job.active,
+            cron_expression=job.cron_expression,
+            timezone=job.timezone,
+            themes=job.themes,
+            topics=job.topics,
+            limit=job.limit,
+            telegram_enabled=job.telegram_enabled,
+            version=job.version,
+            next_run_at=next_run_at,
+        )
 
     async def events(self, run_id: str) -> AsyncIterator[DashboardEvent]:
         state: _RunState = self._get_state(run_id)
@@ -719,11 +848,20 @@ def _create_optional_execution_audit_persistence() -> Optional[WorkflowExecution
     return create_workflow_execution_audit_persistence(database_config)
 
 
+def _create_optional_schedule_persistence() -> Optional[ScheduledRecommendationPersistence]:
+    """Configure KST schedule persistence only when PostgreSQL is configured."""
+    database_config = load_optional_database_config()
+    if database_config is None:
+        return None
+    return create_scheduled_recommendation_persistence(database_config)
+
+
 def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
     """Create the dashboard API and its static single-page client."""
     run_manager: DashboardRunManager = manager or DashboardRunManager(
         filter_persistence=_create_optional_filter_persistence(),
         execution_audit_persistence=_create_optional_execution_audit_persistence(),
+        schedule_persistence=_create_optional_schedule_persistence(),
     )
     app = FastAPI(title="AI Content Screening Dashboard")
 
@@ -734,6 +872,56 @@ def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
     @app.get("/api/health")
     async def health() -> Dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/settings", response_class=HTMLResponse)
+    async def schedule_settings_page() -> str:
+        return SCHEDULE_SETTINGS_HTML
+
+    @app.post("/api/settings/login", status_code=204)
+    async def login_schedule_settings(
+        request: ScheduleLoginRequest,
+        response: Response,
+    ) -> None:
+        expected: str = load_schedule_settings_password()
+        if not passwords_match(request.password, expected):
+            raise HTTPException(status_code=401, detail="Schedule authentication failed")
+        response.set_cookie(
+            key=SCHEDULE_SESSION_COOKIE,
+            value=issue_schedule_session(expected),
+            max_age=60 * 60 * 8,
+            httponly=True,
+            secure=schedule_cookie_uses_secure_transport(),
+            samesite="strict",
+            path="/api/settings",
+        )
+
+    def require_schedule_session(
+        session: Optional[str] = Cookie(default=None, alias=SCHEDULE_SESSION_COOKIE),
+    ) -> None:
+        expected: str = load_schedule_settings_password()
+        if not has_valid_schedule_session(session, expected):
+            raise HTTPException(status_code=401, detail="Schedule authentication failed")
+
+    @app.get("/api/settings/schedule")
+    async def get_schedule(
+        _: None = Depends(require_schedule_session),
+    ) -> ScheduleSettingsResponse:
+        schedule: Optional[ScheduleSettingsResponse] = await run_manager.get_schedule()
+        if schedule is None:
+            raise HTTPException(status_code=404, detail="Schedule is not configured")
+        return schedule
+
+    @app.put("/api/settings/schedule")
+    async def save_schedule(
+        request: ScheduleSettingsRequest,
+        _: None = Depends(require_schedule_session),
+    ) -> ScheduleSettingsResponse:
+        try:
+            return await run_manager.save_schedule(request)
+        except ScheduleVersionConflictError as error:
+            raise HTTPException(status_code=409, detail="Schedule was changed elsewhere") from error
+        except RuntimeError as error:
+            raise HTTPException(status_code=503, detail=str(error)) from error
 
     @app.post("/api/runs")
     async def start_run(request: RecommendationRunRequest) -> Dict[str, str]:
