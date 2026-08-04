@@ -35,6 +35,13 @@ reason code, policy version을 출력하지 않는다. v1 action eligibility는 
 
 `app/filters/`의 `ArticleFilter`와 versioned `ThemeCatalog`는 정규화된 Article의 제목·본문만 읽어 투자 테마와 뉴스 주제 일치 여부를 결정한다. 대시보드 Harness는 통과 Article만 Workflow로 넘기며, `CollectionFilterPersistence`를 통해 실행 ID·선택 enum·카탈로그 버전·건수 집계만 PostgreSQL에 저장한다. Provider·Normalizer·Parser·Policy·Workflow는 이 저장소를 직접 호출하지 않는다.
 
+`app/web/`의 대시보드는 `DashboardRunManager`가 Harness 실행을 SSE로 안전하게 투영한 consumer다. 브라우저의
+워크플로우 그래프는 실행을 제어하거나 재시도를 직접 수행하지 않으며, 수집·directory 상태와 `WorkflowProgressEvent`
+완료 노드, terminal 실패의 bounded stage/error type/attempt count만 표시한다. 따라서 기사 원문, prompt, raw SDK
+응답과 예외 전문은 UI 상태에도 포함되지 않는다. 조건 분기로 실행하지 않은 노드는 브라우저가 후속 실제 node
+event와 Workflow가 제공하는 bounded `next_node`를 기준으로 `미실행`으로 투영하며, 단순 완료 순번이나 수집
+필터 결과로 실행 여부를 추측하지 않는다.
+
 ## 주요 구성 요소
 
 | 경계 | 책임 | 현재 구현 위치 |

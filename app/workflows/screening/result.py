@@ -121,6 +121,7 @@ class WorkflowProgressEvent(BaseModel):
     node: str = Field(min_length=1)
     completed_node_count: int = Field(ge=1)
     output_keys: Tuple[str, ...]
+    next_node: Optional[str] = Field(default=None, min_length=1)
     article_analyses: Tuple[WorkflowArticleAnalysisProgress, ...] = ()
     screening_analyses: Tuple[WorkflowScreeningAnalysisProgress, ...] = ()
     validation_analyses: Tuple[WorkflowValidationAnalysisProgress, ...] = ()

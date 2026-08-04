@@ -136,11 +136,13 @@ class ScreeningWorkflow:
                         screening_analysis_count=len(screening_analyses),
                         validation_analysis_count=len(validation_analyses),
                     )
+                    next_node: Optional[str] = self._next_node(node, state)
                     await progress_callback(
                         WorkflowProgressEvent(
                             node=node,
                             completed_node_count=completed_node_count,
                             output_keys=tuple(sorted(str(key) for key in node_update)),
+                            next_node=next_node,
                             article_analyses=article_analyses,
                             screening_analyses=screening_analyses,
                             validation_analyses=validation_analyses,
@@ -150,6 +152,33 @@ class ScreeningWorkflow:
             self._raise_retry_exhausted(error)
             raise
         return self._result_from_final_state(state)
+
+    @staticmethod
+    def _next_node(node: str, state: Mapping[str, object]) -> Optional[str]:
+        """Expose the graph's actual safe next edge without leaking workflow state."""
+        if node == "evaluate":
+            evaluations = cast(
+                Tuple[ArticleEvaluationResult, ...],
+                state.get("evaluations", ()),
+            )
+            return "extract" if any(item.accepted for item in evaluations) else "aggregate"
+        node_order: tuple[str, ...] = (
+            "extract",
+            "deduplicate",
+            "screen",
+            "cross_validate",
+            "resolve",
+            "analyze",
+            "aggregate",
+            "score",
+            "recommend",
+            "select_candidates",
+        )
+        try:
+            index: int = node_order.index(node)
+        except ValueError:
+            return None
+        return node_order[index + 1] if index + 1 < len(node_order) else None
 
     @staticmethod
     def _raise_retry_exhausted(error: Exception) -> None:

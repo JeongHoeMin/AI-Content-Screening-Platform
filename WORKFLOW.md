@@ -21,6 +21,17 @@ Article만 Evaluate로 전달한다. 빈 선택은 기존 전체 수집 동작�
 않는다. DART는 전문 파일이 실제 존재하는 경우에만 명시적으로 선택하는 보조 진단 source이고, 파일 부재는
 재시도하지 않는 item-local 오류다.
 
+대시보드는 수집, 종목 기준정보 준비, 그리고 실제 LangGraph 노드 순서인 `Evaluate → Extract →
+Deduplicate → Screen → Cross Validate → Resolve → Analyze → Aggregate → Score → Recommend → Select
+Candidates`를 연결 그래프로 투영한다. 완료·진행·terminal 실패 상태만 SSE로 표시하며, 재시도 중간 호출의
+원문·예외 전문은 전송하지 않는다. `extract`·`deduplicate`·`screen`·`cross_validate`는 최초 실행 뒤 5초·10초
+간격으로 총 3회까지 시도할 수 있고, 재시도가 모두 실패한 경우에만 안전한 단계명·오류 분류·실제 시도 횟수를
+그래프의 실패 경로로 표시한다. `Evaluate` 뒤 허용 기사가 없으면 실제 조건 분기대로 `Extract`부터 `Cross
+Validate`까지를 미실행으로 표시하고 `Aggregate`로 진행한다. terminal 오류 분류와 단계명은 allowlist로
+정규화하며, 재시도 소진 예외에만 전달된 실제 attempts 값을 사용하고 나머지 실패는 1회로 표시한다.
+이 조건 분기는 수집 필터 결과가 아니라 Workflow의 evaluator 결과에서 계산한 bounded `next_node` 관측으로
+대시보드에 전달한다.
+
 `Recommend` 노드는 하나의 `ScoringResult`를 `RecommendationPolicy`에 전달한다. Policy는 threshold snapshot,
 reason code, action을 포함한 final immutable `RecommendationResult`를 만들고, Engine은 이를 정확히 한 번 호출해
 같은 객체 identity로 반환한다. 이어지는 `Select Candidates` 노드는 RecommendationDecision만 소비해 internal

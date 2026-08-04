@@ -50,10 +50,14 @@ def test_live_progress_emits_completed_langgraph_nodes_and_writes_audit(tmp_path
     extract_event: WorkflowProgressEvent = next(
         event for event in events if event.node == "extract"
     )
+    evaluate_event: WorkflowProgressEvent = next(
+        event for event in events if event.node == "evaluate"
+    )
     screen_event: WorkflowProgressEvent = next(
         event for event in events if event.node == "screen"
     )
     assert len(extract_event.article_analyses) == len(articles)
+    assert evaluate_event.next_node == "extract"
     assert all(item.summary for item in extract_event.article_analyses)
     assert all(
         len(event_evidence.quotes) <= 2

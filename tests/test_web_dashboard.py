@@ -15,6 +15,7 @@ from app.web.app import (
     RecommendationRunRequest,
     create_web_app,
 )
+from app.workflows.screening.errors import WorkflowStageRetriesExhaustedError
 
 
 class RecordingExecutionAuditPersistence:
@@ -45,6 +46,16 @@ def test_dashboard_page_exposes_recommendation_controls() -> None:
     assert "추천 실행 후 선택된 뉴스를 표시합니다." in response.text
     assert "문단 ${escapeHtml(quote.paragraph_index)}" in response.text
     assert "event_evidence" in response.text
+
+
+def test_dashboard_page_exposes_actual_workflow_graph_and_retry_path() -> None:
+    response = TestClient(create_web_app()).get("/")
+
+    assert 'id="workflow-graph"' in response.text
+    assert 'id="graph-deduplicate"' in response.text
+    assert 'id="retry-path"' in response.text
+    assert "renderWorkflowGraph" in response.text
+    assert "failure_attempts" in response.text
 
 
 def test_dashboard_exposes_theme_and_news_topic_filters() -> None:
@@ -173,6 +184,44 @@ def test_dashboard_event_exposes_safe_terminal_failure_detail() -> None:
 def test_dashboard_maps_completed_workflow_node_to_next_active_stage() -> None:
     assert DashboardRunManager._next_workflow_stage("screen") == "cross_validate"
     assert DashboardRunManager._next_workflow_stage("select_candidates") is None
+
+
+def test_dashboard_workflow_order_includes_deduplicate_before_screen() -> None:
+    assert DashboardRunManager._next_workflow_stage("extract") == "deduplicate"
+    assert DashboardRunManager._next_workflow_stage("deduplicate") == "screen"
+
+
+class _UnretriedConnectionError(Exception):
+    error_type = "APIConnectionError"
+
+
+class _UntrustedError(Exception):
+    error_type = "provider message with raw request data"
+
+
+def test_dashboard_failure_uses_one_attempt_without_retry_exhaustion() -> None:
+    error_type, attempts = DashboardRunManager._safe_failure_details(
+        _UnretriedConnectionError(),
+    )
+
+    assert error_type == "APIConnectionError"
+    assert attempts == 1
+
+
+def test_dashboard_failure_replaces_untrusted_error_type() -> None:
+    error_type, attempts = DashboardRunManager._safe_failure_details(_UntrustedError())
+
+    assert error_type == "unexpected_error"
+    assert attempts == 1
+
+
+def test_dashboard_uses_retry_attempts_only_for_retry_exhaustion() -> None:
+    error_type, attempts = DashboardRunManager._safe_failure_details(
+        WorkflowStageRetriesExhaustedError("screen", "APITimeoutError"),
+    )
+
+    assert error_type == "APITimeoutError"
+    assert attempts == 3
 
 
 def test_dashboard_analysis_cards_use_workflow_article_identity() -> None:
