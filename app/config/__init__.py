@@ -4,7 +4,11 @@ from typing import Any
 
 from app.config.errors import ConfigurationError
 from app.config.openai import OpenAIConfig, load_openai_config
-from app.config.persistence import DatabaseConfig, load_database_config
+from app.config.persistence import (
+    DatabaseConfig,
+    load_database_config,
+    load_optional_database_config,
+)
 from app.config.trusted_sources import (
     IrRssFeedConfig,
     TrustedSourceConfig,
@@ -36,6 +40,7 @@ __all__ = [
     "load_naver_news_config",
     "load_openai_config",
     "load_database_config",
+    "load_optional_database_config",
     "IrRssFeedConfig",
     "TrustedSourceConfig",
     "load_trusted_source_config",
