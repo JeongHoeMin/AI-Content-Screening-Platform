@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from typing import List, Optional, Tuple, Type, TypeVar
 
 import pytest
@@ -22,11 +23,13 @@ from app.models import (
     ExtractedCompany,
     LLMInferenceResult,
     NewsEvent,
+    ScreeningAssessment,
     ScreeningAssessmentResponse,
     ScreeningAssessmentResponseItem,
     ScreeningDecision,
     ScreeningDecisionType,
     ScreeningParseErrorKind,
+    ScreeningScorecardResponseItem,
 )
 from app.prompts import BatchScreeningPromptInput, PromptBuilder
 from app.prompts import ScreeningPromptBuilder
@@ -69,9 +72,11 @@ class FakeStructuredOutputLLM(StructuredOutputLLM):
 
 class RejectAllPolicy(ScreeningPolicy):
     def decide(self, event: NewsEvent, assessment: object) -> ScreeningDecision:
+        assert isinstance(assessment, ScreeningAssessment)
         return ScreeningDecision(
             event=event,
             decision=ScreeningDecisionType.REJECT,
+            scorecard=assessment.scorecard,
             relevance=1,
             importance=1,
             credibility=1,
@@ -120,24 +125,42 @@ def build_inferences(event_count: int = 2) -> Tuple[LLMInferenceResult, ...]:
 def item(index: int, score: int | float = 80) -> ScreeningAssessmentResponseItem:
     return ScreeningAssessmentResponseItem(
         event_index=index,
-        relevance=score,
-        importance=score,
-        credibility=score,
+        scorecard=scorecard_item(score),
         requires_cross_validation=False,
         reasons=["Material event."],
+    )
+
+
+def scorecard_item(score: object = 80) -> ScreeningScorecardResponseItem:
+    return ScreeningScorecardResponseItem(
+        theme_directness=score,
+        topic_match=score,
+        market_transmission_path=score,
+        relevance_reason="Relevant source fact.",
+        impact_magnitude=score,
+        scope_and_spillover=score,
+        time_sensitivity=score,
+        importance_reason="Important source fact.",
+        source_authority=score,
+        evidence_specificity=score,
+        corroboration_and_uncertainty=score,
+        credibility_reason="Credible source fact.",
     )
 
 
 def raw_item(**values: object) -> ScreeningAssessmentResponseItem:
     defaults: dict[str, object] = {
         "event_index": 1,
-        "relevance": 80,
-        "importance": 80,
-        "credibility": 80,
+        "scorecard": scorecard_item().model_dump(),
         "requires_cross_validation": False,
         "reasons": ["Material event."],
     }
+    has_invalid_score: bool = "relevance" in values
+    invalid_score: object = values.pop("relevance", None)
     defaults.update(values)
+    if has_invalid_score:
+        scorecard: dict[str, object] = defaults["scorecard"]  # type: ignore[assignment]
+        scorecard["theme_directness"] = invalid_score
     return ScreeningAssessmentResponseItem.model_validate(defaults)
 
 
@@ -181,11 +204,11 @@ def test_parser_converts_integral_number_to_domain_int(score: int | float) -> No
 @pytest.mark.parametrize(
     "payload",
     [
-        '{"event_index": 0, "relevance": "50", "importance": 50, "credibility": 50, "requires_cross_validation": false, "reasons": ["Reason"]}',
-        '{"event_index": true, "relevance": 50, "importance": 50, "credibility": 50, "requires_cross_validation": false, "reasons": ["Reason"]}',
-        '{"event_index": 0, "relevance": true, "importance": 50, "credibility": 50, "requires_cross_validation": false, "reasons": ["Reason"]}',
-        '{"event_index": 0, "relevance": 50, "importance": 50, "credibility": 50, "requires_cross_validation": 1, "reasons": ["Reason"]}',
-        '{"event_index": 0, "relevance": 50, "importance": 50, "credibility": 50, "requires_cross_validation": "true", "reasons": ["Reason"]}',
+        json.dumps({"event_index": 0, "scorecard": {**scorecard_item().model_dump(), "theme_directness": "50"}, "requires_cross_validation": False, "reasons": ["Reason"]}),
+        json.dumps({"event_index": True, "scorecard": scorecard_item().model_dump(), "requires_cross_validation": False, "reasons": ["Reason"]}),
+        json.dumps({"event_index": 0, "scorecard": {**scorecard_item().model_dump(), "theme_directness": True}, "requires_cross_validation": False, "reasons": ["Reason"]}),
+        json.dumps({"event_index": 0, "scorecard": scorecard_item().model_dump(), "requires_cross_validation": 1, "reasons": ["Reason"]}),
+        json.dumps({"event_index": 0, "scorecard": scorecard_item().model_dump(), "requires_cross_validation": "true", "reasons": ["Reason"]}),
     ],
 )
 def test_response_dto_preserves_malformed_primitives_for_parser(payload: str) -> None:
@@ -236,7 +259,7 @@ def test_parser_records_invalid_scores_without_discarding_siblings(
 
     assert len(parsed.assessments) == 1
     assert parsed.assessments[0].candidate_id == "article-1:0"
-    assert parsed.errors[0].kind is ScreeningParseErrorKind.INVALID_SCORE
+    assert parsed.errors[0].kind is ScreeningParseErrorKind.INVALID_SCORECARD
     assert parsed.errors[0].candidate_id == "article-1:1"
 
 
@@ -250,7 +273,7 @@ def test_parser_records_malformed_score_without_discarding_sibling(
     )
 
     assert len(parsed.assessments) == 1
-    assert parsed.errors[0].kind is ScreeningParseErrorKind.INVALID_SCORE
+    assert parsed.errors[0].kind is ScreeningParseErrorKind.INVALID_SCORECARD
     assert parsed.errors[0].candidate_id == "article-1:1"
 
 
@@ -345,9 +368,7 @@ def test_parser_normalizes_reasons_and_preserves_input_event_order() -> None:
         response(
             ScreeningAssessmentResponseItem(
                 event_index=1,
-                relevance=80,
-                importance=80,
-                credibility=80,
+                scorecard=scorecard_item(80),
                 requires_cross_validation=False,
                 reasons=["  Same  reason ", "", "Same reason", "Second reason"],
             ),
@@ -415,7 +436,7 @@ async def test_screener_allows_partial_event_success_and_safe_logs(
                 "batch_index": 0,
                 "event_index": 1,
                 "candidate_id": "article-1:1",
-                "error_kind": "invalid_score",
+                "error_kind": "invalid_scorecard",
             },
         )
     ]

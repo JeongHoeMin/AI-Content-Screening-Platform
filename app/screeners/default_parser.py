@@ -7,19 +7,32 @@ from typing import Dict, List, Set, Tuple
 from pydantic import ValidationError
 
 from app.models.screening import (
+    CredibilityScorecard,
+    ImportanceScorecard,
+    RelevanceScorecard,
     ScreeningAssessment,
     ScreeningAssessmentResponse,
     ScreeningAssessmentResponseItem,
     ScreeningCandidate,
+    ScreeningScorecard,
+    ScreeningScorecardResponseItem,
     ScreeningParseError,
     ScreeningParseErrorKind,
     ScreeningParseResult,
 )
 from app.screeners.parser import ScreeningAssessmentParser
+from app.screeners.scorecard_policy import ScreeningScorecardPolicy
 
 
 class DefaultScreeningAssessmentParser(ScreeningAssessmentParser):
     """Restores valid assessments by event index without discarding siblings."""
+
+    def __init__(self, scorecard_policy: ScreeningScorecardPolicy | None = None) -> None:
+        self._scorecard_policy: ScreeningScorecardPolicy = (
+            scorecard_policy
+            if scorecard_policy is not None
+            else ScreeningScorecardPolicy()
+        )
 
     def parse(
         self,
@@ -107,12 +120,10 @@ class DefaultScreeningAssessmentParser(ScreeningAssessmentParser):
         candidates: Tuple[ScreeningCandidate, ...],
     ) -> tuple[ScreeningAssessment | None, ScreeningParseError | None]:
         try:
-            relevance: int = self._parse_integer_score(item.relevance)
-            importance: int = self._parse_integer_score(item.importance)
-            credibility: int = self._parse_integer_score(item.credibility)
+            scorecard: ScreeningScorecard = self._parse_scorecard(item.scorecard)
         except ValueError:
             return None, self._error(
-                ScreeningParseErrorKind.INVALID_SCORE,
+                ScreeningParseErrorKind.INVALID_SCORECARD,
                 event_index,
                 candidates,
             )
@@ -138,9 +149,7 @@ class DefaultScreeningAssessmentParser(ScreeningAssessmentParser):
             return (
                 ScreeningAssessment(
                     candidate_id=candidates[event_index].candidate_id,
-                    relevance=relevance,
-                    importance=importance,
-                    credibility=credibility,
+                    scorecard=scorecard,
                     requires_cross_validation=requires_cross_validation,
                     reasons=reasons,
                 ),
@@ -174,6 +183,46 @@ class DefaultScreeningAssessmentParser(ScreeningAssessmentParser):
         if not 0 <= score <= 100:
             raise ValueError("score must be between 0 and 100")
         return score
+
+    def _parse_scorecard(
+        self,
+        item: ScreeningScorecardResponseItem | None,
+    ) -> ScreeningScorecard:
+        if item is None:
+            raise ValueError("scorecard is required")
+        try:
+            raw_scorecard: ScreeningScorecard = ScreeningScorecard(
+                relevance=RelevanceScorecard(
+                    theme_directness=self._parse_integer_score(item.theme_directness),
+                    topic_match=self._parse_integer_score(item.topic_match),
+                    market_transmission_path=self._parse_integer_score(item.market_transmission_path),
+                    reason=self._parse_dimension_reason(item.relevance_reason),
+                ),
+                importance=ImportanceScorecard(
+                    impact_magnitude=self._parse_integer_score(item.impact_magnitude),
+                    scope_and_spillover=self._parse_integer_score(item.scope_and_spillover),
+                    time_sensitivity=self._parse_integer_score(item.time_sensitivity),
+                    reason=self._parse_dimension_reason(item.importance_reason),
+                ),
+                credibility=CredibilityScorecard(
+                    source_authority=self._parse_integer_score(item.source_authority),
+                    evidence_specificity=self._parse_integer_score(item.evidence_specificity),
+                    corroboration_and_uncertainty=self._parse_integer_score(item.corroboration_and_uncertainty),
+                    reason=self._parse_dimension_reason(item.credibility_reason),
+                ),
+            )
+        except (ValueError, ValidationError) as error:
+            raise ValueError("invalid scorecard") from error
+        return self._scorecard_policy.calculate(raw_scorecard)
+
+    @staticmethod
+    def _parse_dimension_reason(value: object) -> str:
+        if not isinstance(value, str):
+            raise ValueError("scorecard reason must be a string")
+        normalized: str = " ".join(value.split())
+        if not normalized:
+            raise ValueError("scorecard reason must not be blank")
+        return normalized
 
     @staticmethod
     def _parse_cross_validation_flag(value: object) -> bool:

@@ -64,6 +64,7 @@ class DefaultScreeningPolicy(ScreeningPolicy):
         return ScreeningDecision(
             event=event,
             decision=self._decision_type(assessment),
+            scorecard=assessment.scorecard,
             relevance=assessment.relevance,
             importance=assessment.importance,
             credibility=assessment.credibility,

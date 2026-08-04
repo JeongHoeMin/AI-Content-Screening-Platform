@@ -5,13 +5,18 @@ from pydantic import ValidationError
 
 from app.models import (
     CompanyRelation,
+    CredibilityScorecard,
     EventType,
     ExtractedCompany,
+    ImportanceScorecard,
     NewsEvent,
+    RelevanceScorecard,
     ScreeningAssessment,
+    ScreeningScorecard,
     ScreeningDecisionType,
 )
 from app.screeners import DefaultScreeningPolicy, ScreeningPolicyConfig
+from app.screeners import ScreeningScorecardPolicy
 
 
 def build_event() -> NewsEvent:
@@ -39,18 +44,32 @@ def build_assessment(
 ) -> ScreeningAssessment:
     return ScreeningAssessment(
         candidate_id="article-1:0",
-        relevance=relevance,
-        importance=importance,
-        credibility=credibility,
+        scorecard=ScreeningScorecardPolicy().calculate(
+            ScreeningScorecard(
+                relevance=RelevanceScorecard(
+                    theme_directness=relevance, topic_match=relevance,
+                    market_transmission_path=relevance, reason="관련성 근거",
+                ),
+                importance=ImportanceScorecard(
+                    impact_magnitude=importance, scope_and_spillover=importance,
+                    time_sensitivity=importance, reason="중요도 근거",
+                ),
+                credibility=CredibilityScorecard(
+                    source_authority=credibility, evidence_specificity=credibility,
+                    corroboration_and_uncertainty=credibility, reason="신뢰도 근거",
+                ),
+            )
+        ),
         requires_cross_validation=requires_cross_validation,
         reasons=("The event has a material stated impact.",),
     )
 
 
-@pytest.mark.parametrize("field", ["relevance", "importance", "credibility"])
-def test_assessment_rejects_scores_outside_zero_to_one_hundred(field: str) -> None:
+def test_assessment_rejects_scorecard_scores_outside_zero_to_one_hundred() -> None:
     values: dict[str, object] = build_assessment().model_dump()
-    values[field] = 101
+    scorecard: dict[str, object] = values["scorecard"]  # type: ignore[assignment]
+    relevance: dict[str, object] = scorecard["relevance"]  # type: ignore[index,assignment]
+    relevance["theme_directness"] = 101
 
     with pytest.raises(ValidationError):
         ScreeningAssessment.model_validate(values)
