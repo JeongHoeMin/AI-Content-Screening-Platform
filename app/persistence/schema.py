@@ -115,3 +115,35 @@ workflow_execution_audits: Table = Table(
     CheckConstraint("duration_seconds >= 0"),
     CheckConstraint("input_article_count >= 0"),
 )
+
+scheduled_recommendation_jobs: Table = Table(
+    "scheduled_recommendation_jobs",
+    metadata,
+    Column("id", String(64), primary_key=True),
+    Column("active", Integer, nullable=False),
+    Column("cron_expression", String(128), nullable=False),
+    Column("timezone", String(64), nullable=False),
+    Column("themes", JSON, nullable=False),
+    Column("topics", JSON, nullable=False),
+    Column("limit", Integer, nullable=False),
+    Column("telegram_enabled", Integer, nullable=False),
+    Column("version", Integer, nullable=False),
+    Column("next_run_at", DateTime(timezone=True), nullable=False),
+    Column("last_run_at", DateTime(timezone=True), nullable=True),
+    Column("lease_owner", String(64), nullable=True),
+    Column("lease_until", DateTime(timezone=True), nullable=True),
+    CheckConstraint("version >= 1"),
+)
+
+scheduled_recommendation_executions: Table = Table(
+    "scheduled_recommendation_executions",
+    metadata,
+    Column("id", String(64), primary_key=True),
+    Column("job_id", String(64), ForeignKey("scheduled_recommendation_jobs.id"), nullable=False),
+    Column("scheduled_for", DateTime(timezone=True), nullable=False),
+    Column("started_at", DateTime(timezone=True), nullable=False),
+    Column("finished_at", DateTime(timezone=True), nullable=True),
+    Column("status", String(32), nullable=False),
+    Column("error_type", String(128), nullable=True),
+    UniqueConstraint("job_id", "scheduled_for"),
+)

@@ -89,6 +89,8 @@ recover 가능한 item 오류는 가능한 한 해당 item만 제외하고 sibli
 로그는 `structlog`만 사용한다. batch index, event/evidence index, 내부 식별자, 제한된 error kind 같은 운영용 메타데이터만 기록하며 기사 본문, prompt, SDK 전체 응답, API key, 개인정보, 무제한 예외 문자열을 기록하지 않는다.
 Docker dashboard 실행은 `./runtime/logs` volume에 구조화 application JSONL과 terminal execution audit JSONL을 보존한다. 이 runtime data는 Git에 포함하지 않는다.
 
+정기 추천은 별도 `schedule-worker` process가 PostgreSQL의 KST cron 설정을 lease로 claim한 뒤 기존 RSS recommendation Harness를 호출한다. 설정·lease·terminal execution status는 `ScheduledRecommendationPersistence`만 변경한다. Telegram adapter는 terminal audit 뒤의 best-effort observer이며 전송 실패가 recommendation 결과를 바꾸지 않는다.
+
 ## 의존성 및 변경 원칙
 
 - Provider/SDK/LLM adapter는 Domain 모델을 만들지 않고 transport 결과만 제공한다.

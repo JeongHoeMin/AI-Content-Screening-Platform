@@ -159,3 +159,5 @@ UTC daily scheduler, JSONL persistence/audit·metrics·alerting, request-cap cos
 대시보드는 반도체·AI·대체에너지 같은 투자 테마와 뉴스 주제를 함께 선택해 수집 결과를 좁힌다. 카탈로그
 기반의 결정적 filter, PostgreSQL 실행 조건 snapshot, 점수표·과거 실행·가격 성과·KST 스케줄·Telegram·실행
 그래프는 작은 독립 변경 단위로 확장한다. LLM은 테마/주제 filter나 매수·매도 결정을 직접 내리지 않는다.
+
+정기 실행 설정·KST worker·Telegram terminal 요약은 현재 구현 단위에 포함한다. 추천 시점 가격 snapshot과 이후 수익률·"그날 샀더라면" 대시보드는 가격 데이터 제공자의 거래일 계약을 확정한 별도 다음 변경 단위로 구현한다.

@@ -3,11 +3,13 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from datetime import datetime, timezone
+from typing import Optional
 
 import pytest
 from app.filters import ArticleFilter, DefaultThemeCatalog
 from app.market_data import posts_to_articles
 from app.models import CollectionFilter, CommunityType, InvestmentTheme, NewsTopic, Post
+from app.models.scheduled_recommendation import ScheduledRecommendationJob
 from app.web.app import (
     DEFAULT_ANALYSIS_SOURCES,
     DashboardEvent,
@@ -262,3 +264,78 @@ def test_dashboard_health_endpoint_is_ready_without_credentials() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+class SchedulePersistence:
+    def __init__(self) -> None:
+        self.job: Optional[ScheduledRecommendationJob] = None
+
+    async def get(self, job_id: str) -> Optional[ScheduledRecommendationJob]:
+        return self.job
+
+    async def save(
+        self,
+        job: ScheduledRecommendationJob,
+        next_run_at: datetime,
+        expected_version: Optional[int],
+    ) -> None:
+        self.job = job
+
+
+def test_schedule_settings_can_be_saved_and_read(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SCHEDULE_SETTINGS_PASSWORD", "x" * 32)
+    monkeypatch.setenv("SCHEDULE_COOKIE_SECURE", "false")
+    persistence = SchedulePersistence()
+    manager = DashboardRunManager(schedule_persistence=persistence)
+    client = TestClient(create_web_app(manager))
+
+    unauthenticated = client.put(
+        "/api/settings/schedule",
+        json={"cron_expression": "0 8 * * *"},
+    )
+    assert unauthenticated.status_code == 401
+
+    login = client.post(
+        "/api/settings/login",
+        json={"password": "x" * 32},
+    )
+    assert login.status_code == 204
+
+    saved = client.put(
+        "/api/settings/schedule",
+        json={
+            "active": True,
+            "cron_expression": "0 8 * * *",
+            "themes": ["semiconductor"],
+            "limit": 25,
+            "telegram_enabled": False,
+        },
+    )
+
+    assert saved.status_code == 200
+    assert saved.json()["next_run_at"].endswith("Z")
+    loaded = client.get("/api/settings/schedule")
+    assert loaded.status_code == 200
+    assert loaded.json()["timezone"] == "Asia/Seoul"
+
+    stale = client.put(
+        "/api/settings/schedule",
+        json={"cron_expression": "0 9 * * *", "version": 99},
+    )
+
+    assert stale.status_code == 409
+
+
+def test_schedule_page_requires_password_before_schedule_api_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SCHEDULE_SETTINGS_PASSWORD", "x" * 32)
+    monkeypatch.setenv("SCHEDULE_COOKIE_SECURE", "false")
+    client = TestClient(create_web_app(DashboardRunManager(schedule_persistence=SchedulePersistence())))
+
+    page = client.get("/settings")
+    response = client.get("/api/settings/schedule")
+
+    assert page.status_code == 200
+    assert "정기 실행 설정" in page.text
+    assert response.status_code == 401

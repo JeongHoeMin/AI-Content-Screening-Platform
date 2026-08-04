@@ -54,3 +54,5 @@ git diff --check
 
 투자 테마·뉴스 주제 필터는 카탈로그 term, 선택 조건, 제외 이유와 catalog version을 단위 테스트한다. PostgreSQL
 snapshot은 실행 조건과 집계만 저장하는지 검증하며 기사 원문·prompt가 저장 대상에 섞이지 않는지 확인한다.
+
+정기 실행 테스트는 KST cron의 다음 UTC slot, 일/요일 cron 의미, schedule DB migration, due lease, Telegram 실패 격리, 설정 비밀번호·HttpOnly session 인증을 확인한다. Docker smoke에서는 migration 적용 후 `schedule-worker`가 PostgreSQL healthcheck 이후 기동하는지 확인한다.

@@ -7,6 +7,7 @@ from app.persistence.harness_adapter import (
     SqlAlchemyCollectionFilterPersistence,
     SqlAlchemyDocumentPersistence,
     SqlAlchemyWorkflowExecutionAuditPersistence,
+    SqlAlchemyScheduledRecommendationPersistence,
 )
 
 
@@ -35,3 +36,10 @@ def create_workflow_execution_audit_persistence(
 ) -> SqlAlchemyWorkflowExecutionAuditPersistence:
     """Assemble durable safe workflow audit persistence for a Harness."""
     return SqlAlchemyWorkflowExecutionAuditPersistence(create_session_factory(config))
+
+
+def create_scheduled_recommendation_persistence(
+    config: DatabaseConfig,
+) -> SqlAlchemyScheduledRecommendationPersistence:
+    """Assemble worker-owned schedule configuration persistence."""
+    return SqlAlchemyScheduledRecommendationPersistence(create_session_factory(config))

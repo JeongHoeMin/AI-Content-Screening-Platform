@@ -302,3 +302,4 @@ __all__ = [
     "EvidenceRelation",
     "ValidationEvidence",
 ]
+from app.models.scheduled_recommendation import ScheduledRecommendationJob

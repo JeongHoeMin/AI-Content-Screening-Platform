@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Protocol, Tuple
+from typing import TYPE_CHECKING, Optional, Protocol, Tuple
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -17,6 +17,11 @@ from app.persistence.filter_repository import SqlAlchemyCollectionFilterReposito
 from app.persistence.execution_audit_repository import (
     SqlAlchemyWorkflowExecutionAuditRepository,
 )
+from app.persistence.schedule_repository import (
+    ClaimedScheduledRecommendationJob,
+    SqlAlchemyScheduledRecommendationRepository,
+)
+from app.models.scheduled_recommendation import ScheduledRecommendationJob
 
 if TYPE_CHECKING:
     from app.harness.execution_audit import WorkflowExecutionAudit
@@ -41,6 +46,49 @@ class WorkflowExecutionAuditPersistence(Protocol):
 
     async def persist(self, audit: "WorkflowExecutionAudit") -> None:
         """Store one terminal observation without input content or prompts."""
+
+
+class ScheduledRecommendationPersistence(Protocol):
+    """Harness boundary for durable schedule configuration and exclusive leases."""
+
+    async def get(self, job_id: str) -> Optional[ScheduledRecommendationJob]:
+        """Load the current schedule configuration, when present."""
+
+    async def save(
+        self,
+        job: ScheduledRecommendationJob,
+        next_run_at: datetime,
+        expected_version: Optional[int],
+    ) -> None:
+        """Persist one validated schedule."""
+
+    async def claim_due(
+        self,
+        now_utc: datetime,
+        lease_owner: str,
+        lease_until: datetime,
+    ) -> Optional[ClaimedScheduledRecommendationJob]:
+        """Lease one due schedule through a short database transaction."""
+
+    async def complete_execution(
+        self,
+        execution_id: str,
+        job_id: str,
+        lease_owner: str,
+        status: str,
+        error_type: Optional[str],
+        finished_at: datetime,
+    ) -> bool:
+        """Persist a bounded terminal status for a claimed schedule slot."""
+
+    async def renew_lease(
+        self,
+        job_id: str,
+        execution_id: str,
+        lease_owner: str,
+        lease_until: datetime,
+    ) -> bool:
+        """Extend a live worker lease without exposing database details."""
 
 
 class SqlAlchemyDocumentPersistence:
@@ -101,3 +149,71 @@ class SqlAlchemyWorkflowExecutionAuditPersistence:
                 SqlAlchemyWorkflowExecutionAuditRepository(session)
             )
             await repository.store(audit)
+
+
+class SqlAlchemyScheduledRecommendationPersistence:
+    """Persist schedule settings through the worker-owned database boundary."""
+
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self._session_factory: async_sessionmaker[AsyncSession] = session_factory
+
+    async def get(self, job_id: str) -> Optional[ScheduledRecommendationJob]:
+        async with self._session_factory() as session:
+            repository = SqlAlchemyScheduledRecommendationRepository(session)
+            return await repository.get(job_id)
+
+    async def save(
+        self,
+        job: ScheduledRecommendationJob,
+        next_run_at: datetime,
+        expected_version: Optional[int],
+    ) -> None:
+        async with self._session_factory.begin() as session:
+            repository = SqlAlchemyScheduledRecommendationRepository(session)
+            await repository.save(job, next_run_at, expected_version)
+
+    async def claim_due(
+        self,
+        now_utc: datetime,
+        lease_owner: str,
+        lease_until: datetime,
+    ) -> Optional[ClaimedScheduledRecommendationJob]:
+        async with self._session_factory.begin() as session:
+            repository = SqlAlchemyScheduledRecommendationRepository(session)
+            return await repository.claim_due(now_utc, lease_owner, lease_until)
+
+    async def complete_execution(
+        self,
+        execution_id: str,
+        job_id: str,
+        lease_owner: str,
+        status: str,
+        error_type: Optional[str],
+        finished_at: datetime,
+    ) -> bool:
+        async with self._session_factory.begin() as session:
+            repository = SqlAlchemyScheduledRecommendationRepository(session)
+            return await repository.complete_execution(
+                execution_id=execution_id,
+                job_id=job_id,
+                lease_owner=lease_owner,
+                status=status,
+                error_type=error_type,
+                finished_at=finished_at,
+            )
+
+    async def renew_lease(
+        self,
+        job_id: str,
+        execution_id: str,
+        lease_owner: str,
+        lease_until: datetime,
+    ) -> bool:
+        async with self._session_factory.begin() as session:
+            repository = SqlAlchemyScheduledRecommendationRepository(session)
+            return await repository.renew_lease(
+                job_id=job_id,
+                execution_id=execution_id,
+                lease_owner=lease_owner,
+                lease_until=lease_until,
+            )

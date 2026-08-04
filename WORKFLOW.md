@@ -380,3 +380,7 @@ CLI는 `python -m app --input <articles.json> --mode mock|openai`로 실행한�
 ## 운영 실행 계약
 
 `ScreeningExecutionHarness`만 workflow terminal audit persistence와 provider request-budget scope를 소유한다. `DailyWorkflowScheduler`는 UTC daily schedule과 injected job lifecycle만 소유하며 실패한 job 뒤에도 다음 slot을 예약한다. `OperationalAlertPolicy`는 failed execution 및 configured duration threshold를 safe alert로 투영한다. JSONL retention은 atomic rotation과 prune candidate plan만 제공하며, 자동 파일 삭제를 수행하지 않는다.
+
+## 정기 추천 실행
+
+`schedule-worker`는 30초마다 due KST cron slot을 조회한다. DB transaction은 job lease를 잡고 다음 slot으로 전진시키며 같은 `(job_id, scheduled_for)` 실행 slot을 한 번만 생성한다. claim 뒤에는 dashboard와 동일한 `collect → filter → LangGraph → recommendation` 흐름을 실행한다. terminal status를 DB에 기록한 뒤 Telegram이 활성화된 job에 한해 안전한 요약을 best-effort로 전송한다.

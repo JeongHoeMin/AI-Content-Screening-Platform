@@ -43,3 +43,13 @@ def test_execution_audit_migration_follows_collection_filter_snapshot() -> None:
 
     assert 'down_revision = "20260805_01"' in migration
     assert "workflow_execution_audits" in migration
+
+
+def test_scheduled_recommendation_migration_follows_execution_audit() -> None:
+    migration: str = Path(
+        "alembic/versions/20260805_03_scheduled_recommendation_jobs.py"
+    ).read_text(encoding="utf-8")
+
+    assert 'down_revision = "20260805_02"' in migration
+    assert "scheduled_recommendation_jobs" in migration
+    assert "scheduled_recommendation_executions" in migration
