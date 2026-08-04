@@ -51,7 +51,7 @@ reason code, policy version을 출력하지 않는다. v1 action eligibility는 
 
 ## LLM 경계
 
-LLM은 Extractor, Screener, Cross Validator에서만 구조화된 관측 결과를 만든다. 응답 DTO는 transport boundary이며 Parser가 타입·범위·index·중복·도메인 규칙을 검사한 뒤 Domain 객체로 만든다. Policy가 `ACCEPT/REVIEW/REJECT`, 검증 상태, 독립 출처 수를 결정한다.
+LLM은 Extractor, Deduplication Comparator, Screener, Cross Validator에서만 구조화된 관측 결과를 만든다. 응답 DTO는 transport boundary이며 Parser가 타입·범위·index·중복·도메인 규칙을 검사한 뒤 Domain 객체로 만든다. Deduplication Policy는 confidence 80 이상인 `same` 관측만 병합하며, Policy가 `ACCEPT/REVIEW/REJECT`, 검증 상태, 독립 출처 수를 결정한다.
 
 OpenAI mode에서는 하나의 `AsyncOpenAI`와 `OpenAIResponsesStructuredOutputClient`, 그리고 stateless `OpenAIResponsesStructuredOutputLLM` gateway를 Extractor·Screener·Cross Validator가 공유한다. 각 호출은 `response_model`을 인자로 전달하므로 현재 gateway는 작업별 상태를 보유하지 않는다. 이 전제가 바뀌면 client만 공유하고 작업별 gateway를 분리한다.
 

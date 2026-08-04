@@ -7,6 +7,11 @@ from enum import Enum
 from openai import AsyncOpenAI
 
 from app.aggregators import DefaultAggregationStrategy, DefaultEvidenceAggregator
+from app.deduplicators import (
+    DeterministicEventComparator,
+    EventDeduplicator,
+)
+from app.deduplicators.llm_comparator import LLMEventComparator
 from app.candidates import DefaultCandidateSelectionEngine, RuleCandidateSelectionPolicy
 from app.analyzers import (
     DEFAULT_IMPACT_RULE_CATALOG,
@@ -53,7 +58,12 @@ from app.mock_screening import (
     DeterministicMockScreener,
 )
 from app.recommenders import DefaultRecommendationEngine, RuleRecommendationPolicy
-from app.prompts import CrossValidationPromptBuilder, NewsEventPromptBuilder, ScreeningPromptBuilder
+from app.prompts import (
+    CrossValidationPromptBuilder,
+    DeduplicationComparisonPromptBuilder,
+    NewsEventPromptBuilder,
+    ScreeningPromptBuilder,
+)
 from app.resolvers import CompanyResolutionPolicy, DefaultCompanyResolver, DefaultResolvePolicy
 from app.scorers import DefaultScoringEngine, EvidenceAwareScoringStrategy
 from app.screeners import (
@@ -127,6 +137,7 @@ def _create_mock_workflow(
         candidate_selection_engine=DefaultCandidateSelectionEngine(
             RuleCandidateSelectionPolicy(DEFAULT_RANKING_POLICY_CONFIG)
         ),
+        event_deduplicator=EventDeduplicator(DeterministicEventComparator()),
     )
 
 
@@ -193,6 +204,12 @@ def _create_openai_workflow(
         ),
         candidate_selection_engine=DefaultCandidateSelectionEngine(
             RuleCandidateSelectionPolicy(DEFAULT_RANKING_POLICY_CONFIG)
+        ),
+        event_deduplicator=EventDeduplicator(
+            LLMEventComparator(
+                structured_llm=structured_llm,
+                prompt_builder=DeduplicationComparisonPromptBuilder(),
+            )
         ),
         request_budget=request_budget,
     )
