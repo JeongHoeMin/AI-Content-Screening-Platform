@@ -8,6 +8,7 @@ import pytest
 
 from app.llms import ChatMessage, ChatRole
 from app.models import Article
+from app.models.article import ArticleParagraph
 from app.prompt_templates import (
     build_news_event_system_prompt,
     build_news_event_user_prompt,
@@ -71,3 +72,13 @@ def test_user_prompt_separates_article_fields_as_data() -> None:
     assert 'Article ID: "article-1"' in prompt
     assert 'Source: "Example News"' in prompt
     assert 'Title: "Samsung expands HBM production"' in prompt
+
+
+def test_user_prompt_numbers_article_evidence_paragraphs() -> None:
+    article: Article = build_articles()[0].model_copy(
+        update={"paragraphs": (ArticleParagraph(index=1, content="Evidence paragraph."),)}
+    )
+
+    prompt: str = build_news_event_user_prompt((article,))
+
+    assert "Paragraph 1: \"Evidence paragraph.\"" in prompt
