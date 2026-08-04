@@ -41,6 +41,26 @@ class WorkflowArticleAnalysisProgress(BaseModel):
     summary: str = Field(min_length=1)
     reasoning: str = Field(min_length=1)
     event_titles: Tuple[str, ...] = ()
+    event_evidence: Tuple["WorkflowEventEvidenceProgress", ...] = ()
+
+
+class WorkflowEvidenceQuote(BaseModel):
+    """One quoted source paragraph rendered for a workflow event."""
+
+    model_config = ConfigDict(frozen=True)
+
+    paragraph_index: int = Field(ge=1)
+    quote: str = Field(min_length=1, max_length=280)
+
+
+class WorkflowEventEvidenceProgress(BaseModel):
+    """Display-safe evidence for one event extracted from an article."""
+
+    model_config = ConfigDict(frozen=True)
+
+    event_title: str = Field(min_length=1)
+    source_url: str = Field(min_length=1)
+    quotes: Tuple[WorkflowEvidenceQuote, ...] = Field(max_length=2)
 
 
 class WorkflowScreeningAnalysisProgress(BaseModel):

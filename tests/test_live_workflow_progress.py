@@ -55,6 +55,11 @@ def test_live_progress_emits_completed_langgraph_nodes_and_writes_audit(tmp_path
     )
     assert len(extract_event.article_analyses) == len(articles)
     assert all(item.summary for item in extract_event.article_analyses)
+    assert all(
+        len(event_evidence.quotes) <= 2
+        for analysis in extract_event.article_analyses
+        for event_evidence in analysis.event_evidence
+    )
     assert len(screen_event.screening_analyses) == len(result.decisions)
     assert result.statistics.total_articles == len(articles)
     assert len(audit_path.read_text(encoding="utf-8").splitlines()) == 1

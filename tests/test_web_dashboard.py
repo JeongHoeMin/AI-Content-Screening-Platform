@@ -35,6 +35,8 @@ def test_dashboard_page_exposes_recommendation_controls() -> None:
     assert "최대 · 100건" in response.text
     assert "JSON.stringify({limit:selectedSize})" in response.text
     assert "추천 실행 후 선택된 뉴스를 표시합니다." in response.text
+    assert "문단 ${escapeHtml(quote.paragraph_index)}" in response.text
+    assert "event_evidence" in response.text
 
 
 def test_dashboard_uses_low_default_collection_limit() -> None:
