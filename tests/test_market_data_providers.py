@@ -182,7 +182,11 @@ def test_dart_provider_uses_requested_period_and_preserves_disclosure_metadata()
 
     assert result.post is not None
     assert result.post.title == "[기재정정]반기보고서"
-    assert result.post.content == "첫 공시 문단\n둘째 공시 문단"
+    assert result.post.content == (
+        "삼성전자 (종목코드: 005930)의 공시입니다. "
+        "공시 제목: [기재정정]반기보고서. 공시 접수일: 2026-07-30.\n"
+        "첫 공시 문단\n둘째 공시 문단"
+    )
     assert str(result.post.url).endswith("20260730000001")
 
 
