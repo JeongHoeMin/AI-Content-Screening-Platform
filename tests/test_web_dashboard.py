@@ -5,7 +5,9 @@ from fastapi.testclient import TestClient
 from datetime import datetime, timezone
 
 import pytest
-from app.models import CommunityType, InvestmentTheme, NewsTopic, Post
+from app.filters import ArticleFilter, DefaultThemeCatalog
+from app.market_data import posts_to_articles
+from app.models import CollectionFilter, CommunityType, InvestmentTheme, NewsTopic, Post
 from app.web.app import (
     DashboardEvent,
     DashboardRunManager,
@@ -65,6 +67,45 @@ def test_dashboard_request_accepts_theme_and_news_topic_filters() -> None:
 
     assert request.themes == (InvestmentTheme.SEMICONDUCTOR,)
     assert request.topics == (NewsTopic.SUPPLY_CHAIN,)
+
+
+def test_dashboard_filter_snapshot_counts_analysis_articles_not_empty_posts() -> None:
+    posts = [
+        Post(
+            id="with-content",
+            source=CommunityType.DART,
+            title="반도체 공급 계약",
+            content="HBM 메모리 공급 계약을 체결했다.",
+            created_at=datetime(2026, 8, 5, tzinfo=timezone.utc),
+            url="https://example.com/with-content",
+        ),
+        Post(
+            id="without-content",
+            source=CommunityType.DART,
+            title="본문 없는 공시",
+            content=None,
+            created_at=datetime(2026, 8, 5, tzinfo=timezone.utc),
+            url="https://example.com/without-content",
+        ),
+    ]
+    articles = posts_to_articles(posts)
+    filter_result = ArticleFilter(DefaultThemeCatalog()).filter(
+        articles,
+        CollectionFilter(themes=(InvestmentTheme.SEMICONDUCTOR,)),
+    )
+
+    snapshot = DashboardRunManager._build_filter_snapshot(
+        run_id="run-1",
+        request=RecommendationRunRequest(
+            themes=(InvestmentTheme.SEMICONDUCTOR,),
+        ),
+        articles=articles,
+        filter_result=filter_result,
+    )
+
+    assert snapshot.collected_count == 1
+    assert snapshot.accepted_count == 1
+    assert snapshot.excluded_count == 0
 
 
 @pytest.mark.parametrize(

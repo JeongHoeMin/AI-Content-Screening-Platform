@@ -27,6 +27,7 @@ from app.market_data import (
     posts_to_articles,
 )
 from app.models.collect_posts import CollectPostsRequest
+from app.models.article import Article
 from app.models.collection_filter import CollectionFilter, FilterRejectionReason, InvestmentTheme, NewsTopic
 from app.models.collection_filter_result import (
     CollectionFilterResult,
@@ -280,7 +281,7 @@ class DashboardRunManager:
             await self._persist_filter_snapshot(
                 run_id,
                 request,
-                len(posts),
+                articles,
                 filter_result,
             )
             initial_analyses: List[NewsAnalysisCard] = self._initial_analyses(
@@ -614,18 +615,34 @@ class DashboardRunManager:
         self,
         run_id: str,
         request: RecommendationRunRequest,
-        collected_count: int,
+        articles: tuple[Article, ...],
         filter_result: CollectionFilterResult,
     ) -> None:
         """Persist reproducible safe filter conditions through the harness boundary."""
         if self._filter_persistence is None:
             return
-        snapshot: CollectionFilterSnapshot = CollectionFilterSnapshot(
+        snapshot: CollectionFilterSnapshot = self._build_filter_snapshot(
+            run_id=run_id,
+            request=request,
+            articles=articles,
+            filter_result=filter_result,
+        )
+        await self._filter_persistence.persist(snapshot)
+
+    @staticmethod
+    def _build_filter_snapshot(
+        run_id: str,
+        request: RecommendationRunRequest,
+        articles: tuple[Article, ...],
+        filter_result: CollectionFilterResult,
+    ) -> CollectionFilterSnapshot:
+        """Build a snapshot whose count basis is exactly the filter input articles."""
+        return CollectionFilterSnapshot(
             run_id=run_id,
             themes=request.themes,
             topics=request.topics,
             catalog_version=filter_result.catalog_version,
-            collected_count=collected_count,
+            collected_count=len(articles),
             accepted_count=len(filter_result.accepted_articles),
             excluded_count=len(filter_result.rejected_article_ids),
             rejection_counts={
@@ -634,7 +651,6 @@ class DashboardRunManager:
             },
             created_at=datetime.now(timezone.utc),
         )
-        await self._filter_persistence.persist(snapshot)
 
 
 def _create_optional_filter_persistence() -> Optional[CollectionFilterPersistence]:

@@ -63,6 +63,19 @@ def test_catalog_rejects_selected_theme_without_theme_term() -> None:
     assert match.rejection_reason is FilterRejectionReason.THEME_MISMATCH
 
 
+def test_catalog_does_not_match_ai_inside_an_unrelated_english_word() -> None:
+    match = DefaultThemeCatalog().match(
+        title="Chairman appointment announcement",
+        content="The board named a new executive.",
+        collection_filter=CollectionFilter(
+            themes=(InvestmentTheme.ARTIFICIAL_INTELLIGENCE,),
+        ),
+    )
+
+    assert match.accepted is False
+    assert match.rejection_reason is FilterRejectionReason.THEME_MISMATCH
+
+
 def test_collection_filter_deduplicates_selected_values_in_input_order() -> None:
     collection_filter = CollectionFilter(
         themes=(

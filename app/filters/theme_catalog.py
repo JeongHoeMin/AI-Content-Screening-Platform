@@ -122,5 +122,16 @@ class DefaultThemeCatalog:
         return tuple(
             value
             for value in selected_values
-            if any(term in normalized_text for term in terms_by_value[value])
+            if any(
+                DefaultThemeCatalog._term_matches(term, normalized_text)
+                for term in terms_by_value[value]
+            )
         )
+
+    @staticmethod
+    def _term_matches(term: str, normalized_text: str) -> bool:
+        """Match ASCII terms as tokens while preserving Korean substring matching."""
+        if not term.isascii():
+            return term in normalized_text
+        pattern: str = rf"(?<![a-z0-9]){re.escape(term)}(?![a-z0-9])"
+        return re.search(pattern, normalized_text) is not None
