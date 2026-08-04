@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from datetime import datetime, timezone
 
 import pytest
-from app.models import CommunityType, Post
+from app.models import CommunityType, InvestmentTheme, NewsTopic, Post
 from app.web.app import (
     DashboardEvent,
     DashboardRunManager,
@@ -43,6 +43,16 @@ def test_dashboard_uses_low_default_collection_limit() -> None:
     request: RecommendationRunRequest = RecommendationRunRequest()
 
     assert request.limit == 10
+
+
+def test_dashboard_request_accepts_theme_and_news_topic_filters() -> None:
+    request: RecommendationRunRequest = RecommendationRunRequest(
+        themes=(InvestmentTheme.SEMICONDUCTOR,),
+        topics=(NewsTopic.SUPPLY_CHAIN,),
+    )
+
+    assert request.themes == (InvestmentTheme.SEMICONDUCTOR,)
+    assert request.topics == (NewsTopic.SUPPLY_CHAIN,)
 
 
 @pytest.mark.parametrize(

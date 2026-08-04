@@ -18,12 +18,15 @@ from app.bootstrap import ExecutionMode
 from app.harness import Harness
 from app.harness.execution_audit import ScreeningExecutionHarness
 from app.harness.execution_audit import JsonLinesWorkflowExecutionAuditSink
+from app.filters import ArticleFilter, DefaultThemeCatalog
 from app.market_data import (
     create_market_collect_posts_skill,
     create_market_screening_workflow,
     posts_to_articles,
 )
 from app.models.collect_posts import CollectPostsRequest
+from app.models.collection_filter import CollectionFilter, FilterRejectionReason, InvestmentTheme, NewsTopic
+from app.models.collection_filter_result import CollectionFilterResult
 from app.models.community import CommunityType
 from app.models.post import Post
 from app.workflows import ScreeningResult, WorkflowProgressEvent
@@ -48,6 +51,8 @@ class RecommendationRunRequest(BaseModel):
     category: str = Field(default="국내 증시", min_length=1, max_length=100)
     limit: Literal[10, 25, 50, 100] = 10
     period_hours: int = Field(default=24, ge=1, le=168)
+    themes: tuple[InvestmentTheme, ...] = ()
+    topics: tuple[NewsTopic, ...] = ()
 
 
 class DashboardEvent(BaseModel):
@@ -113,6 +118,19 @@ class NewsAnalysisCard(BaseModel):
     credibility: Optional[int] = Field(default=None, ge=0, le=100)
     reasons: List[str] = Field(default_factory=list)
     validation_status: Optional[str] = None
+    theme_filter_excluded: bool = False
+    filter_rejection_reason: Optional[str] = None
+
+
+class CollectionFilterSummary(BaseModel):
+    """Display-safe aggregate of deterministic collection filtering."""
+
+    model_config = ConfigDict(frozen=True)
+
+    catalog_version: str
+    accepted_count: int = Field(ge=0)
+    excluded_count: int = Field(ge=0)
+    rejection_counts: Dict[str, int]
 
 
 class EvidenceQuoteCard(BaseModel):
@@ -144,6 +162,7 @@ class DashboardRunResult(BaseModel):
     analyses: List[NewsAnalysisCard]
     recommendations: List[RecommendationCard]
     statistics: Dict[str, Any]
+    collection_filter: CollectionFilterSummary
 
 
 @dataclass
@@ -243,12 +262,22 @@ class DashboardRunManager:
             )
             posts: List[Post] = collect_result.data.posts[: request.limit]
             articles = posts_to_articles(posts)
-            initial_analyses: List[NewsAnalysisCard] = self._initial_analyses(posts)
+            filter_result: CollectionFilterResult = ArticleFilter(
+                DefaultThemeCatalog()
+            ).filter(
+                articles,
+                CollectionFilter(themes=request.themes, topics=request.topics),
+            )
+            initial_analyses: List[NewsAnalysisCard] = self._initial_analyses(
+                posts,
+                filter_result.rejected_article_reasons,
+            )
             state.analyses = {analysis.id: analysis for analysis in initial_analyses}
             await self._emit(
                 state,
                 "collected",
-                f"{len(posts)}건을 수집하고 {len(articles)}건을 분석 대상으로 선택했습니다.",
+                f"{len(posts)}건을 수집하고 {len(filter_result.accepted_articles)}건을 분석 대상으로 선택했습니다. "
+                f"테마·주제 필터로 {len(filter_result.rejected_article_ids)}건을 제외했습니다.",
                 completed_stage_count=1,
                 analyses=initial_analyses,
             )
@@ -288,11 +317,17 @@ class DashboardRunManager:
                 audit_sink=self._audit_sink(),
             ).run_with_progress(
                 workflow,
-                articles,
+                filter_result.accepted_articles,
                 ExecutionMode.OPENAI.value,
                 on_progress,
             )
-            state.result = self._build_result(run_id, posts, result, state.analyses)
+            state.result = self._build_result(
+                run_id,
+                posts,
+                result,
+                state.analyses,
+                filter_result,
+            )
             state.completed = True
             await self._emit(
                 state,
@@ -382,6 +417,7 @@ class DashboardRunManager:
         posts: List[Post],
         result: ScreeningResult,
         analyses: Dict[str, NewsAnalysisCard],
+        filter_result: CollectionFilterResult,
     ) -> DashboardRunResult:
         news_cards: List[NewsCard] = [
             NewsCard(
@@ -409,23 +445,47 @@ class DashboardRunManager:
                 )
             )
         statistics: Dict[str, Any] = result.statistics.model_dump()
+        filter_summary = CollectionFilterSummary(
+            catalog_version=filter_result.catalog_version,
+            accepted_count=len(filter_result.accepted_articles),
+            excluded_count=len(filter_result.rejected_article_ids),
+            rejection_counts={
+                reason.value: count
+                for reason, count in filter_result.rejection_counts.items()
+            },
+        )
         return DashboardRunResult(
             run_id=run_id,
             news_cards=news_cards,
             analyses=list(analyses.values()),
             recommendations=recommendations,
             statistics=statistics,
+            collection_filter=filter_summary,
         )
 
     @staticmethod
-    def _initial_analyses(posts: List[Post]) -> List[NewsAnalysisCard]:
+    def _initial_analyses(
+        posts: List[Post],
+        rejected_article_reasons: Optional[Dict[str, FilterRejectionReason]] = None,
+    ) -> List[NewsAnalysisCard]:
         """Project all collected posts before workflow analysis begins."""
+        reasons: Dict[str, FilterRejectionReason] = rejected_article_reasons or {}
         return [
             NewsAnalysisCard(
                 id=f"{post.source.value}:{post.id}",
                 title=post.title,
                 source=post.source.value,
-                status="수집 완료 · 분석 대기",
+                status=(
+                    "테마·주제 필터 제외"
+                    if f"{post.source.value}:{post.id}" in reasons
+                    else "수집 완료 · 분석 대기"
+                ),
+                theme_filter_excluded=f"{post.source.value}:{post.id}" in reasons,
+                filter_rejection_reason=(
+                    reasons[f"{post.source.value}:{post.id}"].value
+                    if f"{post.source.value}:{post.id}" in reasons
+                    else None
+                ),
             )
             for post in posts
         ]

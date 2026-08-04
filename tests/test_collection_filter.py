@@ -1,12 +1,26 @@
 from __future__ import annotations
 
 from app.filters.theme_catalog import DefaultThemeCatalog
+from app.filters.article_filter import ArticleFilter
+from app.models.article import Article
 from app.models.collection_filter import (
     CollectionFilter,
     FilterRejectionReason,
     InvestmentTheme,
     NewsTopic,
 )
+from datetime import datetime, timezone
+
+
+def _article(article_id: str, title: str, content: str) -> Article:
+    return Article(
+        id=article_id,
+        title=title,
+        content=content,
+        source="dart",
+        published_at=datetime(2026, 8, 5, tzinfo=timezone.utc),
+        url=f"https://example.com/{article_id}",
+    )
 
 
 def test_catalog_requires_theme_and_topic_when_both_are_selected() -> None:
@@ -64,3 +78,17 @@ def test_collection_filter_deduplicates_selected_values_in_input_order() -> None
         InvestmentTheme.ARTIFICIAL_INTELLIGENCE,
     )
     assert collection_filter.topics == (NewsTopic.TECHNOLOGY,)
+
+
+def test_article_filter_preserves_matching_article_identity() -> None:
+    matching = _article("dart:1", "반도체 공급 계약", "HBM 메모리 계약을 체결했다.")
+    excluded = _article("dart:2", "은행 예금", "예금 금리 안내입니다.")
+
+    result = ArticleFilter(DefaultThemeCatalog()).filter(
+        (matching, excluded),
+        CollectionFilter(themes=(InvestmentTheme.SEMICONDUCTOR,)),
+    )
+
+    assert result.accepted_articles == (matching,)
+    assert result.rejected_article_ids == ("dart:2",)
+    assert result.rejection_counts == {FilterRejectionReason.THEME_MISMATCH: 1}

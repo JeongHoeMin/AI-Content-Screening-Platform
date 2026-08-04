@@ -7,6 +7,14 @@ from app.models.article import (
     ArticleParagraph,
     ArticleRejectReason,
 )
+from app.models.collection_filter import (
+    CollectionFilter,
+    FilterRejectionReason,
+    InvestmentTheme,
+    NewsTopic,
+    ThemeMatch,
+)
+from app.models.collection_filter_result import CollectionFilterResult
 from app.models.candidate_selection import (
     DEFAULT_RANKING_POLICY_CONFIG,
     DEFAULT_RECOMMENDATION_RANK_CATALOG,
@@ -165,9 +173,13 @@ __all__ = [
     "CollectPostsData",
     "CollectPostsMetadata",
     "CollectPostsRequest",
+    "CollectionFilter",
+    "CollectionFilterResult",
     "ContentPipelineRequest",
     "ContentPipelineResult",
     "CommunityType",
+    "FilterRejectionReason",
+    "InvestmentTheme",
     "CompanyImpact",
     "CompanyEvidence",
     "CanonicalCompany",
@@ -218,6 +230,7 @@ __all__ = [
     "ExtractionErrorKind",
     "NewsEventParseResult",
     "NormalizeResult",
+    "NewsTopic",
     "NewsEvent",
     "NewsEventExtractionResponse",
     "NewsEventResponseItem",
@@ -235,6 +248,7 @@ __all__ = [
     "ResolvedNewsEvent",
     "ResolvedTicker",
     "TickerResolvedEvent",
+    "ThemeMatch",
     "ResolveDecision",
     "Recommendation",
     "RecommendationAction",
