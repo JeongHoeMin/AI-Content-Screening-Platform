@@ -537,3 +537,34 @@ RSS transport timeout·connection 오류만 재시도 후보가 된다.
 
 분석 입력의 전문·근거 계약이 명확해진다. 운영자는 승인한 RSS URL을 관리해야 하며, RSS 보존 기간 밖의
 과거 재현은 수집 당시 스냅샷 또는 장기 보존 피드를 필요로 한다.
+
+# ADR-023
+
+## Title
+
+대시보드 워크플로우 그래프는 terminal 재시도 관측만 표시한다.
+
+## Status
+
+Accepted
+
+## Context
+
+사용자는 수집부터 후보 선택까지의 실제 처리 경로와 LLM 재시도 상태를 확인해야 한다. 하지만 현재 LangGraph
+`updates` stream은 노드 완료만 제공하고 내부 retry attempt마다 안전한 별도 이벤트를 제공하지 않는다. 이를
+우회해 원문, prompt 또는 SDK 예외 전문을 UI로 전달하면 보안 로깅 원칙을 위반할 수 있다.
+
+## Decision
+
+대시보드는 수집·directory와 실제 LangGraph 노드를 순서대로 연결한 그래프를 렌더링한다. `extract`,
+`deduplicate`, `screen`, `cross_validate`에는 기존의 총 3회 재시도 정책(최초 실행 뒤 5초·10초)을 보조 경로로
+표시한다. 실행 중에는 재시도 가능 정책만 표시하고, retry exhaustion으로 terminal failure가 된 경우에만
+`WorkflowStageRetriesExhaustedError`의 bounded stage, error type, attempts를 실패 경로에 표시한다.
+그 외 terminal error는 allowlist된 error type 또는 `unexpected_error`로 정규화하고 attempts를 1회로 제한한다.
+
+## Consequences
+
+사용자는 실제 노드 순서, 현재 단계, 완료 상태와 재시도 소진 결과를 확인할 수 있다. 중간 retry attempt의
+실시간 관측은 LangGraph 경계에서 안전한 callback 계약을 별도로 설계한 후에만 추가한다. 허용 기사가 없는
+정상 조건 분기처럼 실행하지 않은 노드는 완료가 아닌 `미실행`으로 표시한다. 이 분기는 Workflow가 evaluator
+결과로 계산한 bounded `next_node`를 사용하므로 대시보드가 수집 필터 결과로 실제 graph edge를 추정하지 않는다.

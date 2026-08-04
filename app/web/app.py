@@ -41,6 +41,7 @@ from app.models.collection_filter_result import (
 from app.models.community import CommunityType
 from app.models.post import Post
 from app.workflows import ScreeningResult, WorkflowProgressEvent
+from app.workflows.screening.errors import WorkflowStageRetriesExhaustedError
 from app.web.dashboard_html import DASHBOARD_HTML
 from app.observability import configure_application_logging
 
@@ -53,6 +54,15 @@ DEFAULT_ANALYSIS_SOURCES: tuple[CommunityType, ...] = (CommunityType.IR_RSS,)
 
 _RETRIED_ERROR_TYPES: frozenset[str] = frozenset(
     {"APITimeoutError", "APIConnectionError", "AuthenticationError", "PermissionDeniedError"}
+)
+_SAFE_DASHBOARD_ERROR_TYPES: frozenset[str] = _RETRIED_ERROR_TYPES | frozenset(
+    {
+        "ConfigurationError",
+        "WorkflowStageRetriesExhaustedError",
+        "AllExtractionBatchesFailedError",
+        "NoValidScreeningDecisionsError",
+        "unexpected_error",
+    }
 )
 
 
@@ -208,6 +218,7 @@ class DashboardRunManager:
     _WORKFLOW_NODES: tuple[str, ...] = (
         "evaluate",
         "extract",
+        "deduplicate",
         "screen",
         "cross_validate",
         "resolve",
@@ -332,7 +343,7 @@ class DashboardRunManager:
                     f"{event.node} 단계를 완료했습니다.",
                     node=event.node,
                     completed_node_count=event.completed_node_count,
-                    active_stage=self._next_workflow_stage(event.node),
+                    active_stage=event.next_node,
                     completed_stage_count=event.completed_node_count + 2,
                     analyses=changed_analyses,
                 )
@@ -362,13 +373,10 @@ class DashboardRunManager:
             )
         except Exception as error:
             state.error_type = type(error).__name__
-            state.failure_stage = getattr(error, "stage", state.active_stage)
-            error_type: str = getattr(error, "error_type", state.error_type)
-            state.failure_attempts = getattr(
-                error,
-                "attempts",
-                3 if error_type in _RETRIED_ERROR_TYPES else 1,
+            state.failure_stage = self._safe_failure_stage(
+                getattr(error, "stage", state.active_stage)
             )
+            error_type, state.failure_attempts = self._safe_failure_details(error)
             state.completed = True
             logger.error(
                 "dashboard_workflow_failed",
@@ -405,6 +413,39 @@ class DashboardRunManager:
         if next_index >= len(cls._WORKFLOW_NODES):
             return None
         return cls._WORKFLOW_NODES[next_index]
+
+    @staticmethod
+    def _safe_failure_details(error: Exception) -> tuple[str, int]:
+        """Return a bounded error category and the actual observed attempt count."""
+        raw_error_type: object = getattr(error, "error_type", type(error).__name__)
+        error_type: str = (
+            raw_error_type
+            if isinstance(raw_error_type, str)
+            and raw_error_type in _SAFE_DASHBOARD_ERROR_TYPES
+            else "unexpected_error"
+        )
+        raw_attempts: object = (
+            getattr(error, "attempts", 1)
+            if isinstance(error, WorkflowStageRetriesExhaustedError)
+            else 1
+        )
+        attempts: int = (
+            raw_attempts
+            if isinstance(raw_attempts, int) and not isinstance(raw_attempts, bool)
+            and 1 <= raw_attempts <= 3
+            else 1
+        )
+        return error_type, attempts
+
+    @classmethod
+    def _safe_failure_stage(cls, value: object) -> str:
+        """Keep terminal SSE stage names inside the known dashboard workflow."""
+        known_stages: frozenset[str] = frozenset(
+            {"collect", "directory", *cls._WORKFLOW_NODES}
+        )
+        if isinstance(value, str) and value in known_stages:
+            return value
+        return "unknown_stage"
 
     @staticmethod
     def _per_source_collection_limit(total_limit: int, source_count: int) -> int:
