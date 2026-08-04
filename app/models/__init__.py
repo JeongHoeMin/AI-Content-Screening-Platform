@@ -190,6 +190,7 @@ __all__ = [
     "EvaluationResponse",
     "EvaluationResponseItem",
     "EvidenceAggregation",
+    "EventEvidence",
     "EventTypeCompatibility",
     "EventTypeCompatibilityEntry",
     "EventFact",
