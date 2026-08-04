@@ -47,3 +47,8 @@ event deduplication in three independently reviewable feature branches.
   injected text transport. GUID or Atom ID is retained as the external identity,
   and only the configured feed endpoint is read; HTML bodies are normalized into
   numbered paragraph candidates before Article conversion.
+- 2026-08-04: Input quality filtering now applies the configured minimum and
+  maximum normalized-body limits at the evaluator boundary. Official full text
+  without numbered paragraphs is rejected before LLM extraction; discovery-only
+  Naver results remain ineligible. This is a structural policy only and does not
+  infer relevance or importance.
