@@ -74,12 +74,21 @@ class LLMNewsEventExtractor(NewsEventExtractor):
             errors.extend(parsed.errors)
             successful_batches += 1
         if articles and successful_batches == 0:
-            raise AllExtractionBatchesFailedError("All OpenAI extraction batches failed")
+            api_errors: list[ExtractionError] = [
+                error for error in errors if error.kind is ExtractionErrorKind.API_CALL
+            ]
+            error_type: str = self._provider_error_type(api_errors[-1]) if api_errors else "ResponseProcessingError"
+            raise AllExtractionBatchesFailedError(error_type)
         return LLMExtractionResult(
             inferences=tuple(inferences),
             successful_batches=successful_batches,
             errors=tuple(errors),
         )
+
+    @staticmethod
+    def _provider_error_type(error: ExtractionError) -> str:
+        """Extract a bounded provider error type from the safe error observation."""
+        return error.message.rsplit(": ", maxsplit=1)[-1]
 
     async def _extract_with_recovery(
         self,

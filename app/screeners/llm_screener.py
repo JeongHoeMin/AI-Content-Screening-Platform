@@ -54,10 +54,12 @@ class LLMEventScreener(EventScreener):
             candidates
         )
         decisions: List[ScreeningDecision] = []
+        last_provider_error_type: str | None = None
         for batch_index, batch in enumerate(self._batches(candidates)):
             try:
                 parsed: ScreeningParseResult = await self._assess_batch(batch)
             except StructuredOutputCallError as error:
+                last_provider_error_type = error.error_type
                 logger.warning(
                     "screening_batch_failed",
                     batch_index=batch_index,
@@ -88,7 +90,7 @@ class LLMEventScreener(EventScreener):
                 decisions.append(self._policy.decide(candidate.event, assessment))
         if candidates and not decisions:
             raise NoValidScreeningDecisionsError(
-                "No valid screening decisions were produced"
+                last_provider_error_type or "ResponseProcessingError"
             )
         return tuple(decisions)
 

@@ -25,6 +25,11 @@ from app.scorers.base import ScoringEngine
 from app.screeners.base import EventScreener
 from app.cross_validators.base import CrossValidator
 from app.workflows.screening.graph import _build_screening_graph
+from app.workflows.screening.graph import _retry_llm_stage
+from app.workflows.screening.errors import WorkflowStageRetriesExhaustedError
+from app.extractors.errors import AllExtractionBatchesFailedError
+from app.screeners.errors import NoValidScreeningDecisionsError
+from app.llms.errors import StructuredOutputCallError
 from app.workflows.screening.result import (
     ScreeningResult,
     WorkflowArticleAnalysisProgress,
@@ -81,7 +86,11 @@ class ScreeningWorkflow:
         if context is None:
             context = WorkflowContext()
         initial_state: ScreeningState = {"articles": articles, "context": context}
-        final_state: Mapping[str, object] = await self._graph.ainvoke(initial_state)
+        try:
+            final_state: Mapping[str, object] = await self._graph.ainvoke(initial_state)
+        except Exception as error:
+            self._raise_retry_exhausted(error)
+            raise
         return self._result_from_final_state(final_state)
 
     async def run_with_progress(
@@ -96,41 +105,59 @@ class ScreeningWorkflow:
         state: dict[str, object] = {"articles": articles, "context": context}
         completed_node_count: int = 0
         article_id_by_event_id: dict[int, str] = {}
-        async for update in self._graph.astream(state, stream_mode="updates"):
-            for node, node_update in update.items():
-                if not isinstance(node_update, Mapping):
-                    raise ValueError("LangGraph node update must be a mapping")
-                state.update(node_update)
-                completed_node_count += 1
-                (
-                    article_analyses,
-                    screening_analyses,
-                    validation_analyses,
-                ) = self._analysis_progress(
-                    node,
-                    state,
-                    article_id_by_event_id,
-                )
-                logger.info(
-                    "workflow_node_completed",
-                    node=node,
-                    completed_node_count=completed_node_count,
-                    output_keys=tuple(sorted(str(key) for key in node_update)),
-                    article_analysis_count=len(article_analyses),
-                    screening_analysis_count=len(screening_analyses),
-                    validation_analysis_count=len(validation_analyses),
-                )
-                await progress_callback(
-                    WorkflowProgressEvent(
+        try:
+            async for update in self._graph.astream(state, stream_mode="updates"):
+                for node, node_update in update.items():
+                    if not isinstance(node_update, Mapping):
+                        raise ValueError("LangGraph node update must be a mapping")
+                    state.update(node_update)
+                    completed_node_count += 1
+                    (
+                        article_analyses,
+                        screening_analyses,
+                        validation_analyses,
+                    ) = self._analysis_progress(
+                        node,
+                        state,
+                        article_id_by_event_id,
+                    )
+                    logger.info(
+                        "workflow_node_completed",
                         node=node,
                         completed_node_count=completed_node_count,
                         output_keys=tuple(sorted(str(key) for key in node_update)),
-                        article_analyses=article_analyses,
-                        screening_analyses=screening_analyses,
-                        validation_analyses=validation_analyses,
+                        article_analysis_count=len(article_analyses),
+                        screening_analysis_count=len(screening_analyses),
+                        validation_analysis_count=len(validation_analyses),
                     )
-                )
+                    await progress_callback(
+                        WorkflowProgressEvent(
+                            node=node,
+                            completed_node_count=completed_node_count,
+                            output_keys=tuple(sorted(str(key) for key in node_update)),
+                            article_analyses=article_analyses,
+                            screening_analyses=screening_analyses,
+                            validation_analyses=validation_analyses,
+                        )
+                    )
+        except Exception as error:
+            self._raise_retry_exhausted(error)
+            raise
         return self._result_from_final_state(state)
+
+    @staticmethod
+    def _raise_retry_exhausted(error: Exception) -> None:
+        if not _retry_llm_stage(error):
+            return
+        if isinstance(error, AllExtractionBatchesFailedError):
+            stage: str = "extract"
+        elif isinstance(error, NoValidScreeningDecisionsError):
+            stage = "screen"
+        elif isinstance(error, StructuredOutputCallError):
+            stage = "cross_validate"
+        else:
+            return
+        raise WorkflowStageRetriesExhaustedError(stage, error.error_type) from error
 
     @staticmethod
     def _analysis_progress(

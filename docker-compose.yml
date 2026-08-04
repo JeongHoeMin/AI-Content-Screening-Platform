@@ -1,4 +1,18 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-screening}
+      POSTGRES_USER: ${POSTGRES_USER:-screening}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   dashboard:
     build: .
     ports:
@@ -7,4 +21,15 @@ services:
       - .env
     environment:
       COMPANY_DIRECTORY_MODE: krx_api
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-screening}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-screening}
+      APP_LOG_PATH: /app/runtime/logs/application.jsonl
+      WORKFLOW_AUDIT_LOG_PATH: /app/runtime/logs/execution-audit.jsonl
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./runtime/logs:/app/runtime/logs
     restart: unless-stopped
+
+volumes:
+  postgres_data:

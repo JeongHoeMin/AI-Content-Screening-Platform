@@ -4,6 +4,7 @@ from typing import Any
 
 from app.config.errors import ConfigurationError
 from app.config.openai import OpenAIConfig, load_openai_config
+from app.config.persistence import DatabaseConfig, load_database_config
 from app.config.market_data import (
     DartConfig,
     KrxConfig,
@@ -21,6 +22,7 @@ __all__ = [
     "NaverNewsConfig",
     "KrxConfig",
     "OpenAIConfig",
+    "DatabaseConfig",
     "create_company_directory",
     "create_company_directory_async",
     "load_company_directory_config",
@@ -28,6 +30,7 @@ __all__ = [
     "load_krx_config",
     "load_naver_news_config",
     "load_openai_config",
+    "load_database_config",
 ]
 
 

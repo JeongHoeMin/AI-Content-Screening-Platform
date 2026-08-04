@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import sys
 from enum import IntEnum
 from pathlib import Path
@@ -126,7 +127,10 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def _configure_error_logging() -> None:
-    structlog.configure(logger_factory=structlog.PrintLoggerFactory(file=sys.stderr))
+    structlog.configure(
+        wrapper_class=structlog.make_filtering_bound_logger(logging.WARNING),
+        logger_factory=structlog.PrintLoggerFactory(file=sys.__stderr__),
+    )
 
 
 def _parse_mode(value: str) -> ExecutionMode:
@@ -193,6 +197,7 @@ def _serialize_audit_metrics(path: Path, metrics: object) -> str:
 
 
 async def run(arguments: Sequence[str] | None = None) -> int:
+    _configure_error_logging()
     args: argparse.Namespace = parse_args(arguments)
     if args.audit_report is not None:
         try:

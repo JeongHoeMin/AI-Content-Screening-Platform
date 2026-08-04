@@ -60,6 +60,8 @@ Event extraction은 모든 event에 하나의 상위 `EventType`을 반환한다
 
 대상이 있었는데 모든 item이 무효라면 명시적인 단계 예외를 발생시킨다. provider 오류·structured response 오류·root validation 오류는 batch 단위로 기록하고 후속 batch는 계속 처리한다.
 
+OpenAI timeout, connection, authentication, authorization 오류는 LangGraph가 같은 LLM stage와 입력을 총 3회까지 재시도한다. 3회 모두 실패하면 stage와 제한된 error type만 사용자·감사 로그에 남기고 실행을 종료한다. malformed output, parser failure, oversized input은 재시도하지 않으며 가능한 sibling 결과를 유지한다.
+
 ## 모델 변경과 smoke test
 
 모델명, timeout, retry, API key는 `app/config/openai.py`의 환경변수 계약으로 관리한다. 새 모델을 도입할 때는 schema 호환성과 structured response 동작을 검증한다. 실제 smoke test는 유효한 API 설정이 있을 때만 실행하며 정확한 score/status를 고정하지 않는다.

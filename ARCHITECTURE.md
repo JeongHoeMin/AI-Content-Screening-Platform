@@ -55,7 +55,7 @@ LLM은 Extractor, Screener, Cross Validator에서만 구조화된 관측 결과�
 
 OpenAI mode에서는 하나의 `AsyncOpenAI`와 `OpenAIResponsesStructuredOutputClient`, 그리고 stateless `OpenAIResponsesStructuredOutputLLM` gateway를 Extractor·Screener·Cross Validator가 공유한다. 각 호출은 `response_model`을 인자로 전달하므로 현재 gateway는 작업별 상태를 보유하지 않는다. 이 전제가 바뀌면 client만 공유하고 작업별 gateway를 분리한다.
 
-OpenAI 실행은 `ProviderRequestBudget`을 통해 context-local request cap을 공유한다. `ScreeningExecutionHarness`가 scope를 열고 budgeted gateway가 SDK 호출 전에 slot을 claim하므로, 한 실행이 설정된 provider request 상한을 넘기지 않는다. 이 cap은 token-price accounting이 아닌 보수적 비용 상한이다.
+OpenAI 실행은 `ProviderRequestBudget`을 통해 context-local request cap을 공유한다. `ScreeningExecutionHarness`가 scope를 열고 budgeted gateway가 SDK 호출 전에 slot을 claim하므로, 한 실행이 설정된 provider request 상한을 넘기지 않는다. 이 cap은 token-price accounting이 아닌 보수적 비용 상한이다. LangGraph는 timeout, connection, authentication, authorization 오류에 한해 동일 LLM stage를 총 3회 시도한다.
 
 ```text
 AsyncOpenAI
@@ -77,6 +77,7 @@ Company Directory mode는 LLM execution mode와 독립적이다. `empty` mode는
 recover 가능한 item 오류는 가능한 한 해당 item만 제외하고 sibling 결과를 보존한다. provider/response/root-validation batch 오류도 나머지 batch를 계속 처리한다. 입력이 존재하지만 유효 결과가 하나도 없을 때만 해당 단계의 명시적 예외를 발생시킨다. 프로그래밍 오류와 object identity 불변식 위반은 숨기지 않고 전파한다.
 
 로그는 `structlog`만 사용한다. batch index, event/evidence index, 내부 식별자, 제한된 error kind 같은 운영용 메타데이터만 기록하며 기사 본문, prompt, SDK 전체 응답, API key, 개인정보, 무제한 예외 문자열을 기록하지 않는다.
+Docker dashboard 실행은 `./runtime/logs` volume에 구조화 application JSONL과 terminal execution audit JSONL을 보존한다. 이 runtime data는 Git에 포함하지 않는다.
 
 ## 의존성 및 변경 원칙
 

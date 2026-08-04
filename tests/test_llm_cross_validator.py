@@ -90,14 +90,15 @@ async def test_validator_continues_after_first_batch_failure() -> None:
         return await original(messages, response_model)
     llm.generate = generate  # type: ignore[method-assign]
     result = await subject.validate((first, second))
-    assert len(result) == 1
+    assert len(result) == 2
+    assert result[0].status.value == "insufficient_evidence"
 
 
 @pytest.mark.anyio
-async def test_validator_raises_when_all_targets_fail() -> None:
+async def test_validator_falls_back_when_all_targets_fail_non_retryably() -> None:
     subject, llm = validator([])
     async def generate(messages: List[ChatMessage], response_model: Type[OutputT]) -> OutputT:
         raise StructuredOutputCallError(provider="test", error_type="APIError")
     llm.generate = generate  # type: ignore[method-assign]
-    with pytest.raises(NoValidCrossValidationResultsError):
-        await subject.validate((candidate((article("a", "Reuters"),)),))
+    result = await subject.validate((candidate((article("a", "Reuters"),)),))
+    assert result[0].status.value == "insufficient_evidence"
