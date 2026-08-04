@@ -12,6 +12,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.article import Article
+from app.persistence.harness_adapter import DocumentPersistence
 from app.workflows import (
     ScreeningResult,
     ScreeningWorkflow,
@@ -195,10 +196,12 @@ class ScreeningExecutionHarness:
         audit_sink: Optional[WorkflowExecutionAuditSink] = None,
         clock: Clock = lambda: datetime.now(timezone.utc),
         execution_id_factory: ExecutionIdFactory = lambda: uuid4().hex,
+        document_persistence: Optional[DocumentPersistence] = None,
     ) -> None:
         self._audit_sink: Optional[WorkflowExecutionAuditSink] = audit_sink
         self._clock: Clock = clock
         self._execution_id_factory: ExecutionIdFactory = execution_id_factory
+        self._document_persistence: Optional[DocumentPersistence] = document_persistence
 
     async def run(
         self,
@@ -211,6 +214,7 @@ class ScreeningExecutionHarness:
         execution_id: str = self._execution_id_factory()
         started_at: datetime = self._clock()
         try:
+            await self._persist_documents(articles)
             result: ScreeningResult
             request_budget = getattr(workflow, "request_budget", None)
             if request_budget is None:
@@ -264,6 +268,7 @@ class ScreeningExecutionHarness:
         execution_id: str = self._execution_id_factory()
         started_at: datetime = self._clock()
         try:
+            await self._persist_documents(articles)
             request_budget = getattr(workflow, "request_budget", None)
             if request_budget is None:
                 result: ScreeningResult = await workflow.run_with_progress(
@@ -307,3 +312,7 @@ class ScreeningExecutionHarness:
     async def _append(self, audit: WorkflowExecutionAudit) -> None:
         if self._audit_sink is not None:
             await self._audit_sink.append(audit)
+
+    async def _persist_documents(self, articles: Tuple[Article, ...]) -> None:
+        if self._document_persistence is not None:
+            await self._document_persistence.persist(articles)

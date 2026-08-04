@@ -1,5 +1,6 @@
 """Harness-owned PostgreSQL persistence adapters and schema."""
 
 from app.persistence.database import create_session_factory
+from app.persistence.harness_adapter import DocumentPersistence, SqlAlchemyDocumentPersistence
 
-__all__ = ["create_session_factory"]
+__all__ = ["DocumentPersistence", "SqlAlchemyDocumentPersistence", "create_session_factory"]

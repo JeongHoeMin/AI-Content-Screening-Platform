@@ -20,6 +20,14 @@ from app.models import Article
 from app.workflows import ScreeningResult, WorkflowContext, WorkflowStatistics
 
 
+class RecordingDocumentPersistence:
+    def __init__(self) -> None:
+        self.calls: list[Tuple[Article, ...]] = []
+
+    async def persist(self, articles: Tuple[Article, ...]) -> None:
+        self.calls.append(articles)
+
+
 def build_article() -> Article:
     return Article(
         id="article-1",
@@ -126,6 +134,21 @@ async def test_screening_execution_harness_records_safe_success_observation() ->
     assert audit.input_article_count == 1
     assert audit.statistics == build_statistics()
     assert audit.error_type is None
+
+
+@pytest.mark.anyio
+async def test_screening_execution_harness_owns_document_persistence() -> None:
+    clock, _ = build_clock()
+    persistence = RecordingDocumentPersistence()
+    article = build_article()
+    harness = ScreeningExecutionHarness(
+        clock=clock,
+        document_persistence=persistence,
+    )
+
+    await harness.run(SuccessfulWorkflow(build_result()), (article,), execution_mode="mock")
+
+    assert persistence.calls == [(article,)]
 
 
 @pytest.mark.anyio
