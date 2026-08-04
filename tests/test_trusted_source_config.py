@@ -4,6 +4,8 @@ import pytest
 
 from app.config.errors import ConfigurationError
 from app.config.trusted_sources import load_trusted_source_config
+from app.market_data import create_market_collect_posts_skill
+from app.models.community import CommunityType
 
 
 def test_load_trusted_source_config_parses_ir_rss_feed_definitions(
@@ -44,3 +46,12 @@ def test_load_trusted_source_config_rejects_invalid_settings(
 
     with pytest.raises(ConfigurationError):
         load_trusted_source_config()
+
+
+def test_rss_only_collection_requires_an_operator_configured_feed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("IR_RSS_FEEDS", "[]")
+
+    with pytest.raises(ConfigurationError, match="IR_RSS_FEEDS"):
+        create_market_collect_posts_skill([CommunityType.IR_RSS])

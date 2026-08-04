@@ -190,7 +190,7 @@ def test_dart_provider_uses_requested_period_and_preserves_disclosure_metadata()
     assert str(result.post.url).endswith("20260730000001")
 
 
-def test_dart_provider_uses_request_ended_at_for_historical_kst_day() -> None:
+def test_dart_provider_uses_request_ended_at_with_korean_calendar_projection() -> None:
     client: JsonHttpClientDouble = JsonHttpClientDouble({"status": "000", "list": []})
     provider: DartDisclosureProvider = DartDisclosureProvider(DartConfig(api_key="dart-key"), client)
     request: CollectPostsRequest = CollectPostsRequest(
@@ -198,6 +198,23 @@ def test_dart_provider_uses_request_ended_at_for_historical_kst_day() -> None:
         limit=25,
         period=timedelta(days=1),
         ended_at=datetime(2026, 8, 1, 0, 0, tzinfo=timezone.utc),
+    )
+
+    raw_posts: List[RawPost] = asyncio.run(provider.collect(request))
+
+    assert raw_posts == []
+    assert client.query["bgn_de"] == "20260731"
+    assert client.query["end_de"] == "20260801"
+
+
+def test_dart_provider_projects_cli_kst_boundary_to_one_korean_calendar_day() -> None:
+    client: JsonHttpClientDouble = JsonHttpClientDouble({"status": "000", "list": []})
+    provider: DartDisclosureProvider = DartDisclosureProvider(DartConfig(api_key="dart-key"), client)
+    request: CollectPostsRequest = CollectPostsRequest(
+        sources=[CommunityType.DART],
+        limit=25,
+        period=timedelta(hours=24),
+        ended_at=datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc),
     )
 
     raw_posts: List[RawPost] = asyncio.run(provider.collect(request))

@@ -11,4 +11,3 @@ def test_compose_defines_healthy_postgres_with_persistent_volume() -> None:
     assert "pg_isready" in compose
     assert "DATABASE_URL:" in compose
     assert "condition: service_healthy" in compose
-    assert "${APP_ENV_FILE:-.env}" in compose

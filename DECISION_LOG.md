@@ -509,3 +509,31 @@ Accepted
 
 수집 조건을 나중에 재현할 수 있고, filter 변경은 catalog version으로 추적된다. 정교한 의미 분류,
 임베딩 기반 유사도, 개별 기업 필터, 원문을 포함한 감사 저장은 별도 범위로 유지한다.
+
+# ADR-022
+
+## Title
+
+운영 분석 입력은 승인된 RSS 전문으로 제한한다.
+
+## Status
+
+Accepted
+
+## Context
+
+실제 OpenDART 전문 조회에서 목록은 수신되었지만 다수 항목이 파일 부재(`014`)로 끝났다. 전문이 없는
+공시 제목·메타데이터를 LLM에 보내면 근거·문단 계약을 만족하지 못하고, Naver 검색 snippet은 분석 전문이
+아니다.
+
+## Decision
+
+대시보드와 CLI의 기본 분석 source는 `IR_RSS_FEEDS`에 운영자가 등록한 기업·기관 공식 RSS/Atom 전문으로
+한다. 피드가 없으면 명시적 configuration 오류로 중단한다. DART는 전문 파일이 존재하는 경우에만 명시적으로
+선택하는 보조 진단 source로 남긴다. DART `014`, 빈 RSS 본문, parser 오류는 retry하지 않는 부분 실패이며,
+RSS transport timeout·connection 오류만 재시도 후보가 된다.
+
+## Consequences
+
+분석 입력의 전문·근거 계약이 명확해진다. 운영자는 승인한 RSS URL을 관리해야 하며, RSS 보존 기간 밖의
+과거 재현은 수집 당시 스냅샷 또는 장기 보존 피드를 필요로 한다.

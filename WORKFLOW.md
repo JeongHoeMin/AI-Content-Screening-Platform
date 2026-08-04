@@ -4,7 +4,7 @@
 
 `ScreeningWorkflow`는 LangGraph로 실행되며 bootstrap에서 주입한 interface만 호출한다. 모든 노드는 immutable tuple 중심의 state를 입력·출력으로 사용한다. `NewsEvent` object identity는 Extract → Screen → Cross Validation → Resolve 사이의 연결 키이므로 동등하지만 다른 객체로 교체하면 안 된다.
 
-recover 가능한 오류는 item 또는 batch 단위로 격리하고, 예상하지 못한 RuntimeError와 object identity 불변식 위반은 전파한다. 현재 Workflow에는 노드 수준의 자동 재시도 정책이 없다. OpenAI provider의 네트워크 재시도는 설정된 SDK `max_retries` 경계에서만 수행된다.
+recover 가능한 오류는 item 또는 batch 단위로 격리하고, 예상하지 못한 RuntimeError와 object identity 불변식 위반은 전파한다. LangGraph는 timeout·connection·authentication·authorization 오류에 한해 Extract·Deduplicate·Screen·Cross Validate 노드를 총 3회까지 재시도한다. 입력 품질, parser, DART 전문 파일 부재(`014`)는 재시도하지 않으며 valid sibling 결과를 보존한다. OpenAI provider의 SDK 재시도는 별도의 transport 경계다.
 
 ```text
 Post → Article → 투자 테마·뉴스 주제 Filter → Evaluate → Extract → Deduplicate → Screen → Cross Validate → Resolve
@@ -15,6 +15,11 @@ Post → Article → 투자 테마·뉴스 주제 Filter → Evaluate → Extrac
 테마는 반도체·AI·대체에너지 같은 종목군이며, 선택된 테마와 주제를 동시에 지정하면 둘 다 일치한
 Article만 Evaluate로 전달한다. 빈 선택은 기존 전체 수집 동작을 유지한다. 제외된 Article은 workflow
 실패가 아니라 안전한 이유 코드 관측이며, 실행 조건·카탈로그 버전·건수만 Harness가 영속화한다.
+
+운영 기본 분석 source는 `IR_RSS_FEEDS`로 등록한 기업·기관 공식 RSS/Atom 전문이다. feed가 비어 있으면
+실행을 시작하지 않고 configuration 오류를 반환한다. Naver 검색 결과는 탐색 전용이며 분석 입력으로 사용하지
+않는다. DART는 전문 파일이 실제 존재하는 경우에만 명시적으로 선택하는 보조 진단 source이고, 파일 부재는
+재시도하지 않는 item-local 오류다.
 
 `Recommend` 노드는 하나의 `ScoringResult`를 `RecommendationPolicy`에 전달한다. Policy는 threshold snapshot,
 reason code, action을 포함한 final immutable `RecommendationResult`를 만들고, Engine은 이를 정확히 한 번 호출해

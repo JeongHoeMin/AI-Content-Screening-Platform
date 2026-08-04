@@ -16,7 +16,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.bootstrap import ExecutionMode
 from app.config import load_optional_database_config
-from app.persistence import CollectionFilterPersistence, create_collection_filter_persistence
+from app.persistence import (
+    CollectionFilterPersistence,
+    WorkflowExecutionAuditPersistence,
+    create_collection_filter_persistence,
+    create_workflow_execution_audit_persistence,
+)
 from app.harness import Harness
 from app.harness.execution_audit import ScreeningExecutionHarness
 from app.harness.execution_audit import JsonLinesWorkflowExecutionAuditSink
@@ -43,6 +48,8 @@ import structlog
 
 configure_application_logging()
 logger = structlog.get_logger(__name__)
+
+DEFAULT_ANALYSIS_SOURCES: tuple[CommunityType, ...] = (CommunityType.IR_RSS,)
 
 _RETRIED_ERROR_TYPES: frozenset[str] = frozenset(
     {"APITimeoutError", "APIConnectionError", "AuthenticationError", "PermissionDeniedError"}
@@ -190,9 +197,13 @@ class DashboardRunManager:
     def __init__(
         self,
         filter_persistence: Optional[CollectionFilterPersistence] = None,
+        execution_audit_persistence: Optional[WorkflowExecutionAuditPersistence] = None,
     ) -> None:
         self._runs: Dict[str, _RunState] = {}
         self._filter_persistence: Optional[CollectionFilterPersistence] = filter_persistence
+        self._execution_audit_persistence: Optional[WorkflowExecutionAuditPersistence] = (
+            execution_audit_persistence
+        )
 
     _WORKFLOW_NODES: tuple[str, ...] = (
         "evaluate",
@@ -253,10 +264,7 @@ class DashboardRunManager:
                 "오늘의 뉴스와 공시를 수집하고 있습니다.",
                 active_stage="collect",
             )
-            collection_sources: tuple[CommunityType, ...] = (
-                CommunityType.NAVER_NEWS,
-                CommunityType.DART,
-            )
+            collection_sources: tuple[CommunityType, ...] = DEFAULT_ANALYSIS_SOURCES
             per_source_limit: int = self._per_source_collection_limit(
                 request.limit,
                 len(collection_sources),
@@ -331,6 +339,7 @@ class DashboardRunManager:
 
             result: ScreeningResult = await ScreeningExecutionHarness(
                 audit_sink=self._audit_sink(),
+                execution_audit_persistence=self._execution_audit_persistence,
             ).run_with_progress(
                 workflow,
                 filter_result.accepted_articles,
@@ -661,10 +670,19 @@ def _create_optional_filter_persistence() -> Optional[CollectionFilterPersistenc
     return create_collection_filter_persistence(database_config)
 
 
+def _create_optional_execution_audit_persistence() -> Optional[WorkflowExecutionAuditPersistence]:
+    """Configure durable dashboard execution audits only when PostgreSQL is configured."""
+    database_config = load_optional_database_config()
+    if database_config is None:
+        return None
+    return create_workflow_execution_audit_persistence(database_config)
+
+
 def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
     """Create the dashboard API and its static single-page client."""
     run_manager: DashboardRunManager = manager or DashboardRunManager(
-        filter_persistence=_create_optional_filter_persistence()
+        filter_persistence=_create_optional_filter_persistence(),
+        execution_audit_persistence=_create_optional_execution_audit_persistence(),
     )
     app = FastAPI(title="AI Content Screening Dashboard")
 

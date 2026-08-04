@@ -99,7 +99,7 @@ def parse_args(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--mode", default=ExecutionMode.MOCK.value)
     parser.add_argument(
         "--sources",
-        default="naver_news,dart,ir_rss",
+        default="ir_rss",
         help="Comma-separated real collection sources for --collect.",
     )
     parser.add_argument("--category", help="Naver News search query for --collect.")

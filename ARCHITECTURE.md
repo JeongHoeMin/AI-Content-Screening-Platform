@@ -31,7 +31,7 @@ candidate audit trail만 만든다. Workflow는 이 internal result를 보존하
 reason code, policy version을 출력하지 않는다. v1 action eligibility는 Catalog가 명시·검증하는 고정 제품
 정책이고, priority만 교체 가능한 ranking policy 값이다.
 
-`app/harness/`는 Phase 9의 실행 상태와 운영 side effect를 소유한다. `ScreeningExecutionHarness`는 terminal audit를 만들고 optional JSONL sink에 저장한다. audit reader는 metrics report를 만들며, alert decorator는 durable audit 저장 뒤에만 best-effort delivery를 시도한다. daily scheduler는 주입된 Harness job을 UTC 기준으로 호출하고, retention은 archive rotation 및 review-only prune plan으로 로그 보존을 관리한다. 이 계층 밖의 Workflow·Policy·LLM은 파일 I/O, scheduler, alert delivery를 알지 않는다.
+`app/harness/`는 Phase 9의 실행 상태와 운영 side effect를 소유한다. `ScreeningExecutionHarness`는 terminal audit를 만들고 optional JSONL sink와 PostgreSQL persistence adapter에 저장한다. audit reader는 metrics report를 만들며, alert decorator는 durable audit 저장 뒤에만 best-effort delivery를 시도한다. daily scheduler는 주입된 Harness job을 UTC 기준으로 호출하고, retention은 archive rotation 및 review-only prune plan으로 로그 보존을 관리한다. 이 계층 밖의 Workflow·Policy·LLM은 파일 I/O, scheduler, alert delivery를 알지 않는다.
 
 `app/filters/`의 `ArticleFilter`와 versioned `ThemeCatalog`는 정규화된 Article의 제목·본문만 읽어 투자 테마와 뉴스 주제 일치 여부를 결정한다. 대시보드 Harness는 통과 Article만 Workflow로 넘기며, `CollectionFilterPersistence`를 통해 실행 ID·선택 enum·카탈로그 버전·건수 집계만 PostgreSQL에 저장한다. Provider·Normalizer·Parser·Policy·Workflow는 이 저장소를 직접 호출하지 않는다.
 

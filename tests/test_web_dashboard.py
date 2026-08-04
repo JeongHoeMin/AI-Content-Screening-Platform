@@ -9,11 +9,17 @@ from app.filters import ArticleFilter, DefaultThemeCatalog
 from app.market_data import posts_to_articles
 from app.models import CollectionFilter, CommunityType, InvestmentTheme, NewsTopic, Post
 from app.web.app import (
+    DEFAULT_ANALYSIS_SOURCES,
     DashboardEvent,
     DashboardRunManager,
     RecommendationRunRequest,
     create_web_app,
 )
+
+
+class RecordingExecutionAuditPersistence:
+    async def persist(self, audit: object) -> None:
+        return None
 
 
 def test_dashboard_page_exposes_recommendation_controls() -> None:
@@ -57,6 +63,17 @@ def test_dashboard_uses_low_default_collection_limit() -> None:
     request: RecommendationRunRequest = RecommendationRunRequest()
 
     assert request.limit == 10
+
+
+def test_dashboard_defaults_to_rss_only_analysis_source() -> None:
+    assert DEFAULT_ANALYSIS_SOURCES == (CommunityType.IR_RSS,)
+
+
+def test_dashboard_manager_accepts_harness_owned_execution_audit_persistence() -> None:
+    persistence = RecordingExecutionAuditPersistence()
+    manager = DashboardRunManager(execution_audit_persistence=persistence)
+
+    assert manager._execution_audit_persistence is persistence
 
 
 def test_dashboard_request_accepts_theme_and_news_topic_filters() -> None:
