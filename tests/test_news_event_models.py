@@ -44,6 +44,8 @@ def test_article_reject_reason_uses_observable_values() -> None:
         ArticleRejectReason.EMPTY_TITLE,
         ArticleRejectReason.EMPTY_BODY,
         ArticleRejectReason.BODY_TOO_SHORT,
+        ArticleRejectReason.BODY_TOO_LONG,
+        ArticleRejectReason.MISSING_PARAGRAPHS,
         ArticleRejectReason.ANALYSIS_INELIGIBLE,
     ]
 
