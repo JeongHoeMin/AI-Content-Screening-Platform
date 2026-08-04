@@ -13,7 +13,7 @@
 최종 Workflow는 다음과 같다.
 
 ```text
-News Collection → Normalization → Event Extraction → AI Screening
+News Collection → Normalization → 투자 테마·뉴스 주제 Filter → Event Extraction → AI Screening
 → Cross Validation → Resolve → Event Analysis → Company Mapping
 → Impact Analysis → Stock Scoring → Portfolio Recommendation
 ```
@@ -72,7 +72,14 @@ Failure
 Success
 ```
 
-## 2.6 Non Goals
+## 2.6 수집 조건은 결정적 코드가 소유한다
+
+투자 테마는 개별 기업이 아닌 반도체·AI·대체에너지 같은 종목군이다. 선택한 투자 테마와 뉴스 주제는
+versioned catalog의 문자열 규칙으로 판정하며, 두 조건을 함께 선택하면 모두 일치해야 한다. LLM은 이
+필터의 통과·제외나 최종 추천을 결정하지 않는다. 실행 조건·카탈로그 버전·안전한 집계는 Harness가
+영속화하되, 기사 원문과 prompt는 이 감사 데이터에 저장하지 않는다.
+
+## 2.7 Non Goals
 
 현재 프로젝트는 다음을 목표로 하지 않는다.
 

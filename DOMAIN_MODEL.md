@@ -26,6 +26,17 @@ CrossValidationCandidate → CrossValidationAssessment → CrossValidationResult
 
 EventFact가 없는 EventType-only event는 유효한 Domain Event다. 다만 Fact를 요구하는 후속 Rule Catalog의 입력은 아니다. Fact 오류는 유효 event와 sibling Fact를 버리지 않으며 Parser가 fact-local 오류로 기록한다. 여러 Fact를 복합 Fact로 합치거나 새로운 의미를 추론하지 않는다.
 
+## 수집 필터 계약
+
+`CollectionFilter`는 immutable 투자 테마 tuple과 뉴스 주제 tuple을 가진다. 초기 테마는 `SEMICONDUCTOR`,
+`ARTIFICIAL_INTELLIGENCE`, `RENEWABLE_ENERGY`이고, 주제는 `EARNINGS`, `POLICY`, `SUPPLY_CHAIN`,
+`TECHNOLOGY`다. 입력 중복은 최초 순서를 보존해 제거한다.
+
+`ThemeCatalog`는 versioned 결정적 term mapping을 소유한다. 빈 filter는 항상 통과하고, 선택한 각 차원에서는
+하나 이상이 일치해야 하며 두 차원이 모두 선택되면 AND로 동작한다. `CollectionFilterResult`는 원본 Article
+identity를 유지한 통과 tuple과 제외 ID·이유·집계만 보관한다. `CollectionFilterSnapshot`은 실행 ID, 선택값,
+catalog version, 수집/통과/제외 수, 이유 집계, UTC 시각만 보관하며 기사 원문·URL·prompt는 포함하지 않는다.
+
 ## Screening 계약
 
 `ScreeningAssessment`는 `relevance`, `importance`, `credibility`의 0–100 실제 Python `int`, `requires_cross_validation`, 최대 3개의 정규화된 reasons로 구성된다. `ScreeningDecision`은 assessment와 원본 `NewsEvent`를 묶고 `ScreeningPolicy`가 낸 `ACCEPT`, `REVIEW`, `REJECT` 상태를 갖는다.

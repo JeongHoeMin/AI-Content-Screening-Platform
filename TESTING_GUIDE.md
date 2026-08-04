@@ -14,6 +14,7 @@
 | 서비스 | batching, 오류 격리, retry 경계, 예상 밖 오류 전파 |
 | Workflow | 단계 연결, 누락된 부분 결과, event identity 불변식 |
 | Bootstrap/CLI | mode 조립, shared gateway, 환경 설정, JSON schema/exit code |
+| 수집 필터 | 테마·주제 AND, 빈 선택 호환, 제외 사유·원본 identity, 안전한 snapshot |
 
 ## Parser 테스트 규칙
 
@@ -50,3 +51,6 @@ git diff --check
 ```
 
 네트워크, 비용, 비밀값이 필요한 테스트는 기본 전체 테스트에 섞지 않는다. 실행 방법과 필요한 환경변수는 별도 명시한다.
+
+투자 테마·뉴스 주제 필터는 카탈로그 term, 선택 조건, 제외 이유와 catalog version을 단위 테스트한다. PostgreSQL
+snapshot은 실행 조건과 집계만 저장하는지 검증하며 기사 원문·prompt가 저장 대상에 섞이지 않는지 확인한다.

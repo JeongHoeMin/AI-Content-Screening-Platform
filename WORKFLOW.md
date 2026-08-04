@@ -7,10 +7,14 @@
 recover 가능한 오류는 item 또는 batch 단위로 격리하고, 예상하지 못한 RuntimeError와 object identity 불변식 위반은 전파한다. 현재 Workflow에는 노드 수준의 자동 재시도 정책이 없다. OpenAI provider의 네트워크 재시도는 설정된 SDK `max_retries` 경계에서만 수행된다.
 
 ```text
-Article
-  → Evaluate → Extract → Deduplicate → Screen → Cross Validate → Resolve
+Post → Article → 투자 테마·뉴스 주제 Filter → Evaluate → Extract → Deduplicate → Screen → Cross Validate → Resolve
   → Analyze → Aggregate → Score → Recommend → WorkflowResult / CLI JSON
 ```
+
+대시보드 수집 경계에서는 `posts_to_articles` 직후 결정적 투자 테마·뉴스 주제 Filter를 적용한다. 투자
+테마는 반도체·AI·대체에너지 같은 종목군이며, 선택된 테마와 주제를 동시에 지정하면 둘 다 일치한
+Article만 Evaluate로 전달한다. 빈 선택은 기존 전체 수집 동작을 유지한다. 제외된 Article은 workflow
+실패가 아니라 안전한 이유 코드 관측이며, 실행 조건·카탈로그 버전·건수만 Harness가 영속화한다.
 
 `Recommend` 노드는 하나의 `ScoringResult`를 `RecommendationPolicy`에 전달한다. Policy는 threshold snapshot,
 reason code, action을 포함한 final immutable `RecommendationResult`를 만들고, Engine은 이를 정확히 한 번 호출해

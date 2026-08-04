@@ -481,3 +481,31 @@ Naver News와 OpenDART는 source-specific `RawPost`를 반환하고 normalizer�
 ## Consequences
 
 한 실행의 company mapping은 재현 가능하며 directory version으로 추적된다. API key와 raw response는 로그나 결과에 남지 않는다. API snapshot refresh는 다음 실행에서만 일어나며, 뉴스 전문 추출과 외부 community provider 확대는 별도 수집 단위로 유지한다.
+
+# ADR-021
+
+## Title
+
+투자 테마·뉴스 주제 수집 조건은 versioned 결정적 catalog와 run-scoped snapshot으로 관리한다.
+
+## Status
+
+Accepted
+
+## Context
+
+사용자는 개별 기업명이 아닌 반도체·AI·대체에너지 같은 종목군과 뉴스 주제로 분석 범위를 좁혀야 한다. 이
+판단을 LLM에 맡기면 같은 입력의 재현성·비용·감사 가능성이 낮아지고, 원문을 운영 로그에 저장하면 노출
+범위가 불필요하게 커진다.
+
+## Decision
+
+`ThemeCatalog`는 versioned term mapping으로 Article 제목·본문을 결정적으로 관측한다. 선택한 테마와 주제가
+모두 존재하면 AND로 판정하고, `ArticleFilter`가 원본 identity를 보존한 통과 목록과 안전한 제외 사유를
+반환한다. Dashboard Harness는 `collection_filter_snapshots`에 run ID, 선택 enum, catalog version, 건수
+집계와 UTC 시각만 저장한다.
+
+## Consequences
+
+수집 조건을 나중에 재현할 수 있고, filter 변경은 catalog version으로 추적된다. 정교한 의미 분류,
+임베딩 기반 유사도, 개별 기업 필터, 원문을 포함한 감사 저장은 별도 범위로 유지한다.

@@ -151,3 +151,11 @@ UTC daily scheduler, JSONL persistence/audit·metrics·alerting, request-cap cos
 ## v1 운영 범위 제한
 
 외부 notification provider, OS cron/service installation, distributed lock, token-price accounting, object storage, automatic deletion은 안정된 Harness 계약 위의 후속 운영 통합이다. v1은 안전한 JSONL adapter와 explicit configuration만 제공하며, 자동 삭제나 비밀값 전송을 하지 않는다.
+
+# 후속 운영 확장 — 투자 테마·뉴스 주제 수집 조건
+
+**Status:** In Progress
+
+대시보드는 반도체·AI·대체에너지 같은 투자 테마와 뉴스 주제를 함께 선택해 수집 결과를 좁힌다. 카탈로그
+기반의 결정적 filter, PostgreSQL 실행 조건 snapshot, 점수표·과거 실행·가격 성과·KST 스케줄·Telegram·실행
+그래프는 작은 독립 변경 단위로 확장한다. LLM은 테마/주제 filter나 매수·매도 결정을 직접 내리지 않는다.
