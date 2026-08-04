@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import List, Tuple
+from typing import List, Sequence, Tuple
 
 from app.bootstrap import ExecutionMode, create_screening_workflow_async
 from app.config import load_dart_config, load_naver_news_config, load_trusted_source_config
@@ -21,24 +21,25 @@ from app.models.community import CommunityType
 from app.skills.collect_posts import CollectPostsSkill
 from app.workflows import ScreeningWorkflow
 
-def create_market_collect_posts_skill() -> CollectPostsSkill:
+def create_market_collect_posts_skill(
+    sources: Sequence[CommunityType],
+) -> CollectPostsSkill:
     """Assemble the real-news and disclosure collection skill from environment config."""
     trusted_config = load_trusted_source_config()
+    providers: dict[CommunityType, object] = {}
+    normalizers: dict[CommunityType, object] = {}
+    if CommunityType.NAVER_NEWS in sources:
+        providers[CommunityType.NAVER_NEWS] = NaverNewsProvider(load_naver_news_config())
+        normalizers[CommunityType.NAVER_NEWS] = NaverNewsNormalizer()
+    if CommunityType.DART in sources:
+        providers[CommunityType.DART] = DartDisclosureProvider(load_dart_config())
+        normalizers[CommunityType.DART] = DartDisclosureNormalizer()
+    if CommunityType.IR_RSS in sources:
+        providers[CommunityType.IR_RSS] = IrRssProvider(trusted_config.ir_rss_feeds)
+        normalizers[CommunityType.IR_RSS] = IrRssNormalizer()
     return CollectPostsSkill(
-        provider_registry=ProviderRegistry(
-            {
-                CommunityType.NAVER_NEWS: NaverNewsProvider(load_naver_news_config()),
-                CommunityType.DART: DartDisclosureProvider(load_dart_config()),
-                CommunityType.IR_RSS: IrRssProvider(trusted_config.ir_rss_feeds),
-            }
-        ),
-        normalizer_registry=NormalizerRegistry(
-            {
-                CommunityType.NAVER_NEWS: NaverNewsNormalizer(),
-                CommunityType.DART: DartDisclosureNormalizer(),
-                CommunityType.IR_RSS: IrRssNormalizer(),
-            }
-        ),
+        provider_registry=ProviderRegistry(providers),
+        normalizer_registry=NormalizerRegistry(normalizers),
     )
 
 

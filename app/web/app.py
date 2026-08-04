@@ -213,7 +213,7 @@ class DashboardRunManager:
                 len(collection_sources),
             )
             collect_result = await Harness().run(
-                create_market_collect_posts_skill(),
+                create_market_collect_posts_skill(collection_sources),
                 CollectPostsRequest(
                     sources=list(collection_sources),
                     limit=per_source_limit,

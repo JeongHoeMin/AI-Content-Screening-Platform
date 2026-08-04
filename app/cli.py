@@ -234,11 +234,12 @@ async def run(arguments: Sequence[str] | None = None) -> int:
     collection_metadata: object = None
     try:
         if args.collect:
-            collect_skill: CollectPostsSkill = create_market_collect_posts_skill()
+            sources: List[CommunityType] = _parse_sources(args.sources)
+            collect_skill: CollectPostsSkill = create_market_collect_posts_skill(sources)
             collect_result = await Harness().run(
                 collect_skill,
                 CollectPostsRequest(
-                    sources=_parse_sources(args.sources),
+                    sources=sources,
                     limit=args.limit,
                     period=timedelta(hours=args.period_hours),
                     category=args.category,
