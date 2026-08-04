@@ -75,7 +75,7 @@ class WorkflowScreeningAnalysisProgress(BaseModel):
     importance: int = Field(ge=0, le=100)
     credibility: int = Field(ge=0, le=100)
     reasons: Tuple[str, ...] = ()
-    scorecard: "WorkflowScorecardProgress"
+    scorecard: Optional["WorkflowScorecardProgress"] = None
 
 
 class WorkflowScorecardProgress(BaseModel):

@@ -252,7 +252,7 @@ class ScreeningWorkflow:
                         importance=item.importance,
                         credibility=item.credibility,
                         reasons=item.reasons,
-                        scorecard=WorkflowScorecardProgress(
+                        scorecard=(WorkflowScorecardProgress(
                             theme_directness=item.scorecard.relevance.theme_directness,
                             topic_match=item.scorecard.relevance.topic_match,
                             market_transmission_path=item.scorecard.relevance.market_transmission_path,
@@ -265,7 +265,7 @@ class ScreeningWorkflow:
                             evidence_specificity=item.scorecard.credibility.evidence_specificity,
                             corroboration_and_uncertainty=item.scorecard.credibility.corroboration_and_uncertainty,
                             credibility_reason=item.scorecard.credibility.reason,
-                        ),
+                        ) if item.scorecard is not None else None),
                     )
                 )
             return (), tuple(screening_analyses), ()

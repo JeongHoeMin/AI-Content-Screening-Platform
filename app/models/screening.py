@@ -213,7 +213,7 @@ class ScreeningDecision(BaseModel):
 
     event: NewsEvent
     decision: ScreeningDecisionType
-    scorecard: ScreeningScorecard
+    scorecard: Optional[ScreeningScorecard] = None
     relevance: int = Field(ge=0, le=100)
     importance: int = Field(ge=0, le=100)
     credibility: int = Field(ge=0, le=100)

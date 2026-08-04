@@ -43,11 +43,13 @@ PromptBuilder는 immutable 입력 DTO를 ChatMessage로 조립하며, business r
 | 작업 | LLM이 반환하는 관측 | Policy가 소유하는 결정 |
 | --- | --- | --- |
 | Event extraction | event title/summary/entities/reasons | 어떤 event가 workflow에서 의미 있는지 |
-| Screening | relevance/importance/credibility, reasons, cross-validation 필요성 | ACCEPT/REVIEW/REJECT |
+| Screening | 9개 세부 scorecard 점수·영역별 근거·cross-validation 필요성 | 결정적 총점 및 ACCEPT/REVIEW/REJECT |
 | Cross validation | evidence별 relation, claim, confidence, reason | independent sources, validation status |
 | Impact analysis | 영향 관측 및 근거 | score/recommendation |
 
 credibility는 extraction confidence와 다르다. 전자는 이벤트가 기사 근거상 신뢰할 만한지에 대한 screening 관측이고, 후자는 추출 자체의 확신을 표현할 수 있다. 두 수치를 서로 대신 사용하지 않는다.
+
+Screening prompt는 scorecard의 9개 criterion과 0/50/100 기준을 요구한다. 구조화 응답 DTO는 strict object로 unknown field를 거부하되, 각 primitive는 Parser가 malformed 값을 event 단위로 관측하도록 유지한다. LLM이 계산한 relevance/importance/credibility 총점은 받지 않는다.
 
 Event extraction은 모든 event에 하나의 상위 `EventType`을 반환한다. `EventFact`는 선택적 복수의
 독립 사건이며, LLM은 기사에 명시된 Fact만 원래 순서대로 반환하고 Fact를 합치거나 새 의미를 만들지
