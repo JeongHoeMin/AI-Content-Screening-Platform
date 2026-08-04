@@ -41,6 +41,8 @@ class ArticleRejectReason(str, Enum):
     EMPTY_TITLE = "empty_title"
     EMPTY_BODY = "empty_body"
     BODY_TOO_SHORT = "body_too_short"
+    BODY_TOO_LONG = "body_too_long"
+    MISSING_PARAGRAPHS = "missing_paragraphs"
     ANALYSIS_INELIGIBLE = "analysis_ineligible"
 
 

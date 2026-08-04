@@ -6,7 +6,12 @@ from typing import Optional, Tuple
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.evaluators.article_evaluator import ArticleEvaluator
-from app.models.article import Article, ArticleEvaluationResult, ArticleRejectReason
+from app.models.article import (
+    Article,
+    ArticleContentOrigin,
+    ArticleEvaluationResult,
+    ArticleRejectReason,
+)
 
 
 class RuleArticleEvaluatorConfig(BaseModel):
@@ -15,6 +20,11 @@ class RuleArticleEvaluatorConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     min_body_length: int = Field(default=200, gt=0)
+    max_body_length: int = Field(default=50_000, gt=0)
+
+    def model_post_init(self, __context: object) -> None:
+        if self.min_body_length > self.max_body_length:
+            raise ValueError("min_body_length cannot exceed max_body_length")
 
 
 class RuleArticleEvaluator(ArticleEvaluator):
@@ -45,6 +55,7 @@ class RuleArticleEvaluator(ArticleEvaluator):
         rejection_reason: Optional[ArticleRejectReason] = self._rejection_reason(
             normalized_title,
             normalized_body,
+            article,
         )
         return ArticleEvaluationResult(
             article=article,
@@ -56,6 +67,7 @@ class RuleArticleEvaluator(ArticleEvaluator):
         self,
         normalized_title: str,
         normalized_body: str,
+        article: Article,
     ) -> Optional[ArticleRejectReason]:
         if not normalized_title:
             return ArticleRejectReason.EMPTY_TITLE
@@ -63,6 +75,13 @@ class RuleArticleEvaluator(ArticleEvaluator):
             return ArticleRejectReason.EMPTY_BODY
         if len(normalized_body) < self._config.min_body_length:
             return ArticleRejectReason.BODY_TOO_SHORT
+        if len(normalized_body) > self._config.max_body_length:
+            return ArticleRejectReason.BODY_TOO_LONG
+        if (
+            article.content_origin is ArticleContentOrigin.OFFICIAL_FULL_TEXT
+            and not article.paragraphs
+        ):
+            return ArticleRejectReason.MISSING_PARAGRAPHS
         return None
 
     @staticmethod

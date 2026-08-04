@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Tuple
 
 from app.evaluators import RuleArticleEvaluator, RuleArticleEvaluatorConfig
-from app.models import Article, ArticleRejectReason
+from app.models import Article, ArticleContentOrigin, ArticleParagraph, ArticleRejectReason
 
 
 def build_article(title: str, content: str) -> Article:
@@ -70,3 +70,32 @@ def test_evaluator_rejects_discovery_only_article_before_llm_input() -> None:
 
     assert result[0].accepted is False
     assert result[0].rejection_reason is ArticleRejectReason.ANALYSIS_INELIGIBLE
+
+
+def test_evaluator_rejects_body_above_configured_limit() -> None:
+    article: Article = build_article("Title", "a" * 11)
+    evaluator: RuleArticleEvaluator = RuleArticleEvaluator(
+        RuleArticleEvaluatorConfig(min_body_length=1, max_body_length=10)
+    )
+
+    result = evaluator.evaluate((article,))
+
+    assert result[0].rejection_reason is ArticleRejectReason.BODY_TOO_LONG
+
+
+def test_evaluator_requires_paragraphs_for_official_full_text() -> None:
+    article: Article = build_article("Title", "공시 본문 " * 50).model_copy(
+        update={"content_origin": ArticleContentOrigin.OFFICIAL_FULL_TEXT}
+    )
+    evaluator: RuleArticleEvaluator = RuleArticleEvaluator(
+        RuleArticleEvaluatorConfig(min_body_length=10)
+    )
+
+    result = evaluator.evaluate((article,))
+
+    assert result[0].rejection_reason is ArticleRejectReason.MISSING_PARAGRAPHS
+
+    paragraph_article: Article = article.model_copy(
+        update={"paragraphs": (ArticleParagraph(index=1, content="공시 본문"),)}
+    )
+    assert evaluator.evaluate((paragraph_article,))[0].accepted is True

@@ -21,11 +21,6 @@ from app.models.community import CommunityType
 from app.skills.collect_posts import CollectPostsSkill
 from app.workflows import ScreeningWorkflow
 
-_MARKET_DATA_EVALUATOR_CONFIG: RuleArticleEvaluatorConfig = RuleArticleEvaluatorConfig(
-    min_body_length=40
-)
-
-
 def create_market_collect_posts_skill() -> CollectPostsSkill:
     """Assemble the real-news and disclosure collection skill from environment config."""
     trusted_config = load_trusted_source_config()
@@ -51,7 +46,14 @@ async def create_market_screening_workflow(
     mode: ExecutionMode,
 ) -> ScreeningWorkflow:
     """Assemble screening for provider summaries with a documented minimum length."""
-    return await create_screening_workflow_async(mode, _MARKET_DATA_EVALUATOR_CONFIG)
+    trusted_config = load_trusted_source_config()
+    return await create_screening_workflow_async(
+        mode,
+        RuleArticleEvaluatorConfig(
+            min_body_length=trusted_config.min_body_length,
+            max_body_length=trusted_config.max_body_length,
+        ),
+    )
 
 
 def posts_to_articles(posts: List[Post]) -> Tuple[Article, ...]:

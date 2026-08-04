@@ -1,6 +1,12 @@
 """Domain models."""
 
-from app.models.article import Article, ArticleEvaluationResult, ArticleRejectReason
+from app.models.article import (
+    Article,
+    ArticleContentOrigin,
+    ArticleEvaluationResult,
+    ArticleParagraph,
+    ArticleRejectReason,
+)
 from app.models.candidate_selection import (
     DEFAULT_RANKING_POLICY_CONFIG,
     DEFAULT_RECOMMENDATION_RANK_CATALOG,
