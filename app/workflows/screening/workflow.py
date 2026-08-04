@@ -157,7 +157,7 @@ class ScreeningWorkflow:
         elif isinstance(error, NoValidScreeningDecisionsError):
             stage = "screen"
         elif isinstance(error, StructuredOutputCallError):
-            stage = "cross_validate"
+            stage = str(getattr(error, "workflow_stage", "cross_validate"))
         else:
             return
         raise WorkflowStageRetriesExhaustedError(stage, error.error_type) from error

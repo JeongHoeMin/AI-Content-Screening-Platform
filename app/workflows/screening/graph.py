@@ -181,7 +181,11 @@ class _ScreeningNodes:
                         content_length=len(inference.article.content),
                     )
                 )
-        result = await self._event_deduplicator.deduplicate(tuple(snapshots))
+        try:
+            result = await self._event_deduplicator.deduplicate(tuple(snapshots))
+        except StructuredOutputCallError as error:
+            setattr(error, "workflow_stage", "deduplicate")
+            raise
         canonical_ids: set[str] = {item.id for item in result.canonical_events}
         inferences: Tuple[LLMInferenceResult, ...] = tuple(
             inference.model_copy(
