@@ -12,6 +12,8 @@ from app.candidates.candidate_selection_engine import CandidateSelectionEngine
 from app.analyzers.base import ImpactAnalyzer
 from app.evaluators.article_evaluator import ArticleEvaluator
 from app.extractors.base import NewsEventExtractor
+from app.deduplicators.event_candidates import DeduplicationEvent
+from app.deduplicators.event_deduplicator import EventDeduplicator
 from app.models.article import Article, ArticleEvaluationResult
 from app.models.candidate_selection import CandidateSelectionResult
 from app.models.evidence import EvidenceAggregation
@@ -107,6 +109,7 @@ class _ScreeningNodes:
         scoring_engine: ScoringEngine,
         recommendation_engine: RecommendationEngine,
         candidate_selection_engine: CandidateSelectionEngine,
+        event_deduplicator: EventDeduplicator | None = None,
     ) -> None:
         self._evaluator: ArticleEvaluator = evaluator
         self._extractor: NewsEventExtractor = extractor
@@ -119,6 +122,7 @@ class _ScreeningNodes:
         self._scoring_engine: ScoringEngine = scoring_engine
         self._recommendation_engine: RecommendationEngine = recommendation_engine
         self._candidate_selection_engine: CandidateSelectionEngine = candidate_selection_engine
+        self._event_deduplicator: EventDeduplicator | None = event_deduplicator
 
     def evaluate(self, state: ScreeningState) -> Mapping[str, object]:
         evaluations: Tuple[ArticleEvaluationResult, ...] = self._evaluator.evaluate(
@@ -160,6 +164,48 @@ class _ScreeningNodes:
             state["inferences"]
         )
         return {"decisions": decisions}
+
+    async def deduplicate(self, state: ScreeningState) -> Mapping[str, object]:
+        """Retain only canonical events before screening without mutating extraction output."""
+        if self._event_deduplicator is None:
+            return {"deduplication": None}
+        snapshots: list[DeduplicationEvent] = []
+        for inference in state.get("inferences", ()):
+            for event_index, event in enumerate(inference.events):
+                snapshots.append(
+                    DeduplicationEvent(
+                        id=f"{inference.article.id}:{event_index}",
+                        event=event,
+                        published_at=inference.article.published_at,
+                        source=inference.article.source,
+                        content_length=len(inference.article.content),
+                    )
+                )
+        result = await self._event_deduplicator.deduplicate(tuple(snapshots))
+        canonical_ids: set[str] = {item.id for item in result.canonical_events}
+        inferences: Tuple[LLMInferenceResult, ...] = tuple(
+            inference.model_copy(
+                update={
+                    "events": tuple(
+                        event
+                        for event_index, event in enumerate(inference.events)
+                        if f"{inference.article.id}:{event_index}" in canonical_ids
+                    )
+                }
+            )
+            for inference in state.get("inferences", ())
+        )
+        logger.info(
+            "workflow_deduplication_completed",
+            input_event_count=len(snapshots),
+            canonical_event_count=len(result.canonical_events),
+            comparison_count=len(result.observations),
+        )
+        return {
+            "inferences": inferences,
+            "events": tuple(item.event for item in result.canonical_events),
+            "deduplication": result,
+        }
 
     async def cross_validate(self, state: ScreeningState) -> Mapping[str, object]:
         source_by_event_id: dict[int, Article] = {
@@ -462,6 +508,7 @@ def _build_screening_graph(
     scoring_engine: ScoringEngine,
     recommendation_engine: RecommendationEngine,
     candidate_selection_engine: CandidateSelectionEngine,
+    event_deduplicator: EventDeduplicator | None = None,
 ) -> CompiledStateGraph:
     """Build the private LangGraph implementation used by ScreeningWorkflow."""
     nodes: _ScreeningNodes = _ScreeningNodes(
@@ -476,10 +523,12 @@ def _build_screening_graph(
         scoring_engine=scoring_engine,
         recommendation_engine=recommendation_engine,
         candidate_selection_engine=candidate_selection_engine,
+        event_deduplicator=event_deduplicator,
     )
     builder: StateGraph = StateGraph(ScreeningState)
     builder.add_node("evaluate", nodes.evaluate)
     builder.add_node("extract", nodes.extract, retry_policy=_LLM_RETRY_POLICY)
+    builder.add_node("deduplicate", nodes.deduplicate, retry_policy=_LLM_RETRY_POLICY)
     builder.add_node("screen", nodes.screen, retry_policy=_LLM_RETRY_POLICY)
     builder.add_node("cross_validate", nodes.cross_validate, retry_policy=_LLM_RETRY_POLICY)
     builder.add_node("resolve", nodes.resolve)
@@ -494,7 +543,8 @@ def _build_screening_graph(
         nodes.has_accepted_articles,
         {"extract": "extract", "aggregate": "aggregate"},
     )
-    builder.add_edge("extract", "screen")
+    builder.add_edge("extract", "deduplicate")
+    builder.add_edge("deduplicate", "screen")
     builder.add_edge("screen", "cross_validate")
     builder.add_edge("cross_validate", "resolve")
     builder.add_edge("resolve", "analyze")

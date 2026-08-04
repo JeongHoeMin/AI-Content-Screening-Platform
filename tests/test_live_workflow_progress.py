@@ -36,6 +36,7 @@ def test_live_progress_emits_completed_langgraph_nodes_and_writes_audit(tmp_path
     assert [event.node for event in events] == [
         "evaluate",
         "extract",
+        "deduplicate",
         "screen",
         "cross_validate",
         "resolve",
@@ -45,7 +46,7 @@ def test_live_progress_emits_completed_langgraph_nodes_and_writes_audit(tmp_path
         "recommend",
         "select_candidates",
     ]
-    assert [event.completed_node_count for event in events] == list(range(1, 11))
+    assert [event.completed_node_count for event in events] == list(range(1, 12))
     extract_event: WorkflowProgressEvent = next(
         event for event in events if event.node == "extract"
     )

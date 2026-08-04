@@ -12,6 +12,7 @@ from app.models.recommendation import RecommendationResult
 from app.models.resolved_news_event import ResolvedNewsEvent
 from app.models.scoring import ScoringResult
 from app.models.screening import ScreeningDecision
+from app.deduplicators.event_deduplicator import EventDeduplicationResult
 from app.models.cross_validation import CrossValidationResult
 from app.workflows.screening.result import WorkflowContext, WorkflowStatistics
 
@@ -26,6 +27,7 @@ class ScreeningState(TypedDict, total=False):
     extraction_errors: Tuple[ExtractionError, ...]
     successful_batches: int
     events: Tuple[NewsEvent, ...]
+    deduplication: EventDeduplicationResult
     decisions: Tuple[ScreeningDecision, ...]
     cross_validation_results: Tuple[CrossValidationResult, ...]
     resolved_events: Tuple[ResolvedNewsEvent, ...]

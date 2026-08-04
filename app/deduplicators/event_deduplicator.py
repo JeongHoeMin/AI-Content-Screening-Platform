@@ -143,18 +143,9 @@ class DeterministicEventComparator:
             EventComparisonObservation(
                 left_event_id=candidate.left.id,
                 right_event_id=candidate.right.id,
-                relation=(
-                    DeduplicationRelation.SAME
-                    if self._normalize(candidate.left.event.title)
-                    == self._normalize(candidate.right.event.title)
-                    else DeduplicationRelation.UNCERTAIN
-                ),
-                confidence=(100 if self._normalize(candidate.left.event.title) == self._normalize(candidate.right.event.title) else 0),
-                reasons=("Deterministic title comparison.",),
+                relation=DeduplicationRelation.UNCERTAIN,
+                confidence=0,
+                reasons=("Mock mode cannot establish same-event identity.",),
             )
             for candidate in candidates
         )
-
-    @staticmethod
-    def _normalize(value: str) -> str:
-        return " ".join(value.casefold().split())

@@ -4,8 +4,9 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Tuple
 
-from app.deduplicators.event_candidates import DeduplicationEvent
+from app.deduplicators.event_candidates import DeduplicationEvent, EventCandidateGenerator
 from app.deduplicators.event_deduplicator import (
+    DeterministicEventComparator,
     EventComparisonObservation,
     EventComparator,
     EventDeduplicator,
@@ -64,3 +65,18 @@ def test_event_deduplicator_merges_transitive_same_event_cluster() -> None:
     assert tuple(item.id for item in result.canonical_events) == ("one",)
     assert result.canonical_by_event_id == {"one": "one", "two": "one", "three": "one"}
     assert len(result.observations) == 2
+
+
+def test_deterministic_mock_comparator_never_claims_same_event() -> None:
+    now = datetime(2026, 8, 4, tzinfo=timezone.utc)
+    candidates = EventCandidateGenerator().generate(
+        (
+            DeduplicationEvent(id="one", event=_event("반기 실적 발표"), published_at=now),
+            DeduplicationEvent(id="two", event=_event("반기 실적 발표"), published_at=now),
+        )
+    )
+
+    observations = asyncio.run(DeterministicEventComparator().compare(candidates))
+
+    assert observations[0].relation is DeduplicationRelation.UNCERTAIN
+    assert observations[0].confidence == 0

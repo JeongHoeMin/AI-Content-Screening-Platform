@@ -7,6 +7,7 @@ from enum import Enum
 from openai import AsyncOpenAI
 
 from app.aggregators import DefaultAggregationStrategy, DefaultEvidenceAggregator
+from app.deduplicators import DeterministicEventComparator, EventDeduplicator
 from app.candidates import DefaultCandidateSelectionEngine, RuleCandidateSelectionPolicy
 from app.analyzers import (
     DEFAULT_IMPACT_RULE_CATALOG,
@@ -127,6 +128,7 @@ def _create_mock_workflow(
         candidate_selection_engine=DefaultCandidateSelectionEngine(
             RuleCandidateSelectionPolicy(DEFAULT_RANKING_POLICY_CONFIG)
         ),
+        event_deduplicator=EventDeduplicator(DeterministicEventComparator()),
     )
 
 

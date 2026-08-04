@@ -11,6 +11,7 @@ from app.candidates.candidate_selection_engine import CandidateSelectionEngine
 from app.analyzers.base import ImpactAnalyzer
 from app.evaluators.article_evaluator import ArticleEvaluator
 from app.extractors.base import NewsEventExtractor
+from app.deduplicators.event_deduplicator import EventDeduplicator
 from app.llms.budget import ProviderRequestBudget
 from app.models.article import Article, ArticleEvaluationResult
 from app.models.candidate_selection import CandidateSelectionResult
@@ -60,6 +61,7 @@ class ScreeningWorkflow:
         scoring_engine: ScoringEngine,
         recommendation_engine: RecommendationEngine,
         candidate_selection_engine: CandidateSelectionEngine,
+        event_deduplicator: Optional[EventDeduplicator] = None,
         request_budget: Optional[ProviderRequestBudget] = None,
     ) -> None:
         self._graph: CompiledStateGraph = _build_screening_graph(
@@ -74,6 +76,7 @@ class ScreeningWorkflow:
             scoring_engine=scoring_engine,
             recommendation_engine=recommendation_engine,
             candidate_selection_engine=candidate_selection_engine,
+            event_deduplicator=event_deduplicator,
         )
         self.request_budget: Optional[ProviderRequestBudget] = request_budget
 
