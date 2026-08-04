@@ -125,13 +125,20 @@ class DartDisclosureProvider(CommunityProvider):
                 timeout_seconds=self._config.timeout_seconds,
             )
             paragraphs: tuple[str, ...] = self._document_extractor.extract(archive)
-        except (DartDocumentExtractionError, ExternalServiceError):
+        except DartDocumentExtractionError as error:
             logger.warning(
                 "dart_document_unavailable",
                 item_index=index,
-                error_kind="document_unavailable",
+                error_kind=error.kind,
             )
-            return raw_post
+            return raw_post.model_copy(update={"document_error_kind": error.kind})
+        except ExternalServiceError:
+            logger.warning(
+                "dart_document_unavailable",
+                item_index=index,
+                error_kind="transport_failure",
+            )
+            return raw_post.model_copy(update={"document_error_kind": "transport_failure"})
         return raw_post.model_copy(update={"document_paragraphs": paragraphs})
 
     def _optional_string(self, value: object) -> Optional[str]:

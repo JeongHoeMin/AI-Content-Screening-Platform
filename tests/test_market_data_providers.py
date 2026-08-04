@@ -219,6 +219,26 @@ def test_dart_provider_rejects_non_success_response() -> None:
         asyncio.run(provider.collect(request))
 
 
+def test_dart_normalizer_exposes_document_failure_as_recoverable_error() -> None:
+    raw_post = RawDartDisclosurePost(
+        raw_id="20260730000001",
+        fetched_at=datetime(2026, 7, 30, tzinfo=timezone.utc),
+        corporation_code="00126380",
+        corporation_name="삼성전자",
+        report_name="반기보고서",
+        receipt_number="20260730000001",
+        receipt_date=datetime(2026, 7, 30, tzinfo=timezone.utc),
+        disclosure_url="https://dart.fss.or.kr/dsaf001/main.do?rcpNo=20260730000001",
+        document_error_kind="not_zip_archive",
+    )
+
+    result = asyncio.run(DartDisclosureNormalizer().normalize(raw_post))
+
+    assert result.post is None
+    assert result.error is not None
+    assert result.error.code == "dart_document_not_zip_archive"
+
+
 def test_market_data_config_requires_env_values(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("NAVER_CLIENT_ID", raising=False)
     monkeypatch.delenv("NAVER_CLIENT_SECRET", raising=False)

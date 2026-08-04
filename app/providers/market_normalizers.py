@@ -55,6 +55,15 @@ class DartDisclosureNormalizer(CommunityNormalizer):
                     source=raw_post.source.value,
                 )
             )
+        if raw_post.document_error_kind is not None:
+            return NormalizeResult(
+                error=SkillError(
+                    code=f"dart_document_{raw_post.document_error_kind}",
+                    stage=SkillStage.NORMALIZE,
+                    message="OpenDART full document is unavailable",
+                    source=raw_post.source.value,
+                )
+            )
         stock_suffix: str = f" (종목코드: {raw_post.stock_code})" if raw_post.stock_code else ""
         fallback_content: str = (
             f"{raw_post.corporation_name}{stock_suffix}의 공시입니다. "
