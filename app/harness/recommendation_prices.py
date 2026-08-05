@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Protocol, Tuple
+from typing import Protocol, Tuple, Union
 
 import structlog
 
 from app.market_prices.contracts import PriceLookupObservation
+from app.models.candidate_selection import CandidateEvaluation
 from app.models.market_price import PriceErrorKind, RecommendationPriceSnapshot
 from app.models.recommendation import RecommendationAction, RecommendationDecision
 from app.models.resolved_news_event import ResolvedCompany, ResolvedTicker
@@ -51,14 +52,24 @@ class RecommendationPriceRecorder:
     async def record_entries(
         self,
         run_id: str,
-        recommendations: Tuple[RecommendationDecision, ...],
+        recommendations: Tuple[Union[RecommendationDecision, CandidateEvaluation], ...],
         observed_at: datetime,
     ) -> None:
         """Capture each resolved direction independently and persist all outcomes."""
         entries: list[RecommendationPriceEntry] = []
-        recommendation_index: int
-        decision: RecommendationDecision
-        for recommendation_index, decision in enumerate(recommendations):
+        ordinal_index: int
+        recommendation: Union[RecommendationDecision, CandidateEvaluation]
+        for ordinal_index, recommendation in enumerate(recommendations):
+            recommendation_index: int = (
+                recommendation.input_index
+                if isinstance(recommendation, CandidateEvaluation)
+                else ordinal_index
+            )
+            decision: RecommendationDecision = (
+                recommendation.decision
+                if isinstance(recommendation, CandidateEvaluation)
+                else recommendation
+            )
             action: RecommendationAction | None = self._price_action(decision.action)
             company: ResolvedCompany = decision.company_score.company
             ticker: ResolvedTicker | None = company.ticker

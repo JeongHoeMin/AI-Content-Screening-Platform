@@ -17,11 +17,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.bootstrap import ExecutionMode
 from app.config import (
     DatabaseConfig,
+    KisConfig,
     load_krx_config,
     load_optional_database_config,
     load_optional_kis_config,
     load_schedule_settings_password,
 )
+from app.config.errors import ConfigurationError
 from app.config.schedule_security import (
     SCHEDULE_SESSION_COOKIE,
     has_valid_schedule_session,
@@ -62,7 +64,7 @@ from app.models.collection_filter_result import (
     CollectionFilterResult,
     CollectionFilterSnapshot,
 )
-from app.models.recommendation import RecommendationDecision
+from app.models.candidate_selection import CandidateEvaluation, CandidateSelectionResult
 from app.models.community import CommunityType
 from app.models.post import Post
 from app.workflows import ScreeningResult, WorkflowProgressEvent
@@ -511,7 +513,7 @@ class DashboardRunManager:
             )
             await self._record_price_entries(
                 run_id,
-                result.recommendation.decisions,
+                self._selected_price_recommendations(result.candidate_selection),
                 datetime.now(timezone.utc),
             )
             state.completed = True
@@ -832,7 +834,7 @@ class DashboardRunManager:
     async def _record_price_entries(
         self,
         run_id: str,
-        recommendations: tuple[RecommendationDecision, ...],
+        recommendations: tuple[CandidateEvaluation, ...],
         observed_at: datetime,
     ) -> None:
         """Record price observations without changing a completed recommendation result."""
@@ -850,6 +852,13 @@ class DashboardRunManager:
                 run_id=run_id,
                 error_type=type(error).__name__,
             )
+
+    @staticmethod
+    def _selected_price_recommendations(
+        candidate_selection: CandidateSelectionResult,
+    ) -> tuple[CandidateEvaluation, ...]:
+        """Return only selected candidates in stable rank order for entry pricing."""
+        return candidate_selection.candidates
 
     @staticmethod
     def _build_filter_snapshot(
@@ -905,8 +914,16 @@ def _create_optional_price_recorder() -> Optional[RecommendationPriceRecorder]:
     if database_config is None:
         return None
     try:
+        try:
+            kis_config: Optional[KisConfig] = load_optional_kis_config()
+        except ConfigurationError:
+            logger.warning(
+                "dashboard_recommendation_price_kis_unavailable",
+                reason="partial_configuration",
+            )
+            kis_config = None
         price_service: MarketPriceService = MarketPriceService(
-            KisRealtimePriceClient(load_optional_kis_config()),
+            KisRealtimePriceClient(kis_config),
             KrxClosingPriceClient(load_krx_config()),
         )
         return RecommendationPriceRecorder(

@@ -8,11 +8,13 @@ from typing import Optional
 import structlog
 
 from app.config import (
+    KisConfig,
     load_krx_config,
     load_database_config,
     load_optional_kis_config,
     load_optional_telegram_config,
 )
+from app.config.errors import ConfigurationError
 from app.config.persistence import DatabaseConfig
 from app.harness.scheduled_recommendations import (
     ScheduledRecommendationOutcome,
@@ -100,8 +102,16 @@ def _create_optional_price_recorder(
 ) -> Optional[RecommendationPriceRecorder]:
     """Keep a schedule worker available when price lookup configuration is absent."""
     try:
+        try:
+            kis_config: Optional[KisConfig] = load_optional_kis_config()
+        except ConfigurationError:
+            logger.warning(
+                "scheduled_recommendation_price_kis_unavailable",
+                reason="partial_configuration",
+            )
+            kis_config = None
         price_service: MarketPriceService = MarketPriceService(
-            KisRealtimePriceClient(load_optional_kis_config()),
+            KisRealtimePriceClient(kis_config),
             KrxClosingPriceClient(load_krx_config()),
         )
         return RecommendationPriceRecorder(
