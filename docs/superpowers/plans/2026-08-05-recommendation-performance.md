@@ -103,7 +103,7 @@
 
 ### 2026-08-05 KST — 문서·운영 조립 검증
 
-- KIS 실시간 가격은 `RUN_LIVE_MARKET_DATA_TESTS=1`일 때만 호출하는 opt-in 계약 테스트로 분리했다. 기본 pytest는 외부 API를 호출하지 않으며 KIS 자격 증명이 없으면 테스트를 skip한다.
+- `RUN_LIVE_MARKET_DATA_TESTS=1` opt-in은 KIS를 실제 호출하는 계약 테스트에만 적용했다. 기본 pytest는 외부 API를 호출하지 않으며 KIS 자격 증명이 없으면 해당 테스트를 skip한다. production dashboard와 scheduled worker는 KIS 자격 증명이 모두 설정되면 KIS 실시간 가격을 호출하고, 미설정·실패 시 KRX fallback을 사용한다.
 - Compose의 dashboard와 `schedule-worker`에 KIS 설정 이름만 전달하고, README·운영 문서·아키텍처·Domain·ADR에 KIS 우선/7일 KRX 종가 fallback, KST 표기, `가격 미확인`, 사후 단순 가격 비교 한계와 Harness-owned persistence 경계를 기록했다.
 - 환경 파일의 KIS 변경은 `--force-recreate dashboard schedule-worker`로 반영한다. key·secret·token·authorization header·raw payload는 문서 예시, 로그, DB, SSE, Telegram에 포함하지 않는다.
 - 검증은 기본 live-test skip을 포함한 전체 pytest, 임시 pycache compileall, diff check, Compose config 및 PostgreSQL → migration → worker smoke로 수행했다. smoke 종료는 `docker-compose down`만 사용해 named volume을 보존했다.

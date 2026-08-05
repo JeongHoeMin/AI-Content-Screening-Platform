@@ -616,5 +616,7 @@ adapter·repository와 연결한다. entry snapshot은 immutable이며 latest는
 가격 관측 실패는 sibling recommendation과 원래 실행의 부분 성공을 보존한다. 대시보드와 Telegram은 KST로
 안전한 provider/basis/가격만 투영하고 `가격 미확인`에는 수익률을 표시하지 않는다. BUY/SELL 수익률은 사후
 단순 가격 비교이므로 수수료·세금·배당·실제 체결 가격을 반영하지 않는다. KIS key/secret, access token,
-authorization header, raw HTTP payload는 설정 오류·로그·DB·SSE·Telegram에 남기지 않으며, 실제 KIS 호출은
-`RUN_LIVE_MARKET_DATA_TESTS=1`인 opt-in 계약 테스트에서만 수행한다.
+authorization header, raw HTTP payload는 설정 오류·로그·DB·SSE·Telegram에 남기지 않는다. production
+dashboard와 scheduled worker는 KIS 자격 증명이 모두 설정되면 KIS를 호출하고, 그렇지 않거나 KIS 관측을
+사용할 수 없으면 KRX fallback을 사용한다. `RUN_LIVE_MARKET_DATA_TESTS=1` opt-in은 기본 CI에서 외부 호출을
+막기 위한 live 계약 테스트에만 적용한다.
