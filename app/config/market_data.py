@@ -38,6 +38,18 @@ class KrxConfig(BaseModel):
     timeout_seconds: float = Field(default=15.0, gt=0.0, le=60.0)
 
 
+class KisConfig(BaseModel):
+    """Validated optional KIS credentials for real-time market-price lookups."""
+
+    model_config = ConfigDict(frozen=True)
+
+    app_key: SecretStr
+    app_secret: SecretStr
+    account_product_code: str = Field(default="01", pattern=r"^\d{2}$")
+    base_url: str = "https://openapi.koreainvestment.com:9443"
+    timeout_seconds: float = Field(default=10.0, gt=0.0, le=60.0)
+
+
 def load_naver_news_config() -> NaverNewsConfig:
     """Load Naver credentials without exposing their values in errors."""
     client_id: Optional[str] = os.getenv("NAVER_CLIENT_ID")
@@ -65,3 +77,23 @@ def load_krx_config() -> KrxConfig:
         return KrxConfig(api_key=api_key, directory_date=raw_date or date.today())
     except ValueError as error:
         raise ConfigurationError("KRX_DIRECTORY_DATE must use YYYY-MM-DD") from error
+
+
+def load_optional_kis_config() -> KisConfig | None:
+    """Load complete KIS credentials, or return None when KIS is not configured."""
+    app_key: Optional[str] = os.getenv("KIS_APP_KEY")
+    app_secret: Optional[str] = os.getenv("KIS_APP_SECRET")
+    if not app_key and not app_secret:
+        return None
+    if not app_key or not app_secret:
+        raise ConfigurationError("KIS_APP_KEY and KIS_APP_SECRET must both be set")
+    return KisConfig(
+        app_key=app_key,
+        app_secret=app_secret,
+        account_product_code=os.getenv("KIS_ACCOUNT_PRODUCT_CODE", "01"),
+        base_url=os.getenv(
+            "KIS_BASE_URL",
+            "https://openapi.koreainvestment.com:9443",
+        ),
+        timeout_seconds=os.getenv("KIS_TIMEOUT_SECONDS", "10"),
+    )

@@ -118,6 +118,14 @@ from app.models.recommendation import (
     RecommendationResult,
     RecommendationThresholdSnapshot,
 )
+from app.models.market_price import (
+    PriceBasis,
+    PriceErrorKind,
+    PriceProvider,
+    PriceSnapshotStatus,
+    RecommendationPerformance,
+    RecommendationPriceSnapshot,
+)
 from app.models.screen_posts import (
     PostEvaluationResult,
     ScreeningResult,
@@ -267,6 +275,12 @@ __all__ = [
     "RecommendationRankEntry",
     "RecommendationResult",
     "RecommendationThresholdSnapshot",
+    "PriceBasis",
+    "PriceErrorKind",
+    "PriceProvider",
+    "PriceSnapshotStatus",
+    "RecommendationPerformance",
+    "RecommendationPriceSnapshot",
     "RelevanceScorecard",
     "RankingPolicyConfig",
     "ScreeningResult",

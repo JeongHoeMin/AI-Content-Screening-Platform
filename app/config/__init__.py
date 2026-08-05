@@ -18,11 +18,13 @@ from app.config.trusted_sources import (
 )
 from app.config.market_data import (
     DartConfig,
+    KisConfig,
     KrxConfig,
     NaverNewsConfig,
     load_dart_config,
     load_krx_config,
     load_naver_news_config,
+    load_optional_kis_config,
 )
 
 __all__ = [
@@ -30,6 +32,7 @@ __all__ = [
     "CompanyDirectoryMode",
     "ConfigurationError",
     "DartConfig",
+    "KisConfig",
     "NaverNewsConfig",
     "KrxConfig",
     "OpenAIConfig",
@@ -40,6 +43,7 @@ __all__ = [
     "load_dart_config",
     "load_krx_config",
     "load_naver_news_config",
+    "load_optional_kis_config",
     "load_openai_config",
     "load_database_config",
     "load_optional_database_config",
