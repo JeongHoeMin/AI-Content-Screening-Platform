@@ -53,3 +53,12 @@ def test_scheduled_recommendation_migration_follows_execution_audit() -> None:
     assert 'down_revision = "20260805_02"' in migration
     assert "scheduled_recommendation_jobs" in migration
     assert "scheduled_recommendation_executions" in migration
+
+
+def test_recommendation_price_snapshot_migration_follows_scheduled_recommendations() -> None:
+    migration: str = Path(
+        "alembic/versions/20260805_04_recommendation_price_snapshots.py"
+    ).read_text(encoding="utf-8")
+
+    assert 'down_revision = "20260805_03"' in migration
+    assert "recommendation_price_snapshots" in migration

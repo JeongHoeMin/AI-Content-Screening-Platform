@@ -8,6 +8,7 @@ from app.persistence.harness_adapter import (
     SqlAlchemyDocumentPersistence,
     SqlAlchemyWorkflowExecutionAuditPersistence,
     SqlAlchemyScheduledRecommendationPersistence,
+    SqlAlchemyRecommendationPricePersistence,
 )
 
 
@@ -43,3 +44,10 @@ def create_scheduled_recommendation_persistence(
 ) -> SqlAlchemyScheduledRecommendationPersistence:
     """Assemble worker-owned schedule configuration persistence."""
     return SqlAlchemyScheduledRecommendationPersistence(create_session_factory(config))
+
+
+def create_recommendation_price_persistence(
+    config: DatabaseConfig,
+) -> SqlAlchemyRecommendationPricePersistence:
+    """Assemble Harness-owned immutable recommendation price persistence."""
+    return SqlAlchemyRecommendationPricePersistence(create_session_factory(config))

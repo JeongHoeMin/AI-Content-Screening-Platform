@@ -15,7 +15,13 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.bootstrap import ExecutionMode
-from app.config import load_optional_database_config, load_schedule_settings_password
+from app.config import (
+    DatabaseConfig,
+    load_krx_config,
+    load_optional_database_config,
+    load_optional_kis_config,
+    load_schedule_settings_password,
+)
 from app.config.schedule_security import (
     SCHEDULE_SESSION_COOKIE,
     has_valid_schedule_session,
@@ -28,9 +34,11 @@ from app.persistence import (
     ScheduledRecommendationPersistence,
     WorkflowExecutionAuditPersistence,
     create_collection_filter_persistence,
+    create_recommendation_price_persistence,
     create_scheduled_recommendation_persistence,
     create_workflow_execution_audit_persistence,
 )
+from app.harness.recommendation_prices import RecommendationPriceRecorder
 from app.persistence.schedule_repository import ScheduleVersionConflictError
 from app.harness import Harness
 from app.harness.execution_audit import ScreeningExecutionHarness
@@ -41,6 +49,11 @@ from app.market_data import (
     create_market_screening_workflow,
     posts_to_articles,
 )
+from app.market_prices import (
+    KisRealtimePriceClient,
+    KrxClosingPriceClient,
+    MarketPriceService,
+)
 from app.models.collect_posts import CollectPostsRequest
 from app.models.article import Article
 from app.models.collection_filter import CollectionFilter, FilterRejectionReason, InvestmentTheme, NewsTopic
@@ -49,6 +62,7 @@ from app.models.collection_filter_result import (
     CollectionFilterResult,
     CollectionFilterSnapshot,
 )
+from app.models.recommendation import RecommendationDecision
 from app.models.community import CommunityType
 from app.models.post import Post
 from app.workflows import ScreeningResult, WorkflowProgressEvent
@@ -259,6 +273,7 @@ class DashboardRunManager:
         filter_persistence: Optional[CollectionFilterPersistence] = None,
         execution_audit_persistence: Optional[WorkflowExecutionAuditPersistence] = None,
         schedule_persistence: Optional[ScheduledRecommendationPersistence] = None,
+        price_recorder: Optional[RecommendationPriceRecorder] = None,
     ) -> None:
         self._runs: Dict[str, _RunState] = {}
         self._filter_persistence: Optional[CollectionFilterPersistence] = filter_persistence
@@ -268,6 +283,7 @@ class DashboardRunManager:
         self._schedule_persistence: Optional[ScheduledRecommendationPersistence] = (
             schedule_persistence
         )
+        self._price_recorder: Optional[RecommendationPriceRecorder] = price_recorder
 
     _WORKFLOW_NODES: tuple[str, ...] = (
         "evaluate",
@@ -492,6 +508,11 @@ class DashboardRunManager:
                 result,
                 state.analyses,
                 filter_result,
+            )
+            await self._record_price_entries(
+                run_id,
+                result.recommendation.decisions,
+                datetime.now(timezone.utc),
             )
             state.completed = True
             await self._emit(
@@ -808,6 +829,28 @@ class DashboardRunManager:
         )
         await self._filter_persistence.persist(snapshot)
 
+    async def _record_price_entries(
+        self,
+        run_id: str,
+        recommendations: tuple[RecommendationDecision, ...],
+        observed_at: datetime,
+    ) -> None:
+        """Record price observations without changing a completed recommendation result."""
+        if self._price_recorder is None:
+            return
+        try:
+            await self._price_recorder.record_entries(
+                run_id,
+                recommendations,
+                observed_at,
+            )
+        except Exception as error:
+            logger.warning(
+                "dashboard_recommendation_price_recording_failed",
+                run_id=run_id,
+                error_type=type(error).__name__,
+            )
+
     @staticmethod
     def _build_filter_snapshot(
         run_id: str,
@@ -834,7 +877,7 @@ class DashboardRunManager:
 
 def _create_optional_filter_persistence() -> Optional[CollectionFilterPersistence]:
     """Configure dashboard filter persistence only when PostgreSQL is configured."""
-    database_config = load_optional_database_config()
+    database_config: Optional[DatabaseConfig] = load_optional_database_config()
     if database_config is None:
         return None
     return create_collection_filter_persistence(database_config)
@@ -856,12 +899,35 @@ def _create_optional_schedule_persistence() -> Optional[ScheduledRecommendationP
     return create_scheduled_recommendation_persistence(database_config)
 
 
+def _create_optional_price_recorder() -> Optional[RecommendationPriceRecorder]:
+    """Assemble entry-price recording only when every safe dependency is configured."""
+    database_config: Optional[DatabaseConfig] = load_optional_database_config()
+    if database_config is None:
+        return None
+    try:
+        price_service: MarketPriceService = MarketPriceService(
+            KisRealtimePriceClient(load_optional_kis_config()),
+            KrxClosingPriceClient(load_krx_config()),
+        )
+        return RecommendationPriceRecorder(
+            price_service,
+            create_recommendation_price_persistence(database_config),
+        )
+    except Exception as error:
+        logger.warning(
+            "dashboard_recommendation_price_recorder_unavailable",
+            error_type=type(error).__name__,
+        )
+        return None
+
+
 def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
     """Create the dashboard API and its static single-page client."""
     run_manager: DashboardRunManager = manager or DashboardRunManager(
         filter_persistence=_create_optional_filter_persistence(),
         execution_audit_persistence=_create_optional_execution_audit_persistence(),
         schedule_persistence=_create_optional_schedule_persistence(),
+        price_recorder=_create_optional_price_recorder(),
     )
     app = FastAPI(title="AI Content Screening Dashboard")
 

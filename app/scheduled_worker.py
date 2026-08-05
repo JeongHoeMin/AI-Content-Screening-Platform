@@ -8,9 +8,12 @@ from typing import Optional
 import structlog
 
 from app.config import (
+    load_krx_config,
     load_database_config,
+    load_optional_kis_config,
     load_optional_telegram_config,
 )
+from app.config.persistence import DatabaseConfig
 from app.harness.scheduled_recommendations import (
     ScheduledRecommendationOutcome,
     ScheduledRecommendationRunner,
@@ -21,8 +24,11 @@ from app.models.scheduled_recommendation import ScheduledRecommendationJob
 from app.persistence import (
     create_collection_filter_persistence,
     create_scheduled_recommendation_persistence,
+    create_recommendation_price_persistence,
     create_workflow_execution_audit_persistence,
 )
+from app.harness.recommendation_prices import RecommendationPriceRecorder
+from app.market_prices import KisRealtimePriceClient, KrxClosingPriceClient, MarketPriceService
 from app.web.app import DashboardRunManager, RecommendationRunRequest
 
 logger = structlog.get_logger(__name__)
@@ -60,12 +66,16 @@ async def run_forever() -> None:
     """Poll durable schedules; all displayed schedule times are Asia/Seoul based."""
     database_config = load_database_config()
     persistence = create_scheduled_recommendation_persistence(database_config)
+    price_recorder: Optional[RecommendationPriceRecorder] = _create_optional_price_recorder(
+        database_config
+    )
     manager = DashboardRunManager(
         filter_persistence=create_collection_filter_persistence(database_config),
         execution_audit_persistence=create_workflow_execution_audit_persistence(
             database_config
         ),
         schedule_persistence=persistence,
+        price_recorder=price_recorder,
     )
     telegram_config = load_optional_telegram_config()
     reporter: Optional[TelegramReporter] = (
@@ -83,6 +93,27 @@ async def run_forever() -> None:
         if completed:
             logger.info("scheduled_recommendation_runs_completed", count=completed)
         await asyncio.sleep(30)
+
+
+def _create_optional_price_recorder(
+    database_config: DatabaseConfig,
+) -> Optional[RecommendationPriceRecorder]:
+    """Keep a schedule worker available when price lookup configuration is absent."""
+    try:
+        price_service: MarketPriceService = MarketPriceService(
+            KisRealtimePriceClient(load_optional_kis_config()),
+            KrxClosingPriceClient(load_krx_config()),
+        )
+        return RecommendationPriceRecorder(
+            price_service,
+            create_recommendation_price_persistence(database_config),
+        )
+    except Exception as error:
+        logger.warning(
+            "scheduled_recommendation_price_recorder_unavailable",
+            error_type=type(error).__name__,
+        )
+        return None
 
 
 def main() -> None:
