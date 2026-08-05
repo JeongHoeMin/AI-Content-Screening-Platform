@@ -98,3 +98,12 @@
 - **설계 coverage:** Task 2가 실시간/종가 fallback, Task 3이 immutable entry storage, Task 4가 BUY/SELL 성과와 UI/Telegram, Task 5가 KST·보안·문서·Docker 검증을 다룬다.
 - **Placeholder scan:** 남겨둔 미결 항목이나 모호한 오류 지시를 두지 않았다.
 - **Type consistency:** RecommendationPriceSnapshot은 adapter, recorder, repository, performance Policy가 공통으로 사용하며 `(run_id, recommendation_index, snapshot_kind)`가 snapshot identity다.
+
+## 구현 기록
+
+### 2026-08-05 KST — 문서·운영 조립 검증
+
+- KIS 실시간 가격은 `RUN_LIVE_MARKET_DATA_TESTS=1`일 때만 호출하는 opt-in 계약 테스트로 분리했다. 기본 pytest는 외부 API를 호출하지 않으며 KIS 자격 증명이 없으면 테스트를 skip한다.
+- Compose의 dashboard와 `schedule-worker`에 KIS 설정 이름만 전달하고, README·운영 문서·아키텍처·Domain·ADR에 KIS 우선/7일 KRX 종가 fallback, KST 표기, `가격 미확인`, 사후 단순 가격 비교 한계와 Harness-owned persistence 경계를 기록했다.
+- 환경 파일의 KIS 변경은 `--force-recreate dashboard schedule-worker`로 반영한다. key·secret·token·authorization header·raw payload는 문서 예시, 로그, DB, SSE, Telegram에 포함하지 않는다.
+- 검증은 기본 live-test skip을 포함한 전체 pytest, 임시 pycache compileall, diff check, Compose config 및 PostgreSQL → migration → worker smoke로 수행했다. smoke 종료는 `docker-compose down`만 사용해 named volume을 보존했다.

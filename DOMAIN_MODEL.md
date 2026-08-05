@@ -126,6 +126,22 @@ decision tuple만 저장한다. 기존 `companies` access는 별도 legacy view�
 `RecommendationDecision` collection을 반환하는 read-only compatibility alias다.
 CLI는 이 내부 Decision을 기존 `companies[].score`/`companies[].recommendation` schema로만 투영한다.
 
+## 추천 가격과 사후 성과 계약
+
+`RecommendationPriceSnapshot`은 resolved 6자리 KRX ticker의 BUY 또는 SELL recommendation에 연결되는 immutable
+가격 관측이다. `AVAILABLE`은 양수 KRW 가격, `REALTIME` 또는 `CLOSE` basis, KIS 또는 KRX provider, UTC
+관측 시각과 거래일을 모두 가져야 한다. `UNAVAILABLE`은 가격·basis·provider·거래일을 비워 두고 제한된
+`PriceErrorKind`만 보관한다. 따라서 가격 실패를 0원이나 추정 가격으로 바꾸지 않는다.
+
+저장 identity는 `(run_id, recommendation_index, snapshot_kind)`이다. entry는 추천 당시의 관측을 보존하는
+불변 snapshot이고, latest는 별도 `snapshot_kind`로 갱신할 수 있다. price adapter는 외부 가격을 관측만 하며,
+추천 결과와 snapshot의 연결·저장은 Harness가 담당한다.
+
+`RecommendationPerformance`는 entry와 latest가 모두 AVAILABLE이고 ticker·통화가 같으며 양수 가격일 때만
+수익률을 가진다. BUY는 `(latest - entry) / entry * 100`, SELL은 `(entry - latest) / entry * 100`의
+방향별 사후 단순 가격 비교다. 가격을 확인할 수 없으면 수익률도 없다. 이 값은 수수료·세금·배당, 실제 체결과
+보유 기간의 모든 비용·권리를 반영하지 않으며 투자 조언이나 실현 수익이 아니다.
+
 ## Candidate Selection 계약
 
 `RecommendationRankCatalog`은 모든 `RecommendationAction`을 정확히 한 번씩 등록하고, action 중복·누락,

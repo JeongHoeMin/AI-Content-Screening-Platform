@@ -89,6 +89,16 @@ TELEGRAM_BOT_TOKEN=...
 TELEGRAM_CHAT_ID=...
 ```
 
+추천 가격의 실시간 조회는 선택 사항이다. 비밀값 대신 아래 **설정 이름만** 보안 환경 파일에 추가한다.
+두 KIS 자격 증명은 함께 설정해야 하며, 둘 다 없으면 KRX 종가 fallback만 사용한다.
+
+- `KIS_APP_KEY`, `KIS_APP_SECRET`
+- `KIS_ACCOUNT_PRODUCT_CODE` (기본값 `01`)
+- `KIS_BASE_URL` (기본값 `https://openapi.koreainvestment.com:9443`)
+- `KIS_TIMEOUT_SECONDS` (기본값 `10`)
+
+키·secret·authorization header·외부 응답 원문은 저장소, 문서 예시, 로그에 넣지 않는다.
+
 ```bash
 docker compose up --build -d
 
@@ -97,6 +107,12 @@ docker compose --env-file /secure/screening.env up --build -d
 ```
 
 `http://<server>:8000`에서 **"오늘의 뉴스를 기준으로 추천받기"** 를 누르면 다음을 확인할 수 있습니다.
+
+환경 파일의 KIS 설정을 추가하거나 변경했다면 dashboard와 worker를 재생성해 적용한다.
+
+```bash
+docker compose --env-file /secure/screening.env up --build -d --force-recreate dashboard schedule-worker
+```
 
 - 운영자가 등록한 기업 IR RSS 전문 수집 (`IR_RSS_FEEDS`에는 승인한 기업·기관의 RSS/Atom URL만 등록)
 - KRX OpenAPI 종목 snapshot (실행마다 `KRX_API_KEY`로 API를 호출해 생성, CSV 마운트/캐시 없음)
@@ -140,6 +156,8 @@ screening --collect --mode openai --period-hours 24 --limit 25
 | `IR_RSS_FEEDS` | 신뢰할 기업 IR RSS 전문 설정 JSON (`[{"id","url","company_name"}, ...]`) |
 | `DART_API_KEY` | OpenDART 보조 진단 수집 (선택) |
 | `KRX_API_KEY` | KRX OpenAPI 종목 snapshot 조회 (`COMPANY_DIRECTORY_MODE=krx_api`일 때 필수) |
+| `KIS_APP_KEY` / `KIS_APP_SECRET` | 선택적 KIS 실시간 가격 조회 (반드시 함께 설정) |
+| `KIS_ACCOUNT_PRODUCT_CODE` / `KIS_BASE_URL` / `KIS_TIMEOUT_SECONDS` | KIS 가격 조회 설정 (각각 기본 `01`, 운영 URL, `10`) |
 | `OPENAI_API_KEY` | OpenAI 기반 이벤트 추출/스크리닝/교차검증 (`--mode openai`) |
 | `POSTGRES_PASSWORD` 등 | Docker Compose PostgreSQL 접속 정보 |
 | `DATABASE_URL` | `postgresql+asyncpg://` 형식의 비동기 접속 문자열 |
@@ -193,5 +211,7 @@ uv run python -m compileall app tests
 ## 프로젝트 상태
 
 완료된 영역: Provider(IR RSS 중심) · Normalizer · Collection Filter(투자 테마/뉴스 주제) · Event Extraction · AI Screening(scorecard 포함) · Cross Validation · Resolve · Company Resolver · Impact Analyzer · Stock Scoring · Recommendation · Candidate Selection · 실행 감사/재시도 분석 · PostgreSQL 기반 정기 스케줄러 · 텔레그램 알림 · 웹 대시보드(SSE 워크플로우 그래프).
+
+추천 시점과 사후 조회 가격은 화면에서 KST로 표시한다. KIS 실시간 가격을 우선 사용하고 조회할 수 없으면 KRX의 최근 거래일 종가를 사용한다. 둘 다 확인할 수 없으면 `가격 미확인`으로 표시하며 수익률을 추정하지 않는다. 표시는 수수료·세금·배당을 반영하지 않는 사후 단순 가격 비교이며 투자 조언이나 실제 체결 성과가 아니다.
 
 현재 목표는 아니지만 명시적으로 배제하는 항목: 실시간 초단위 자동매매, 가격 예측 모델, 기술적 분석 기반 투자 전략, LLM이 직접 투자 결정을 내리는 시스템, 단일 기사만으로 종목을 추천하는 시스템.

@@ -20,3 +20,15 @@ def test_compose_defines_healthy_postgres_with_persistent_volume() -> None:
     assert "SCHEDULE_SETTINGS_PASSWORD:" in compose
     assert "db-migrate:" in compose
     assert "service_completed_successfully" in compose
+
+
+def test_compose_forwards_optional_kis_configuration_to_runtime_services() -> None:
+    compose: str = Path("docker-compose.yml").read_text(encoding="utf-8")
+
+    assert compose.count("KIS_APP_KEY: ${KIS_APP_KEY:-}") == 2
+    assert compose.count("KIS_APP_SECRET: ${KIS_APP_SECRET:-}") == 2
+    assert compose.count("KIS_ACCOUNT_PRODUCT_CODE: ${KIS_ACCOUNT_PRODUCT_CODE:-01}") == 2
+    assert compose.count(
+        "KIS_BASE_URL: ${KIS_BASE_URL:-https://openapi.koreainvestment.com:9443}"
+    ) == 2
+    assert compose.count("KIS_TIMEOUT_SECONDS: ${KIS_TIMEOUT_SECONDS:-10}") == 2

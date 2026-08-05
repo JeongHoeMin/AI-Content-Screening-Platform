@@ -56,3 +56,20 @@ git diff --check
 snapshot은 실행 조건과 집계만 저장하는지 검증하며 기사 원문·prompt가 저장 대상에 섞이지 않는지 확인한다.
 
 정기 실행 테스트는 KST cron의 다음 UTC slot, 일/요일 cron 의미, schedule DB migration, due lease, Telegram 실패 격리, 설정 비밀번호·HttpOnly session 인증을 확인한다. Docker smoke에서는 migration 적용 후 `schedule-worker`가 PostgreSQL healthcheck 이후 기동하는지 확인한다.
+
+## 추천 가격 테스트
+
+기본 pytest는 외부 시세 API를 호출하지 않는다. KIS/KRX adapter의 fallback, 휴장일 lookback, 제한된 오류,
+entry/latest snapshot identity, BUY/SELL 사후 비교, `가격 미확인`, UTC 저장과 KST 투영은 fake HTTP client로
+검증한다. Compose 테스트는 KIS 설정 **이름**이 dashboard와 `schedule-worker`에 전달되는지만 확인하며 값을
+기록하거나 출력하지 않는다.
+
+실제 KIS 계약 확인은 로컬에서만 아래처럼 명시적으로 opt-in한다. `KIS_APP_KEY`와 `KIS_APP_SECRET`이 둘 다
+없으면 skip되며, 기본 CI에는 이 환경 변수를 설정하지 않는다.
+
+```bash
+RUN_LIVE_MARKET_DATA_TESTS=1 uv run pytest tests/test_market_price_live_contract.py -q
+```
+
+이 live test는 삼성전자(`005930`)의 KIS 가격이 `AVAILABLE`이고 양수인지만 검사한다. credential, token,
+authorization header, raw payload를 assertion·로그·출력에 포함하지 않는다.
