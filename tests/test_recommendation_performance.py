@@ -20,11 +20,13 @@ def _snapshot(
     ticker: str = "005930",
     price: Decimal | None = Decimal("100"),
     currency: str = "KRW",
+    run_id: str = "run-1",
+    recommendation_index: int = 0,
 ) -> RecommendationPriceSnapshot:
     if price is None:
         return RecommendationPriceSnapshot(
-            run_id="run-1",
-            recommendation_index=0,
+            run_id=run_id,
+            recommendation_index=recommendation_index,
             ticker=ticker,
             action=action,
             status=PriceSnapshotStatus.UNAVAILABLE,
@@ -32,8 +34,8 @@ def _snapshot(
             error_kind=PriceErrorKind.NOT_FOUND,
         )
     return RecommendationPriceSnapshot(
-        run_id="run-1",
-        recommendation_index=0,
+        run_id=run_id,
+        recommendation_index=recommendation_index,
         ticker=ticker,
         action=action,
         status=PriceSnapshotStatus.AVAILABLE,
@@ -154,3 +156,64 @@ def test_service_upserts_latest_without_replacing_the_entry_snapshot() -> None:
     assert persistence.latest[0].snapshot_kind is SnapshotKind.LATEST
     assert persistence.latest[0].snapshot.price == Decimal("110")
     assert response.items[0].return_percent == 10.0
+
+
+def test_service_scopes_two_same_ticker_runs_and_summary_to_requested_run() -> None:
+    from app.harness.recommendation_prices import RecommendationPerformanceService
+    from app.market_prices.contracts import PriceLookupObservation
+    from app.persistence.price_repository import RecommendationPriceEntry, SnapshotKind
+
+    old_entry = RecommendationPriceEntry(
+        snapshot=_snapshot(run_id="run-old", price=Decimal("100")),
+        snapshot_kind=SnapshotKind.ENTRY,
+        company_id="company-samsung",
+        company_name="삼성전자",
+    )
+    current_entry = RecommendationPriceEntry(
+        snapshot=_snapshot(run_id="run-current", price=Decimal("200")),
+        snapshot_kind=SnapshotKind.ENTRY,
+        company_id="company-samsung",
+        company_name="삼성전자",
+    )
+
+    class _Capture:
+        def __init__(self) -> None:
+            self.tickers: list[str] = []
+
+        async def capture(
+            self,
+            ticker: str,
+            observed_at: datetime,
+        ) -> PriceLookupObservation:
+            self.tickers.append(ticker)
+            return PriceLookupObservation(
+                status=PriceSnapshotStatus.AVAILABLE,
+                price=Decimal("110"),
+                basis=PriceBasis.REALTIME,
+                provider=PriceProvider.KIS,
+                observed_at=observed_at,
+                trading_date=observed_at.date(),
+            )
+
+    class _Persistence:
+        async def list_snapshots(self) -> tuple[RecommendationPriceEntry, ...]:
+            return (old_entry, current_entry)
+
+        async def upsert_latest(
+            self,
+            snapshots: tuple[RecommendationPriceEntry, ...],
+        ) -> None:
+            return None
+
+    capture = _Capture()
+    response = asyncio.run(
+        RecommendationPerformanceService(capture, _Persistence()).refresh_and_query(  # type: ignore[arg-type]
+            "run-current"
+        )
+    )
+
+    assert capture.tickers == ["005930"]
+    assert tuple(item.run_id for item in response.items) == ("run-current",)
+    assert response.items[0].return_percent == -45.0
+    assert response.summary.confirmed_count == 1
+    assert response.summary.mean_return_percent == -45.0

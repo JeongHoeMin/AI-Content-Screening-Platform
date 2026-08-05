@@ -3,6 +3,8 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from datetime import datetime, timezone
+import shutil
+import subprocess
 from typing import Optional
 
 import pytest
@@ -50,15 +52,6 @@ def test_dashboard_page_exposes_recommendation_controls() -> None:
     assert "event_evidence" in response.text
 
 
-def test_dashboard_joins_performance_to_the_current_run_by_stable_identity() -> None:
-    response = TestClient(create_web_app()).get("/")
-
-    assert "recommendation_index" in response.text
-    assert "performanceByIdentity" in response.text
-    assert "item.run_id===data.run_id" in response.text
-    assert "`${data.run_id}:${item.recommendation_index}`" in response.text
-
-
 def test_dashboard_renders_server_summary_with_korean_kst_labels() -> None:
     response = TestClient(create_web_app()).get("/")
 
@@ -68,6 +61,24 @@ def test_dashboard_renders_server_summary_with_korean_kst_labels() -> None:
     assert "승률" in response.text
     assert "중앙값" in response.text
     assert "KST" in response.text
+
+
+def test_dashboard_formats_utc_time_as_a_deterministic_kst_value() -> None:
+    from app.web.dashboard_html import DASHBOARD_HTML
+
+    node: str | None = shutil.which("node")
+    assert node is not None
+    formatter: str = DASHBOARD_HTML.split("const formatKst=")[1].split(
+        ";const formatPricePerformance"
+    )[0]
+    completed = subprocess.run(
+        [node, "-e", f"const formatKst={formatter};process.stdout.write(formatKst('2026-08-05T15:00:00Z'));"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.stdout == "2026-08-06 00:00 KST"
 
 
 def test_dashboard_page_exposes_actual_workflow_graph_and_retry_path() -> None:

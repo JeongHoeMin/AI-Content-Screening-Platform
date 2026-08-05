@@ -413,11 +413,14 @@ class DashboardRunManager:
             raise HTTPException(status_code=500, detail="Missing recommendation result")
         return state.result
 
-    async def recommendation_performance(self) -> RecommendationPerformanceResponse:
+    async def recommendation_performance(
+        self,
+        run_id: Optional[str] = None,
+    ) -> RecommendationPerformanceResponse:
         """Refresh and project price performance only through the Harness service."""
         if self._performance_service is None:
             return RecommendationPerformanceResponse(evaluated_at=datetime.now(timezone.utc))
-        return await self._performance_service.refresh_and_query()
+        return await self._performance_service.refresh_and_query(run_id)
 
     async def _execute(
         self,
@@ -1003,8 +1006,10 @@ def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
         return {"status": "ok"}
 
     @app.get("/api/recommendations/performance")
-    async def get_recommendation_performance() -> RecommendationPerformanceResponse:
-        return await run_manager.recommendation_performance()
+    async def get_recommendation_performance(
+        run_id: Optional[str] = None,
+    ) -> RecommendationPerformanceResponse:
+        return await run_manager.recommendation_performance(run_id)
 
     @app.get("/settings", response_class=HTMLResponse)
     async def schedule_settings_page() -> str:

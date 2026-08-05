@@ -156,12 +156,18 @@ class RecommendationPerformanceService:
         self._persistence: RecommendationPerformancePersistence = persistence
         self._policy: RecommendationPerformancePolicy = policy or RecommendationPerformancePolicy()
 
-    async def refresh_and_query(self) -> RecommendationPerformanceResponse:
-        """Refresh every entry independently, preserving unavailable siblings and entries."""
+    async def refresh_and_query(
+        self,
+        run_id: str | None = None,
+    ) -> RecommendationPerformanceResponse:
+        """Refresh and summarize either all entries or only one requested dashboard run."""
         evaluated_at: datetime = datetime.now(timezone.utc)
         stored: Tuple[RecommendationPriceEntry, ...] = await self._persistence.list_snapshots()
         entries: Tuple[RecommendationPriceEntry, ...] = tuple(
-            item for item in stored if item.snapshot_kind is SnapshotKind.ENTRY
+            item
+            for item in stored
+            if item.snapshot_kind is SnapshotKind.ENTRY
+            and (run_id is None or item.snapshot.run_id == run_id)
         )
         latest_entries: list[RecommendationPriceEntry] = []
         entry: RecommendationPriceEntry

@@ -9,18 +9,17 @@ from app.web.app import DashboardRunManager, create_web_app
 
 
 class _PerformanceService(Protocol):
-    async def refresh_and_query(self) -> object:
+    async def refresh_and_query(self, run_id: str | None = None) -> object:
         """Return the safe response projected by the dashboard API."""
 
 
 class _UnavailablePerformanceService:
-    async def refresh_and_query(self) -> object:
+    async def refresh_and_query(self, run_id: str | None = None) -> object:
         from app.market_prices.performance import (
             RecommendationPerformanceItem,
             RecommendationPerformanceResponse,
             RecommendationPerformanceSummary,
         )
-
         return RecommendationPerformanceResponse(
             items=(
                 RecommendationPerformanceItem(
@@ -43,6 +42,15 @@ class _UnavailablePerformanceService:
         )
 
 
+class _RunAwarePerformanceService:
+    def __init__(self) -> None:
+        self.run_id: str | None = None
+
+    async def refresh_and_query(self, run_id: str | None = None) -> object:
+        self.run_id = run_id
+        return await _UnavailablePerformanceService().refresh_and_query(run_id)
+
+
 def test_performance_api_returns_null_return_for_an_unavailable_item() -> None:
     manager = DashboardRunManager(
         performance_service=_UnavailablePerformanceService(),  # type: ignore[arg-type]
@@ -58,3 +66,15 @@ def test_performance_api_returns_null_return_for_an_unavailable_item() -> None:
     assert item["return_percent"] is None
     assert "secret" not in response.text.lower()
     assert "payload" not in response.text.lower()
+
+
+def test_performance_api_passes_run_id_to_the_server_side_summary_query() -> None:
+    service = _RunAwarePerformanceService()
+    client = TestClient(
+        create_web_app(DashboardRunManager(performance_service=service))  # type: ignore[arg-type]
+    )
+
+    response = client.get("/api/recommendations/performance?run_id=run-current")
+
+    assert response.status_code == 200
+    assert service.run_id == "run-current"
