@@ -4,6 +4,12 @@ from app.market_prices.contracts import PriceLookupClient, PriceLookupObservatio
 from app.market_prices.kis import KisRealtimePriceClient
 from app.market_prices.krx import KrxClosingPriceClient
 from app.market_prices.service import MarketPriceService
+from app.market_prices.performance import (
+    RecommendationPerformanceItem,
+    RecommendationPerformancePolicy,
+    RecommendationPerformanceResponse,
+    RecommendationPerformanceSummary,
+)
 
 __all__ = [
     "KisRealtimePriceClient",
@@ -11,4 +17,8 @@ __all__ = [
     "MarketPriceService",
     "PriceLookupClient",
     "PriceLookupObservation",
+    "RecommendationPerformanceItem",
+    "RecommendationPerformancePolicy",
+    "RecommendationPerformanceResponse",
+    "RecommendationPerformanceSummary",
 ]

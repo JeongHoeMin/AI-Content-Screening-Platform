@@ -41,6 +41,7 @@ from app.persistence import (
     create_workflow_execution_audit_persistence,
 )
 from app.harness.recommendation_prices import RecommendationPriceRecorder
+from app.harness.recommendation_prices import RecommendationPerformanceService
 from app.persistence.schedule_repository import ScheduleVersionConflictError
 from app.harness import Harness
 from app.harness.execution_audit import ScreeningExecutionHarness
@@ -55,6 +56,7 @@ from app.market_prices import (
     KisRealtimePriceClient,
     KrxClosingPriceClient,
     MarketPriceService,
+    RecommendationPerformanceResponse,
 )
 from app.models.collect_posts import CollectPostsRequest
 from app.models.article import Article
@@ -276,6 +278,7 @@ class DashboardRunManager:
         execution_audit_persistence: Optional[WorkflowExecutionAuditPersistence] = None,
         schedule_persistence: Optional[ScheduledRecommendationPersistence] = None,
         price_recorder: Optional[RecommendationPriceRecorder] = None,
+        performance_service: Optional[RecommendationPerformanceService] = None,
     ) -> None:
         self._runs: Dict[str, _RunState] = {}
         self._filter_persistence: Optional[CollectionFilterPersistence] = filter_persistence
@@ -286,6 +289,9 @@ class DashboardRunManager:
             schedule_persistence
         )
         self._price_recorder: Optional[RecommendationPriceRecorder] = price_recorder
+        self._performance_service: Optional[RecommendationPerformanceService] = (
+            performance_service
+        )
 
     _WORKFLOW_NODES: tuple[str, ...] = (
         "evaluate",
@@ -405,6 +411,12 @@ class DashboardRunManager:
         if state.result is None:
             raise HTTPException(status_code=500, detail="Missing recommendation result")
         return state.result
+
+    async def recommendation_performance(self) -> RecommendationPerformanceResponse:
+        """Refresh and project price performance only through the Harness service."""
+        if self._performance_service is None:
+            return RecommendationPerformanceResponse(evaluated_at=datetime.now(timezone.utc))
+        return await self._performance_service.refresh_and_query()
 
     async def _execute(
         self,
@@ -938,6 +950,36 @@ def _create_optional_price_recorder() -> Optional[RecommendationPriceRecorder]:
         return None
 
 
+def _create_optional_performance_service() -> Optional[RecommendationPerformanceService]:
+    """Assemble on-demand latest-price refresh only when DB and price adapters exist."""
+    database_config: Optional[DatabaseConfig] = load_optional_database_config()
+    if database_config is None:
+        return None
+    try:
+        try:
+            kis_config: Optional[KisConfig] = load_optional_kis_config()
+        except ConfigurationError:
+            logger.warning(
+                "dashboard_recommendation_performance_kis_unavailable",
+                reason="partial_configuration",
+            )
+            kis_config = None
+        price_service: MarketPriceService = MarketPriceService(
+            KisRealtimePriceClient(kis_config),
+            KrxClosingPriceClient(load_krx_config()),
+        )
+        return RecommendationPerformanceService(
+            price_service,
+            create_recommendation_price_persistence(database_config),
+        )
+    except Exception as error:
+        logger.warning(
+            "dashboard_recommendation_performance_unavailable",
+            error_type=type(error).__name__,
+        )
+        return None
+
+
 def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
     """Create the dashboard API and its static single-page client."""
     run_manager: DashboardRunManager = manager or DashboardRunManager(
@@ -945,6 +987,7 @@ def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
         execution_audit_persistence=_create_optional_execution_audit_persistence(),
         schedule_persistence=_create_optional_schedule_persistence(),
         price_recorder=_create_optional_price_recorder(),
+        performance_service=_create_optional_performance_service(),
     )
     app = FastAPI(title="AI Content Screening Dashboard")
 
@@ -955,6 +998,10 @@ def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
     @app.get("/api/health")
     async def health() -> Dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/api/recommendations/performance")
+    async def get_recommendation_performance() -> RecommendationPerformanceResponse:
+        return await run_manager.recommendation_performance()
 
     @app.get("/settings", response_class=HTMLResponse)
     async def schedule_settings_page() -> str:

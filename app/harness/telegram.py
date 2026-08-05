@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Optional, Protocol, Tuple
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.config.telegram import TelegramConfig
 from app.providers.http import ExternalServiceError, JsonHttpClient, StdlibJsonHttpClient
@@ -20,7 +20,15 @@ class TelegramRecommendationSummary(BaseModel):
     execution_id: str = Field(min_length=1, max_length=64)
     scheduled_for: datetime
     recommendation_count: int = Field(ge=0)
-    recommendations: Tuple[str, ...] = Field(default=(), max_length=10)
+    recommendations: Tuple[str, ...] = ()
+
+    @field_validator("recommendations", mode="before")
+    @classmethod
+    def _limit_recommendations(cls, value: object) -> Tuple[str, ...]:
+        """Keep the terminal message bounded even if an upstream caller sends more."""
+        if not isinstance(value, tuple):
+            raise ValueError("recommendations must be a tuple")
+        return tuple(str(item) for item in value[:10])
 
 
 class TelegramReporter(Protocol):

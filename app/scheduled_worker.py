@@ -29,8 +29,12 @@ from app.persistence import (
     create_recommendation_price_persistence,
     create_workflow_execution_audit_persistence,
 )
-from app.harness.recommendation_prices import RecommendationPriceRecorder
+from app.harness.recommendation_prices import (
+    RecommendationPerformanceService,
+    RecommendationPriceRecorder,
+)
 from app.market_prices import KisRealtimePriceClient, KrxClosingPriceClient, MarketPriceService
+from app.market_prices.performance import RecommendationPerformanceItem, RecommendationPerformanceResponse
 from app.web.app import DashboardRunManager, RecommendationRunRequest
 
 logger = structlog.get_logger(__name__)
@@ -54,13 +58,40 @@ class DashboardScheduledRecommendationRunner:
                 topics=job.topics,
             )
         )
+        performance: RecommendationPerformanceResponse = (
+            await self._manager.recommendation_performance()
+        )
+        price_by_ticker: dict[str, RecommendationPerformanceItem] = {
+            item.ticker: item
+            for item in performance.items
+            if item.run_id == result.run_id
+        }
         recommendations: tuple[str, ...] = tuple(
-            f"{item.company_name} · {item.action}" for item in result.recommendations[:10]
+            self._telegram_candidate(item.company_name, item.action, price_by_ticker.get(item.ticker or ""))
+            for item in result.recommendations[:10]
         )
         return ScheduledRecommendationOutcome(
             execution_id=result.run_id,
             recommendation_count=len(result.recommendations),
             recommendations=recommendations,
+        )
+
+    @staticmethod
+    def _telegram_candidate(
+        company_name: str,
+        action: str,
+        performance: Optional[RecommendationPerformanceItem],
+    ) -> str:
+        """Render only company, action, entry price, and basis for Telegram."""
+        if (
+            performance is None
+            or performance.entry_price is None
+            or performance.entry_basis is None
+        ):
+            return f"{company_name} · {action} · 가격 미확인 · -"
+        return (
+            f"{company_name} · {action} · {performance.entry_price:g} KRW · "
+            f"{performance.entry_basis.value}"
         )
 
 
@@ -78,6 +109,7 @@ async def run_forever() -> None:
         ),
         schedule_persistence=persistence,
         price_recorder=price_recorder,
+        performance_service=_create_optional_performance_service(database_config),
     )
     telegram_config = load_optional_telegram_config()
     reporter: Optional[TelegramReporter] = (
@@ -121,6 +153,35 @@ def _create_optional_price_recorder(
     except Exception as error:
         logger.warning(
             "scheduled_recommendation_price_recorder_unavailable",
+            error_type=type(error).__name__,
+        )
+        return None
+
+
+def _create_optional_performance_service(
+    database_config: DatabaseConfig,
+) -> Optional[RecommendationPerformanceService]:
+    """Keep scheduled price summaries available without affecting the main run result."""
+    try:
+        try:
+            kis_config: Optional[KisConfig] = load_optional_kis_config()
+        except ConfigurationError:
+            logger.warning(
+                "scheduled_recommendation_performance_kis_unavailable",
+                reason="partial_configuration",
+            )
+            kis_config = None
+        price_service: MarketPriceService = MarketPriceService(
+            KisRealtimePriceClient(kis_config),
+            KrxClosingPriceClient(load_krx_config()),
+        )
+        return RecommendationPerformanceService(
+            price_service,
+            create_recommendation_price_persistence(database_config),
+        )
+    except Exception as error:
+        logger.warning(
+            "scheduled_recommendation_performance_unavailable",
             error_type=type(error).__name__,
         )
         return None

@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Protocol, Tuple, Union
 
 import structlog
 
 from app.market_prices.contracts import PriceLookupObservation
 from app.models.candidate_selection import CandidateEvaluation
+from app.market_prices.performance import (
+    RecommendationPerformanceItem,
+    RecommendationPerformancePolicy,
+    RecommendationPerformanceResponse,
+)
 from app.models.market_price import PriceErrorKind, RecommendationPriceSnapshot
 from app.models.recommendation import RecommendationAction, RecommendationDecision
 from app.models.resolved_news_event import ResolvedCompany, ResolvedTicker
@@ -36,6 +42,19 @@ class RecommendationPricePersistence(Protocol):
         snapshots: Tuple[RecommendationPriceEntry, ...],
     ) -> None:
         """Store entry snapshots, preserving existing snapshot identities."""
+
+
+class RecommendationPerformancePersistence(Protocol):
+    """Harness boundary for refreshing and reading recommendation performance."""
+
+    async def upsert_latest(
+        self,
+        snapshots: Tuple[RecommendationPriceEntry, ...],
+    ) -> None:
+        """Store replacement latest observations under the LATEST identity."""
+
+    async def list_snapshots(self) -> Tuple[RecommendationPriceEntry, ...]:
+        """Load safe snapshot records without exposing database implementation."""
 
 
 class RecommendationPriceRecorder:
@@ -122,3 +141,138 @@ class RecommendationPriceRecorder:
         if action in {RecommendationAction.STRONG_SELL, RecommendationAction.SELL}:
             return RecommendationAction.SELL
         return None
+
+
+class RecommendationPerformanceService:
+    """Harness-owned latest-price refresh and safe performance projection."""
+
+    def __init__(
+        self,
+        price_capture: RecommendationPriceCapture,
+        persistence: RecommendationPerformancePersistence,
+        policy: RecommendationPerformancePolicy | None = None,
+    ) -> None:
+        self._price_capture: RecommendationPriceCapture = price_capture
+        self._persistence: RecommendationPerformancePersistence = persistence
+        self._policy: RecommendationPerformancePolicy = policy or RecommendationPerformancePolicy()
+
+    async def refresh_and_query(self) -> RecommendationPerformanceResponse:
+        """Refresh every entry independently, preserving unavailable siblings and entries."""
+        evaluated_at: datetime = datetime.now(timezone.utc)
+        stored: Tuple[RecommendationPriceEntry, ...] = await self._persistence.list_snapshots()
+        entries: Tuple[RecommendationPriceEntry, ...] = tuple(
+            item for item in stored if item.snapshot_kind is SnapshotKind.ENTRY
+        )
+        latest_entries: list[RecommendationPriceEntry] = []
+        entry: RecommendationPriceEntry
+        for entry in entries:
+            latest_entries.append(await self._refresh_latest(entry, evaluated_at))
+        if latest_entries:
+            await self._persistence.upsert_latest(tuple(latest_entries))
+        latest_by_identity: dict[tuple[str, int], RecommendationPriceEntry] = {
+            (item.snapshot.run_id, item.snapshot.recommendation_index): item
+            for item in latest_entries
+        }
+        performances = tuple(
+            self._policy.evaluate(
+                entry.snapshot,
+                self._latest_for_entry(entry, latest_by_identity, stored),
+            )
+            for entry in entries
+        )
+        items: Tuple[RecommendationPerformanceItem, ...] = tuple(
+            self._item(entry, performance.latest, performance.return_percent)
+            for entry, performance in zip(entries, performances)
+        )
+        return RecommendationPerformanceResponse(
+            items=items,
+            summary=self._policy.summarize(performances),
+            evaluated_at=evaluated_at,
+        )
+
+    async def _refresh_latest(
+        self,
+        entry: RecommendationPriceEntry,
+        observed_at: datetime,
+    ) -> RecommendationPriceEntry:
+        """Capture one latest observation without allowing one provider failure to abort peers."""
+        try:
+            observation: PriceLookupObservation = await self._price_capture.capture(
+                entry.snapshot.ticker,
+                observed_at,
+            )
+        except Exception as error:
+            logger.warning(
+                "recommendation_latest_price_capture_failed",
+                run_id=entry.snapshot.run_id,
+                recommendation_index=entry.snapshot.recommendation_index,
+                error_type=type(error).__name__,
+            )
+            observation = PriceLookupObservation.unavailable(
+                observed_at,
+                PriceErrorKind.TRANSPORT,
+            )
+        return RecommendationPriceEntry(
+            snapshot=RecommendationPriceSnapshot(
+                run_id=entry.snapshot.run_id,
+                recommendation_index=entry.snapshot.recommendation_index,
+                ticker=entry.snapshot.ticker,
+                action=entry.snapshot.action,
+                status=observation.status,
+                price=observation.price,
+                basis=observation.basis,
+                provider=observation.provider,
+                observed_at=observation.observed_at,
+                trading_date=observation.trading_date,
+                error_kind=observation.error_kind,
+            ),
+            snapshot_kind=SnapshotKind.LATEST,
+            company_id=entry.company_id,
+            company_name=entry.company_name,
+        )
+
+    @staticmethod
+    def _latest_for_entry(
+        entry: RecommendationPriceEntry,
+        refreshed: dict[tuple[str, int], RecommendationPriceEntry],
+        snapshots: Tuple[RecommendationPriceEntry, ...],
+    ) -> RecommendationPriceSnapshot | None:
+        """Prefer this query's refresh and otherwise retain a separately persisted latest."""
+        identity: tuple[str, int] = (
+            entry.snapshot.run_id,
+            entry.snapshot.recommendation_index,
+        )
+        refreshed_latest: RecommendationPriceEntry | None = refreshed.get(identity)
+        if refreshed_latest is not None:
+            return refreshed_latest.snapshot
+        for item in snapshots:
+            if (
+                item.snapshot_kind is SnapshotKind.LATEST
+                and item.snapshot.run_id == entry.snapshot.run_id
+                and item.snapshot.recommendation_index
+                == entry.snapshot.recommendation_index
+            ):
+                return item.snapshot
+        return None
+
+    @staticmethod
+    def _item(
+        entry: RecommendationPriceEntry,
+        latest: RecommendationPriceSnapshot | None,
+        return_percent: Decimal | None,
+    ) -> RecommendationPerformanceItem:
+        """Project validated snapshots without status error detail or provider payloads."""
+        return RecommendationPerformanceItem(
+            run_id=entry.snapshot.run_id,
+            recommendation_index=entry.snapshot.recommendation_index,
+            company_name=entry.company_name,
+            ticker=entry.snapshot.ticker,
+            action=entry.snapshot.action,
+            entry_price=(float(entry.snapshot.price) if entry.snapshot.price is not None else None),
+            entry_provider=entry.snapshot.provider,
+            entry_basis=entry.snapshot.basis,
+            entry_observed_at=entry.snapshot.observed_at,
+            latest_price=(float(latest.price) if latest is not None and latest.price is not None else None),
+            latest_observed_at=latest.observed_at if latest is not None else None,
+            return_percent=(float(return_percent) if return_percent is not None else None),
+        )

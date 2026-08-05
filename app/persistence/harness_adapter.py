@@ -104,6 +104,15 @@ class RecommendationPricePersistence(Protocol):
     ) -> None:
         """Store safe entry snapshots without overwriting prior observations."""
 
+    async def upsert_latest(
+        self,
+        snapshots: Tuple[RecommendationPriceEntry, ...],
+    ) -> None:
+        """Store safe latest snapshots without modifying entry observations."""
+
+    async def list_snapshots(self) -> Tuple[RecommendationPriceEntry, ...]:
+        """Load safe snapshots for a Harness-owned performance query."""
+
 
 class SqlAlchemyDocumentPersistence:
     """Write source documents once through a Harness-owned async session."""
@@ -248,3 +257,18 @@ class SqlAlchemyRecommendationPricePersistence:
                 SqlAlchemyRecommendationPriceRepository(session)
             )
             await repository.store_entries(snapshots)
+
+    async def upsert_latest(
+        self,
+        snapshots: Tuple[RecommendationPriceEntry, ...],
+    ) -> None:
+        """Upsert only LATEST observations in a Harness-owned transaction."""
+        async with self._session_factory.begin() as session:
+            repository = SqlAlchemyRecommendationPriceRepository(session)
+            await repository.upsert_latest(snapshots)
+
+    async def list_snapshots(self) -> Tuple[RecommendationPriceEntry, ...]:
+        """Read snapshots through the database adapter, not from Policy or API code."""
+        async with self._session_factory() as session:
+            repository = SqlAlchemyRecommendationPriceRepository(session)
+            return await repository.list_snapshots()
