@@ -188,6 +188,7 @@ class RecommendationCard(BaseModel):
     score: float
     action: str
     reason_code: str
+    recommendation_index: int = Field(default=0, ge=0)
 
 
 class NewsAnalysisCard(BaseModel):
@@ -661,7 +662,8 @@ class DashboardRunManager:
             for post in posts
         ]
         recommendations: List[RecommendationCard] = []
-        for decision in result.recommendation.decisions:
+        recommendation_index: int
+        for recommendation_index, decision in enumerate(result.recommendation.decisions):
             company = decision.company_score.company
             ticker = company.ticker
             recommendations.append(
@@ -672,6 +674,7 @@ class DashboardRunManager:
                     score=decision.score,
                     action=decision.action.value,
                     reason_code=decision.reason_code.value,
+                    recommendation_index=recommendation_index,
                 )
             )
         statistics: Dict[str, Any] = result.statistics.model_dump()

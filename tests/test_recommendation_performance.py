@@ -68,6 +68,19 @@ def test_policy_keeps_return_unknown_when_a_price_is_unavailable_or_mismatched()
     assert mismatched_ticker.return_percent is None
 
 
+def test_policy_uses_half_up_and_rejects_missing_or_currency_mismatch_latest() -> None:
+    from app.market_prices.performance import RecommendationPerformancePolicy
+
+    policy = RecommendationPerformancePolicy()
+    entry = _snapshot(price=Decimal("1000"))
+    half_up_latest = _snapshot(price=Decimal("1000.5"))
+    mismatched_currency = half_up_latest.model_copy(update={"currency": "USD"})
+
+    assert policy.evaluate(entry, half_up_latest).return_percent == Decimal("0.1")
+    assert policy.evaluate(entry, None).return_percent is None
+    assert policy.evaluate(entry, mismatched_currency).return_percent is None
+
+
 def test_policy_summarizes_buy_sell_win_rate_and_median() -> None:
     from app.market_prices.performance import RecommendationPerformancePolicy
 

@@ -50,6 +50,26 @@ def test_dashboard_page_exposes_recommendation_controls() -> None:
     assert "event_evidence" in response.text
 
 
+def test_dashboard_joins_performance_to_the_current_run_by_stable_identity() -> None:
+    response = TestClient(create_web_app()).get("/")
+
+    assert "recommendation_index" in response.text
+    assert "performanceByIdentity" in response.text
+    assert "item.run_id===data.run_id" in response.text
+    assert "`${data.run_id}:${item.recommendation_index}`" in response.text
+
+
+def test_dashboard_renders_server_summary_with_korean_kst_labels() -> None:
+    response = TestClient(create_web_app()).get("/")
+
+    assert "성과 요약" in response.text
+    assert "확인" in response.text
+    assert "미확인" in response.text
+    assert "승률" in response.text
+    assert "중앙값" in response.text
+    assert "KST" in response.text
+
+
 def test_dashboard_page_exposes_actual_workflow_graph_and_retry_path() -> None:
     response = TestClient(create_web_app()).get("/")
 
