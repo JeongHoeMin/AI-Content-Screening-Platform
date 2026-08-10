@@ -38,6 +38,12 @@ Validate`까지를 미실행으로 표시하고 `Aggregate`로 진행한다. ter
 이 조건 분기는 수집 필터 결과가 아니라 Workflow의 evaluator 결과에서 계산한 bounded `next_node` 관측으로
 대시보드에 전달한다.
 
+`Evaluate`부터 `Select Candidates`까지 각 노드는 완료 시 `WorkflowStageCounts`(input/accepted/rejected 정수 3개)를
+함께 반환한다. 이 값은 각 노드가 이미 갖고 있는 domain 결과(`ArticleEvaluationResult`, `ScreeningDecision`,
+`CrossValidationResult`, `ResolvedNewsEvent`, `CandidateSelectionResult` 등)에서 계산한 안전한 집계이며,
+기사 원문·prompt·LLM 응답 전문은 포함하지 않는다. 대시보드는 수집(collect) 단계의 건수와 함께 이 값을 SSE
+`stage_counts`로 누적 전달하고, 파이프라인 그래프의 각 단계 노드에 입력·통과·탈락 건수로 표시한다.
+
 `Recommend` 노드는 하나의 `ScoringResult`를 `RecommendationPolicy`에 전달한다. Policy는 threshold snapshot,
 reason code, action을 포함한 final immutable `RecommendationResult`를 만들고, Engine은 이를 정확히 한 번 호출해
 같은 객체 identity로 반환한다. 이어지는 `Select Candidates` 노드는 RecommendationDecision만 소비해 internal
