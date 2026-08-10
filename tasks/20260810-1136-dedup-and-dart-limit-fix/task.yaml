@@ -26,6 +26,8 @@ scope:
     - "app/config/market_data.py"
     - "tests/test_llm_event_comparator.py"
     - "tests/test_market_data_providers.py"
+    - "app/prompt_templates/screening.py"
+    - "tests/test_llm_event_screener.py"
     - "docs/WORKFLOW.md"
     - "docs/DECISION_LOG.md"
     - "tasks/20260810-1136-dedup-and-dart-limit-fix/**"
@@ -50,6 +52,7 @@ requirements:
     - "문서 원문, prompt, LLM 응답 전문은 로그나 테스트 산출물에 남기지 않는다."
     - "변경 사항을 검증하는 테스트를 추가하고 전체 pytest 스위트가 통과한다."
     - "완료 후 docker compose로 이미지를 재빌드·재배포하고 실제 브라우저 실행으로 두 문제가 모두 해결되었는지 확인한다."
+    - "(범위 확장) dedup 수정 후 실제 브라우저 실행에서 새로 드러난 screen 단계 unexpected_error도 원인을 조사해 수정한다."
 
 plan:
   steps:
@@ -71,7 +74,11 @@ plan:
 
     - id: 5
       description: "docker compose로 재빌드·재배포하고 실제 브라우저에서 두 문제가 해결되었는지 확인한다."
-      status: pending
+      status: in_progress
+
+    - id: 6
+      description: "(범위 확장) dedup 수정 후 실제 실행에서 screen 단계가 새로 unexpected_error로 실패하는 것을 발견해 원인(requires_cross_validation 프롬프트 모호성으로 공식 DART 공시 콘텐츠에서 필드가 누락됨)을 실제 API 호출로 재현·확인하고 프롬프트를 수정한다."
+      status: completed
 
 result:
   summary: null
@@ -95,3 +102,7 @@ history:
   - at: "2026-08-10T11:55:00+09:00"
     status: in_progress
     message: "Confirmed OpenDART list.json's real response envelope (status/message/page_no/page_count/total_count/total_page/list) via a live call inside the container. Rewrote DartDisclosureProvider.collect to paginate at a fixed page_count=100 (independent of CollectPostsRequest.limit) up to a 5-page safety cap, using total_page to decide whether to continue. Updated the existing page_count=='5' assertion (now '100') and added two new tests: multi-page aggregation and the 5-page safety-cap stop. Updated docs/WORKFLOW.md to describe the discovery-scan-vs-display-limit split. Full pytest suite: 614 passed, 1 skipped."
+
+  - at: "2026-08-10T12:00:00+09:00"
+    status: in_progress
+    message: "Allowed paths expanded to app/prompt_templates/screening.py and tests/test_llm_event_screener.py. After redeploying with both fixes, a live browser run got past deduplicate for the first time but then failed at screen with the same unexpected_error signature. Confirmed via a live API call with realistic official-DART-filing content (not synthetic short text) that gpt-4o-mini omits requires_cross_validation entirely (returns null) for exactly this kind of well-sourced primary-source content, because the prompt said 'Set requires_cross_validation when [conditions]' which reads as conditional presence rather than an always-required field; DefaultScreeningAssessmentParser's `type(value) is not bool` check then rejects every candidate in the batch, and NoValidScreeningDecisionsError's underlying provider error type isn't in the dashboard's safe-error allowlist so it renders as unexpected_error. This is a systemic, not one-off, bug: DART is now the default discovery source (ADR-026) and official filings are structurally exactly the 'well-sourced, not weak/anonymous/disputed' case the old wording invited the model to skip. Reworded the prompt to require an explicit true/false always. Re-verified with the same realistic content that the model now returns false correctly. Added a prompt-content regression test. Full pytest suite: 615 passed, 1 skipped."

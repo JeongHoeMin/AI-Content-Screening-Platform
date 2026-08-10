@@ -625,3 +625,19 @@ async def test_screener_uses_injected_policy_decision() -> None:
     decisions = await screener.screen(build_inferences())
 
     assert all(decision.decision is ScreeningDecisionType.REJECT for decision in decisions)
+
+
+def test_screening_prompt_requires_an_explicit_cross_validation_boolean() -> None:
+    """Regression: real OpenDART filings are well-sourced official filings, so a
+    model reading 'set requires_cross_validation when weak/unclear/...' as a
+    conditional instruction will omit the field entirely for exactly this kind
+    of content (verified against the live API) instead of returning false —
+    and DefaultScreeningAssessmentParser strictly rejects a null/missing flag,
+    failing every candidate in the batch. The prompt must say this field is
+    always required."""
+    from app.prompt_templates.screening import build_screening_system_prompt
+
+    system_prompt: str = build_screening_system_prompt()
+
+    assert "never omit it or leave it null" in system_prompt
+    assert "Otherwise return false" in system_prompt

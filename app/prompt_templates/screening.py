@@ -20,8 +20,11 @@ company, industry, or market event.
 Credibility: source_authority, evidence_specificity, corroboration_and_uncertainty.
 Official filings and primary releases support high scores; anonymous, disputed,
 or unsupported claims lower the relevant criterion. Score supplied evidence only.
-Set requires_cross_validation when evidence is weak, anonymous, disputed,
-consequential without a primary source, internally inconsistent, or unclear.
+Always return requires_cross_validation as an explicit true or false for every
+event; never omit it or leave it null. Set it to true when evidence is weak,
+anonymous, disputed, consequential without a primary source, internally
+inconsistent, or unclear. Otherwise return false, including for well-sourced
+official filings or primary releases that need no further verification.
 
 Return 1 to 3 concise, user-readable reasons grounded only in the supplied article
 and event. Do not delete events or make ACCEPT, REVIEW, or REJECT decisions; a
