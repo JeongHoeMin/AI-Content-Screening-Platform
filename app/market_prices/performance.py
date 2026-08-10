@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.market_price import (
     PriceBasis,
+    PriceErrorKind,
     PriceProvider,
     PriceSnapshotStatus,
     RecommendationPerformance,
@@ -50,8 +51,10 @@ class RecommendationPerformanceItem(BaseModel):
     entry_provider: Optional[PriceProvider] = None
     entry_basis: Optional[PriceBasis] = None
     entry_observed_at: Optional[datetime] = None
+    entry_error_kind: Optional[PriceErrorKind] = None
     latest_price: Optional[float] = None
     latest_observed_at: Optional[datetime] = None
+    latest_error_kind: Optional[PriceErrorKind] = None
     return_percent: Optional[float] = None
 
 

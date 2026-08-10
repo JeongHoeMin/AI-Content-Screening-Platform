@@ -278,7 +278,9 @@ class RecommendationPerformanceService:
             entry_provider=entry.snapshot.provider,
             entry_basis=entry.snapshot.basis,
             entry_observed_at=entry.snapshot.observed_at,
+            entry_error_kind=entry.snapshot.error_kind,
             latest_price=(float(latest.price) if latest is not None and latest.price is not None else None),
             latest_observed_at=latest.observed_at if latest is not None else None,
+            latest_error_kind=latest.error_kind if latest is not None else None,
             return_percent=(float(return_percent) if return_percent is not None else None),
         )

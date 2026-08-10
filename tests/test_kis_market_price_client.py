@@ -181,3 +181,36 @@ async def test_rate_limit_retries_but_authentication_failure_does_not(
     assert auth_observation.error_kind is PriceErrorKind.AUTHENTICATION
     assert auth_client.quote_requests == 1
     assert sleeps == [1.0]
+
+
+@pytest.mark.anyio
+async def test_stale_cached_token_is_dropped_and_refetched_after_auth_failure(
+    config: KisConfig,
+    observed_at: datetime,
+) -> None:
+    """A token cached from an earlier successful call can later expire or be revoked.
+
+    The client must not keep retrying with that same stale token forever; the next
+    fetch() call should re-authenticate instead of repeating the same failure.
+    """
+    from app.market_prices.kis import KisRealtimePriceClient
+
+    client: KisHttpClientDouble = KisHttpClientDouble(
+        [
+            {"output": {"stck_prpr": "72000"}},
+            ExternalServiceError("HTTP status 401"),
+            {"output": {"stck_prpr": "73000"}},
+        ]
+    )
+    price_client: KisRealtimePriceClient = KisRealtimePriceClient(config, client)
+
+    first_observation = await price_client.fetch("005930", observed_at)
+    second_observation = await price_client.fetch("005930", observed_at)
+    third_observation = await price_client.fetch("005930", observed_at)
+
+    assert first_observation.status is PriceSnapshotStatus.AVAILABLE
+    assert second_observation.status is PriceSnapshotStatus.UNAVAILABLE
+    assert second_observation.error_kind is PriceErrorKind.AUTHENTICATION
+    assert third_observation.status is PriceSnapshotStatus.AVAILABLE
+    assert third_observation.price == 73000
+    assert client.token_requests == 2

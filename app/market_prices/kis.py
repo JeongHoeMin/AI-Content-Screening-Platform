@@ -110,9 +110,15 @@ class KisRealtimePriceClient:
             )
             price: Decimal = MarketPriceParser.parse_kis_realtime(payload)
         except ExternalServiceError as error:
+            error_kind: PriceErrorKind = self._classify_external_error(error)
+            if error_kind is PriceErrorKind.AUTHENTICATION:
+                # A cached token can go stale between calls (expiry, revocation).
+                # Drop it so the next fetch re-authenticates instead of repeating
+                # the same failing token indefinitely.
+                self._access_token = None
             return PriceLookupObservation.unavailable(
                 observed_at,
-                self._classify_external_error(error),
+                error_kind,
             )
         except (PricePayloadError, ValidationError, ValueError):
             return PriceLookupObservation.unavailable(

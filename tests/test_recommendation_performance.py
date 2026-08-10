@@ -217,3 +217,44 @@ def test_service_scopes_two_same_ticker_runs_and_summary_to_requested_run() -> N
     assert response.items[0].return_percent == -45.0
     assert response.summary.confirmed_count == 1
     assert response.summary.mean_return_percent == -45.0
+
+
+def test_service_exposes_entry_and_latest_unavailable_reasons() -> None:
+    from app.harness.recommendation_prices import RecommendationPerformanceService
+    from app.market_prices.contracts import PriceLookupObservation
+    from app.persistence.price_repository import RecommendationPriceEntry, SnapshotKind
+
+    entry = RecommendationPriceEntry(
+        snapshot=_snapshot(price=None),
+        snapshot_kind=SnapshotKind.ENTRY,
+        company_id="company-samsung",
+        company_name="삼성전자",
+    )
+
+    class _Capture:
+        async def capture(
+            self,
+            ticker: str,
+            observed_at: datetime,
+        ) -> PriceLookupObservation:
+            return PriceLookupObservation.unavailable(observed_at, PriceErrorKind.AUTHENTICATION)
+
+    class _Persistence:
+        async def list_snapshots(self) -> tuple[RecommendationPriceEntry, ...]:
+            return (entry,)
+
+        async def upsert_latest(
+            self,
+            snapshots: tuple[RecommendationPriceEntry, ...],
+        ) -> None:
+            return None
+
+    response = asyncio.run(
+        RecommendationPerformanceService(_Capture(), _Persistence()).refresh_and_query()  # type: ignore[arg-type]
+    )
+
+    assert response.items[0].entry_price is None
+    assert response.items[0].entry_error_kind is PriceErrorKind.NOT_FOUND
+    assert response.items[0].latest_price is None
+    assert response.items[0].latest_error_kind is PriceErrorKind.AUTHENTICATION
+    assert response.items[0].return_percent is None
