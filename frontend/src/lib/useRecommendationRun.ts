@@ -12,6 +12,7 @@ import {
   type PerformanceResponse,
   type StageCounts,
 } from "./types";
+import { classifySseResultStatus, nextSseRecoveryDelay } from "./sseRecovery";
 
 export type RunStatus = "idle" | "running" | "completed" | "failed";
 
@@ -121,9 +122,16 @@ export function useRecommendationRun(): RunState {
 
   const analysesById = useRef(new Map<string, AnalysisItem>());
   const sourceRef = useRef<EventSource | null>(null);
+  const recoveryTimerRef = useRef<number | null>(null);
+  const activeRunIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    return () => sourceRef.current?.close();
+    return () => {
+      sourceRef.current?.close();
+      if (recoveryTimerRef.current !== null) {
+        window.clearTimeout(recoveryTimerRef.current);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -173,6 +181,11 @@ export function useRecommendationRun(): RunState {
   const start = useCallback(
     async (request: RunRequest) => {
       sourceRef.current?.close();
+      if (recoveryTimerRef.current !== null) {
+        window.clearTimeout(recoveryTimerRef.current);
+        recoveryTimerRef.current = null;
+      }
+      activeRunIdRef.current = null;
       analysesById.current.clear();
       setTimeline([]);
       setAnalyses([]);
@@ -206,48 +219,103 @@ export function useRecommendationRun(): RunState {
         return;
       }
 
+      activeRunIdRef.current = runId;
       let terminal = false;
-      const source = new EventSource(`/api/runs/${runId}/events`);
-      sourceRef.current = source;
+      const reportDiagnostic = (event: "eventsource_error" | "result_completed" | "result_running" | "recovery_exhausted", attempt: number) => {
+        void fetch(`/api/runs/${runId}/connection-diagnostics`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ event, attempt }),
+        }).catch(() => undefined);
+      };
+      const isActive = () => !terminal && activeRunIdRef.current === runId;
+      let recovering = false;
+      let recoveryAttempt = 0;
 
-      for (const name of STREAMED_EVENTS) {
-        source.addEventListener(name, (event) => {
-          const data: DashboardEvent = JSON.parse((event as MessageEvent).data);
-          setProgress((previous) => applyEvent(previous, data));
-          if (data.type !== "heartbeat" && data.message) {
-            setTimeline((previous) => [...previous, data.message]);
-          }
-          mergeAnalyses(data.analyses ?? []);
-
-          if (data.type === "completed") {
+      const recover = async (attempt: number) => {
+        if (!isActive() || recovering) return;
+        recovering = true;
+        setLoadError("실시간 연결을 복구하고 있습니다.");
+        try {
+          const response = await fetch(`/api/runs/${runId}`);
+          const outcome = classifySseResultStatus(response.status);
+          if (!isActive()) return;
+          if (outcome === "completed") {
             terminal = true;
-            source.close();
-            setProgress((previous) => ({
-              ...previous,
-              active: null,
-              status: "completed",
-            }));
+            reportDiagnostic("result_completed", attempt);
+            setProgress((previous) => ({ ...previous, active: null, status: "completed" }));
             loadResult(runId).catch(() =>
               setLoadError("결과를 불러오지 못했습니다. 다시 실행해 주세요."),
             );
+            return;
           }
-
-          if (data.type === "failed") {
+          if (outcome === "failed") {
             terminal = true;
-            source.close();
-            const detail = `중단 단계: ${data.failure_stage ?? data.active_stage ?? "-"} · 오류: ${data.error_type ?? "-"} · 시도: ${data.failure_attempts ?? 1}/3`;
-            setLoadError(`뉴스 분석이 완료되지 않았습니다. ${detail}`);
-            setProgress((previous) => ({ ...previous, status: "failed" }));
+            setLoadError("서버가 추천 실행을 완료하지 못했습니다. 다시 실행해 주세요.");
+            setProgress((previous) => ({ ...previous, active: null, status: "failed" }));
+            return;
           }
-        });
+          reportDiagnostic("result_running", attempt);
+        } catch {
+          // A result lookup can fail for the same transient reason as SSE; retry below.
+        } finally {
+          recovering = false;
+        }
+
+        if (!isActive()) return;
+        const delay = nextSseRecoveryDelay(attempt);
+        if (delay === null) {
+          reportDiagnostic("recovery_exhausted", attempt);
+          setLoadError("실시간 연결을 복구하지 못했습니다. 잠시 후 다시 실행해 주세요.");
+          setProgress((previous) => ({ ...previous, active: null, status: "failed" }));
+          return;
+        }
+        recoveryTimerRef.current = window.setTimeout(() => {
+          recoveryTimerRef.current = null;
+          recoveryAttempt = attempt + 1;
+          openStream();
+        }, delay);
+      };
+
+      function openStream(): void {
+        if (!isActive()) return;
+        const source = new EventSource(`/api/runs/${runId}/events`);
+        sourceRef.current = source;
+        for (const name of STREAMED_EVENTS) {
+          source.addEventListener(name, (event) => {
+            const data: DashboardEvent = JSON.parse((event as MessageEvent).data);
+            setProgress((previous) => applyEvent(previous, data));
+            if (data.type !== "heartbeat" && data.message) {
+              setTimeline((previous) => [...previous, data.message]);
+            }
+            mergeAnalyses(data.analyses ?? []);
+            if (data.type === "completed") {
+              terminal = true;
+              source.close();
+              setProgress((previous) => ({ ...previous, active: null, status: "completed" }));
+              loadResult(runId).catch(() =>
+                setLoadError("결과를 불러오지 못했습니다. 다시 실행해 주세요."),
+              );
+            }
+            if (data.type === "failed") {
+              terminal = true;
+              source.close();
+              const detail = `중단 단계: ${data.failure_stage ?? data.active_stage ?? "-"} · 오류: ${data.error_type ?? "-"} · 시도: ${data.failure_attempts ?? 1}/3`;
+              setLoadError(`뉴스 분석이 완료되지 않았습니다. ${detail}`);
+              setProgress((previous) => ({ ...previous, status: "failed" }));
+            }
+          });
+        }
+        source.onerror = () => {
+          if (!isActive()) return;
+          source.close();
+          const attempt = recoveryAttempt;
+          reportDiagnostic("eventsource_error", attempt);
+          void recover(attempt);
+        };
       }
 
-      source.onerror = () => {
-        if (terminal) return;
-        source.close();
-        setLoadError("실시간 연결이 끊겼습니다. 다시 실행해 주세요.");
-        setProgress((previous) => ({ ...previous, status: "failed", active: null }));
-      };
+      openStream();
     },
     [loadResult, mergeAnalyses],
   );

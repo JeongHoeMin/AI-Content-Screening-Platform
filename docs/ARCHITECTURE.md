@@ -60,6 +60,13 @@ browser 갱신을 알지 않는다.
 event와 Workflow가 제공하는 bounded `next_node`를 기준으로 `미실행`으로 투영하며, 단순 완료 순번이나 수집
 필터 결과로 실행 여부를 추측하지 않는다.
 
+SSE는 best-effort 진행 상태 transport이며 terminal 결과의 기준은 `GET /api/runs/{run_id}`다. 브라우저가 SSE
+오류를 관측하면 제한된 횟수로 stream을 다시 연결하고 결과 endpoint가 `409`를 반환하는 동안 실행 중 상태를
+유지한다. 완료 결과를 받으면 결과 endpoint로 화면을 복구하고, 실제 server terminal failure 또는 복구 예산 소진
+때만 중단 상태를 표시한다. dashboard는 stream open·terminal 전송·close와 browser 연결 오류를 실행 ID, 제한된
+lifecycle/attempt 값만 가진 structlog event로 기록하며 원문·prompt·SDK 응답·자격 증명·예외 전문은 기록하지
+않는다. 실행 상태는 dashboard process 메모리에 있으므로 컨테이너 재시작 뒤의 진행 중 실행은 복구 대상이 아니다.
+
 ## 주요 구성 요소
 
 | 경계 | 책임 | 현재 구현 위치 |

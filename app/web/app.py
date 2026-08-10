@@ -183,6 +183,20 @@ class DashboardEvent(BaseModel):
     stage_counts: Dict[str, WorkflowStageCounts] = Field(default_factory=dict)
 
 
+class SseConnectionDiagnosticRequest(BaseModel):
+    """Bounded browser-side SSE diagnostic safe to write to operations logs."""
+
+    model_config = ConfigDict(frozen=True)
+
+    event: Literal[
+        "eventsource_error",
+        "result_completed",
+        "result_running",
+        "recovery_exhausted",
+    ]
+    attempt: int = Field(ge=0, le=2)
+
+
 class NewsCard(BaseModel):
     """Small, display-safe projection of a normalized selected news item."""
 
@@ -1251,9 +1265,33 @@ def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
         run_manager.ensure_exists(run_id)
 
         async def stream() -> AsyncIterator[str]:
-            async for event in run_manager.events(run_id):
-                payload: str = json.dumps(event.model_dump(mode="json"), ensure_ascii=False)
-                yield f"event: {event.type}\ndata: {payload}\n\n"
+            terminal_type: Optional[str] = None
+            logger.info(
+                "dashboard_sse_stream_opened",
+                run_id=run_id,
+                lifecycle="opened",
+            )
+            try:
+                async for event in run_manager.events(run_id):
+                    if event.type in {"completed", "failed"}:
+                        terminal_type = event.type
+                        logger.info(
+                            "dashboard_sse_terminal_sent",
+                            run_id=run_id,
+                            lifecycle="terminal",
+                            terminal_type=terminal_type,
+                        )
+                    payload: str = json.dumps(
+                        event.model_dump(mode="json"), ensure_ascii=False
+                    )
+                    yield f"event: {event.type}\ndata: {payload}\n\n"
+            finally:
+                logger.info(
+                    "dashboard_sse_stream_closed",
+                    run_id=run_id,
+                    lifecycle="closed",
+                    terminal_type=terminal_type,
+                )
         return StreamingResponse(
             stream(),
             media_type="text/event-stream",
@@ -1265,6 +1303,20 @@ def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
             },
         )
 
+    @app.post("/api/runs/{run_id}/connection-diagnostics", status_code=204)
+    async def record_connection_diagnostic(
+        run_id: str,
+        diagnostic: SseConnectionDiagnosticRequest,
+    ) -> Response:
+        run_manager.ensure_exists(run_id)
+        logger.info(
+            "dashboard_sse_client_diagnostic",
+            run_id=run_id,
+            diagnostic_event=diagnostic.event,
+            attempt=diagnostic.attempt,
+        )
+        return Response(status_code=204)
+
     @app.get("/api/runs/{run_id}")
     async def get_result(run_id: str) -> DashboardRunResult:
         return run_manager.result(run_id)
@@ -1273,4 +1325,3 @@ def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
 
 
 app: FastAPI = create_web_app()
-

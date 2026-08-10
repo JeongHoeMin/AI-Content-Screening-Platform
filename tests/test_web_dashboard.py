@@ -298,6 +298,87 @@ def test_event_stream_forbids_intermediaries_from_buffering_or_compressing() -> 
         assert response.headers["x-accel-buffering"] == "no"
 
 
+class _RecordingLogger:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, object]]] = []
+
+    def info(self, event: str, **fields: object) -> None:
+        self.events.append((event, fields))
+
+
+def test_event_stream_logs_safe_lifecycle_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _TerminalEventManager(DashboardRunManager):
+        def ensure_exists(self, run_id: str) -> None:
+            return None
+
+        async def events(self, run_id: str):  # type: ignore[override]
+            yield DashboardEvent(type="completed", message="완료")
+
+    recorded = _RecordingLogger()
+    monkeypatch.setattr("app.web.app.logger", recorded)
+    client = TestClient(create_web_app(_TerminalEventManager()))
+
+    with client.stream("GET", "/api/runs/run-1/events") as response:
+        assert response.status_code == 200
+        list(response.iter_text())
+
+    assert recorded.events == [
+        (
+            "dashboard_sse_stream_opened",
+            {"run_id": "run-1", "lifecycle": "opened"},
+        ),
+        (
+            "dashboard_sse_terminal_sent",
+            {
+                "run_id": "run-1",
+                "lifecycle": "terminal",
+                "terminal_type": "completed",
+            },
+        ),
+        (
+            "dashboard_sse_stream_closed",
+            {
+                "run_id": "run-1",
+                "lifecycle": "closed",
+                "terminal_type": "completed",
+            },
+        ),
+    ]
+
+
+def test_dashboard_records_a_bounded_browser_connection_diagnostic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def scenario() -> DashboardRunManager:
+        manager = DashboardRunManager()
+        manager._runs["run-1"] = _RunState()
+        return manager
+
+    manager = asyncio.run(scenario())
+    recorded = _RecordingLogger()
+    monkeypatch.setattr("app.web.app.logger", recorded)
+    client = TestClient(create_web_app(manager))
+
+    response = client.post(
+        "/api/runs/run-1/connection-diagnostics",
+        json={"event": "eventsource_error", "attempt": 1},
+    )
+
+    assert response.status_code == 204
+    assert recorded.events == [
+        (
+            "dashboard_sse_client_diagnostic",
+            {
+                "run_id": "run-1",
+                "diagnostic_event": "eventsource_error",
+                "attempt": 1,
+            },
+        )
+    ]
+
+
 def test_dashboard_health_endpoint_is_ready_without_credentials() -> None:
     client: TestClient = TestClient(create_web_app())
 

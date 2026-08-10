@@ -8,10 +8,10 @@ description: >-
   지점을 제한된 메타데이터로 식별하고, 일시적인 SSE 종료 뒤에도 terminal 결과를 조회해 화면이
   실제 서버 결과를 반영하도록 한다.
 
-status: planning
+status: completed
 
 createdAt: "2026-08-10T16:59:42+09:00"
-updatedAt: "2026-08-10T16:59:42+09:00"
+updatedAt: "2026-08-10T17:14:54+09:00"
 
 agent:
   provider: "codex"
@@ -29,6 +29,8 @@ scope:
     - "frontend/src/lib/useRecommendationRun.ts"
     - "tests/test_web_dashboard.py"
     - "frontend/src/lib/useRecommendationRun.test.ts"
+    - "frontend/src/lib/sseRecovery.ts"
+    - "frontend/src/lib/sseRecovery.test.ts"
     - "docs/ARCHITECTURE.md"
     - "docs/superpowers/specs/2026-08-10-sse-connection-recovery-design.md"
     - "docs/superpowers/plans/2026-08-10-sse-connection-recovery.md"
@@ -58,22 +60,51 @@ plan:
   steps:
     - id: 1
       description: "현재 SSE stream·EventSource 종료 흐름과 기존 dashboard 테스트 경계를 확인하고, 복구·제한 메타데이터 설계를 작성한다."
-      status: in_progress
+      status: completed
     - id: 2
       description: "SSE 연결 수명주기와 브라우저 연결 오류 뒤 terminal 결과 조회를 재현하는 실패 테스트를 추가한다."
-      status: pending
+      status: completed
     - id: 3
       description: "서버와 브라우저 경계에 안전한 SSE 진단 관측을 최소 변경으로 구현한다."
-      status: pending
+      status: completed
     - id: 4
       description: "아키텍처 관측성 계약을 갱신하고 backend·frontend 검증 및 Docker 배포 확인을 수행한다."
-      status: pending
+      status: completed
 
 result:
-  summary: null
-  changedFiles: []
-  verifications: []
-  completedAt: null
+  summary: >-
+    SSE는 진행 event를 전달하는 best-effort transport로 유지하되, EventSource 오류 시 1초·3초의
+    제한된 재연결과 실행 결과 endpoint 조회를 수행하도록 변경했다. 결과가 완료면 화면이 완료·추천
+    결과로 복구되고, 409 실행 중 응답은 재시도하며, 실제 server failure 또는 복구 예산 소진일 때만
+    중단됨을 표시한다. Dashboard는 server stream open·terminal 전달·close와 browser 오류·복구 결과를
+    run ID, 제한된 lifecycle/diagnostic event, attempt만으로 runtime JSONL에 기록한다.
+  changedFiles:
+    - "app/web/app.py"
+    - "docs/ARCHITECTURE.md"
+    - "docs/superpowers/specs/2026-08-10-sse-connection-recovery-design.md"
+    - "docs/superpowers/plans/2026-08-10-sse-connection-recovery.md"
+    - "frontend/src/lib/sseRecovery.test.ts"
+    - "frontend/src/lib/sseRecovery.ts"
+    - "frontend/src/lib/useRecommendationRun.ts"
+    - "tasks/20260810-1659-sse-connection-diagnostics/task.yaml"
+    - "tests/test_web_dashboard.py"
+  verifications:
+    - command: "UV_CACHE_DIR=/private/tmp/ai-screening-uv-cache uv run pytest -q"
+      result: passed
+      summary: "전체 Python 테스트 634개가 통과했고, opt-in 실계약 테스트 1개는 예상대로 skip됐다."
+    - command: "npm test && npm run lint"
+      result: passed
+      summary: "Vitest 20개와 frontend ESLint가 통과했다."
+    - command: "PYTHONPYCACHEPREFIX=/private/tmp/ai-screening-pycache UV_CACHE_DIR=/private/tmp/ai-screening-uv-cache uv run python -m compileall app tests -q && git diff --check"
+      result: passed
+      summary: "Python 컴파일과 변경 공백 검증이 통과했다."
+    - command: "docker-compose up -d --build --force-recreate dashboard frontend && docker-compose ps dashboard frontend"
+      result: passed
+      summary: "새 dashboard(d78fe7e3ac60)·frontend(2f051d42e03b) 이미지로 재생성했고 두 컨테이너가 healthy임을 확인했다."
+    - command: "npm run build"
+      result: failed
+      summary: "로컬 실행 환경의 Turbopack 포트 바인딩 권한 제한(os error 1)으로 실패했다. 동일 production build는 Docker frontend image 생성으로 성공했고 healthy 컨테이너로 확인했다."
+  completedAt: "2026-08-10T17:14:54+09:00"
 
 blocker:
   reason: null
@@ -83,3 +114,18 @@ history:
   - at: "2026-08-10T16:59:42+09:00"
     status: planning
     message: "Task created: 서버 완료와 브라우저 중단 표시가 불일치한 SSE 경로를 안전한 메타데이터로 진단하는 범위와 요구사항을 기록했다."
+  - at: "2026-08-10T17:02:00+09:00"
+    status: planning
+    message: "설계 승인: SSE를 유지하고, 연결 오류 뒤 bounded 재연결과 terminal 결과 조회로 화면을 복구하며 lifecycle 진단을 추가하기로 확정했다."
+  - at: "2026-08-10T17:08:57+09:00"
+    status: in_progress
+    message: "구현 시작: 사용자의 main 브랜치 직접 수정 허가를 받고 SSE lifecycle과 결과 조회 복구의 실패 테스트를 먼저 추가한다."
+  - at: "2026-08-10T17:12:30+09:00"
+    status: testing
+    message: "구현 완료: SSE lifecycle·browser diagnostic 로그, bounded 재연결, 결과 endpoint 복구, 아키텍처 계약을 추가하고 전체 검증을 시작한다."
+  - at: "2026-08-10T17:13:15+09:00"
+    status: in_progress
+    message: "검증 실패 분석: 새 diagnostic endpoint 테스트가 Python 3.9에서 현재 event loop 없이 asyncio.Queue를 생성했다. Queue 생성만 하나의 asyncio.run 안으로 옮겨 테스트 환경 계약을 맞춘다."
+  - at: "2026-08-10T17:14:54+09:00"
+    status: completed
+    message: "전체 Python 634 passed/1 skipped, Vitest 20개, ESLint, compileall, diff 검증을 통과했고 새 Docker dashboard·frontend 이미지를 healthy 상태로 재배포해 작업을 완료했다."
