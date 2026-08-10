@@ -31,10 +31,6 @@ def create_market_collect_posts_skill(
 ) -> CollectPostsSkill:
     """Assemble the real-news and disclosure collection skill from environment config."""
     trusted_config = load_trusted_source_config()
-    if CommunityType.IR_RSS in sources and not trusted_config.ir_rss_feeds:
-        raise ConfigurationError(
-            "IR_RSS_FEEDS must contain at least one approved full-text RSS feed"
-        )
     providers: dict[CommunityType, object] = {}
     normalizers: dict[CommunityType, object] = {}
     if CommunityType.NAVER_NEWS in sources:
@@ -43,9 +39,14 @@ def create_market_collect_posts_skill(
     if CommunityType.DART in sources:
         providers[CommunityType.DART] = DartDisclosureProvider(load_dart_config())
         normalizers[CommunityType.DART] = DartDisclosureNormalizer()
-    if CommunityType.IR_RSS in sources:
+    if CommunityType.IR_RSS in sources and trusted_config.ir_rss_feeds:
         providers[CommunityType.IR_RSS] = IrRssProvider(trusted_config.ir_rss_feeds)
         normalizers[CommunityType.IR_RSS] = IrRssNormalizer()
+    if not providers:
+        raise ConfigurationError(
+            "At least one analysis source must be available: configure DART_API_KEY "
+            "(market-wide discovery) or IR_RSS_FEEDS (approved full-text RSS feeds)"
+        )
     return CollectPostsSkill(
         provider_registry=ProviderRegistry(providers),
         normalizer_registry=NormalizerRegistry(normalizers),

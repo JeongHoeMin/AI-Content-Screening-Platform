@@ -12,6 +12,10 @@ from app.models.collect_posts import CollectPostsRequest
 from app.models.raw_post import RawDartDisclosurePost, RawPost
 from app.providers.base import CommunityProvider
 from app.providers.dart_document import DartDocumentExtractionError, DartDocumentExtractor
+from app.providers.dart_event_filter import (
+    DEFAULT_DART_EVENT_TYPE_ALLOWLIST,
+    DartEventTypeAllowlist,
+)
 from app.providers.http import (
     BytesHttpClient,
     ExternalServiceError,
@@ -36,12 +40,16 @@ class DartDisclosureProvider(CommunityProvider):
         http_client: Optional[JsonHttpClient] = None,
         document_client: Optional[BytesHttpClient] = None,
         document_extractor: Optional[DartDocumentExtractor] = None,
+        event_filter: Optional[DartEventTypeAllowlist] = None,
     ) -> None:
         self._config: DartConfig = config
         self._http_client: JsonHttpClient = http_client or StdlibJsonHttpClient()
         self._document_client: BytesHttpClient = document_client or StdlibBytesHttpClient()
         self._document_extractor: DartDocumentExtractor = (
             document_extractor or DartDocumentExtractor()
+        )
+        self._event_filter: DartEventTypeAllowlist = (
+            event_filter or DEFAULT_DART_EVENT_TYPE_ALLOWLIST
         )
 
     async def collect(self, request: CollectPostsRequest) -> List[RawPost]:
@@ -72,16 +80,26 @@ class DartDisclosureProvider(CommunityProvider):
 
         raw_posts: List[RawPost] = []
         for index, item in enumerate(items):
-            raw_post: Optional[RawDartDisclosurePost] = await self._parse_item(item, index)
-            if raw_post is not None:
-                raw_posts.append(raw_post)
+            raw_post: Optional[RawDartDisclosurePost] = self._parse_metadata(item, index)
+            if raw_post is None:
+                continue
+            if not self._event_filter.is_allowed(raw_post.report_name):
+                logger.info(
+                    "dart_disclosure_filtered",
+                    item_index=index,
+                    reason="event_type_not_allowed",
+                    catalog_version=self._event_filter.version,
+                )
+                continue
+            raw_posts.append(await self._with_document(raw_post, index))
         return raw_posts
 
-    async def _parse_item(
+    def _parse_metadata(
         self,
         item: object,
         index: int,
     ) -> Optional[RawDartDisclosurePost]:
+        """Parse OpenDART list metadata only; does not fetch the filing document."""
         if not isinstance(item, dict):
             logger.warning("dart_disclosure_item_skipped", item_index=index, error_kind="invalid_type")
             return None
@@ -92,7 +110,7 @@ class DartDisclosureProvider(CommunityProvider):
             ).replace(tzinfo=timezone.utc)
             stock_code: Optional[str] = self._optional_string(item.get("stock_code"))
             market_class: Optional[str] = self._optional_string(item.get("corp_cls"))
-            raw_post: RawDartDisclosurePost = RawDartDisclosurePost(
+            return RawDartDisclosurePost(
                 raw_id=receipt_number,
                 fetched_at=datetime.now(timezone.utc),
                 corporation_code=str(item["corp_code"]),
@@ -108,7 +126,6 @@ class DartDisclosureProvider(CommunityProvider):
                     f"{receipt_number}"
                 ),
             )
-            return await self._with_document(raw_post, index)
         except (KeyError, TypeError, ValueError, ValidationError):
             logger.warning("dart_disclosure_item_skipped", item_index=index, error_kind="invalid_item")
             return None

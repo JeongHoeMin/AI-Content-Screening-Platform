@@ -33,6 +33,7 @@ from app.models.collect_posts import (
     ProviderResultMetadata,
 )
 from app.models.community import CommunityType
+from app.models.dart_event_category import DartEventCategory
 from app.models.evaluation_response import EvaluationResponse, EvaluationResponseItem
 from app.models.event_compatibility import (
     DEFAULT_EVENT_TYPE_COMPATIBILITY,
@@ -192,6 +193,7 @@ __all__ = [
     "ContentPipelineRequest",
     "ContentPipelineResult",
     "CommunityType",
+    "DartEventCategory",
     "FilterRejectionReason",
     "InvestmentTheme",
     "CompanyImpact",

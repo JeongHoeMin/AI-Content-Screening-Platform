@@ -16,10 +16,16 @@ Post → Article → 투자 테마·뉴스 주제 Filter → Evaluate → Extrac
 Article만 Evaluate로 전달한다. 빈 선택은 기존 전체 수집 동작을 유지한다. 제외된 Article은 workflow
 실패가 아니라 안전한 이유 코드 관측이며, 실행 조건·카탈로그 버전·건수만 Harness가 영속화한다.
 
-운영 기본 분석 source는 `IR_RSS_FEEDS`로 등록한 기업·기관 공식 RSS/Atom 전문이다. feed가 비어 있으면
-실행을 시작하지 않고 configuration 오류를 반환한다. Naver 검색 결과는 탐색 전용이며 분석 입력으로 사용하지
-않는다. DART는 전문 파일이 실제 존재하는 경우에만 명시적으로 선택하는 보조 진단 source이고, 파일 부재는
-재시도하지 않는 item-local 오류다.
+운영 기본 분석 source는 DART 공시 전체 목록과 `IR_RSS_FEEDS`로 등록한 기업·기관 공식 RSS/Atom 전문이다
+(ADR-026). `DartDisclosureProvider`는 회사 등록 없이 시장 전체 공시를 조회하되, `report_nm`을 결정적
+event-type allowlist(`DartEventTypeAllowlist`, 대규모 공급계약·실적/가이던스 변경·설비투자·인수합병·
+유상증자/CB/자사주·규제/소송 6개 카테고리)로 먼저 판정해 통과한 공시만 원문 문서를 조회한다. 이
+사전 필터는 LLM이 아니라 코드가 소유하며, 정기적·반복적 공시(사업보고서·최대주주변동신고 등)는 document
+API 호출 전에 제외된다. 전문 파일이 실제로 없는 공시(`014` 등)는 필터를 통과했더라도 재시도하지 않는
+item-local 오류로 폐기한다. `IR_RSS_FEEDS`는 특정 회사를 추가로 깊게 추적하고 싶을 때 쓰는 선택적 보강
+source이며, 비어 있어도 DART discovery만으로 실행이 시작된다. DART·IR_RSS 모두 사용할 provider가
+하나도 없을 때만 실행을 시작하지 않고 configuration 오류를 반환한다. Naver 검색 결과는 기존과 동일하게
+탐색 전용이며 분석 입력으로 사용하지 않는다.
 
 대시보드는 수집, 종목 기준정보 준비, 그리고 실제 LangGraph 노드 순서인 `Evaluate → Extract →
 Deduplicate → Screen → Cross Validate → Resolve → Analyze → Aggregate → Score → Recommend → Select

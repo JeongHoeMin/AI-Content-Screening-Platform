@@ -80,7 +80,10 @@ import structlog
 configure_application_logging()
 logger = structlog.get_logger(__name__)
 
-DEFAULT_ANALYSIS_SOURCES: tuple[CommunityType, ...] = (CommunityType.IR_RSS,)
+DEFAULT_ANALYSIS_SOURCES: tuple[CommunityType, ...] = (
+    CommunityType.DART,
+    CommunityType.IR_RSS,
+)
 
 _RETRIED_ERROR_TYPES: frozenset[str] = frozenset(
     {"APITimeoutError", "APIConnectionError", "AuthenticationError", "PermissionDeniedError"}

@@ -2,6 +2,11 @@
 
 from app.providers.base import CommunityNormalizer, CommunityProvider
 from app.providers.dart import DartDisclosureProvider
+from app.providers.dart_event_filter import (
+    DEFAULT_DART_EVENT_TYPE_ALLOWLIST,
+    DartEventTypeAllowlist,
+    DefaultDartEventTypeAllowlist,
+)
 from app.providers.ir_rss import IrRssNormalizer, IrRssProvider
 from app.providers.market_normalizers import DartDisclosureNormalizer, NaverNewsNormalizer
 from app.providers.mock import (
@@ -18,6 +23,9 @@ __all__ = [
     "CommunityProvider",
     "DartDisclosureNormalizer",
     "DartDisclosureProvider",
+    "DartEventTypeAllowlist",
+    "DefaultDartEventTypeAllowlist",
+    "DEFAULT_DART_EVENT_TYPE_ALLOWLIST",
     "IrRssNormalizer",
     "IrRssProvider",
     "MockDcInsideNormalizer",

@@ -61,6 +61,22 @@ class BytesHttpClientDouble(BytesHttpClient):
         return self.payload
 
 
+class CountingBytesHttpClientDouble(BytesHttpClientDouble):
+    def __init__(self, payload: bytes) -> None:
+        super().__init__(payload)
+        self.call_count: int = 0
+
+    async def get(
+        self,
+        url: str,
+        headers: Mapping[str, str],
+        query: Mapping[str, str],
+        timeout_seconds: float,
+    ) -> bytes:
+        self.call_count += 1
+        return await super().get(url, headers, query, timeout_seconds)
+
+
 def build_document_zip() -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
@@ -150,7 +166,7 @@ def test_dart_provider_uses_requested_period_and_preserves_disclosure_metadata()
                     "corp_name": "삼성전자",
                     "stock_code": "005930",
                     "corp_cls": "Y",
-                    "report_nm": "[기재정정]반기보고서",
+                    "report_nm": "단일판매ㆍ공급계약체결(자율공시)",
                     "rcept_no": "20260730000001",
                     "flr_nm": "삼성전자",
                     "rcept_dt": "20260730",
@@ -181,13 +197,60 @@ def test_dart_provider_uses_requested_period_and_preserves_disclosure_metadata()
     result = asyncio.run(DartDisclosureNormalizer().normalize(raw_posts[0]))
 
     assert result.post is not None
-    assert result.post.title == "[기재정정]반기보고서"
+    assert result.post.title == "단일판매ㆍ공급계약체결(자율공시)"
     assert result.post.content == (
         "삼성전자 (종목코드: 005930)의 공시입니다. "
-        "공시 제목: [기재정정]반기보고서. 공시 접수일: 2026-07-30.\n"
+        "공시 제목: 단일판매ㆍ공급계약체결(자율공시). 공시 접수일: 2026-07-30.\n"
         "첫 공시 문단\n둘째 공시 문단"
     )
     assert str(result.post.url).endswith("20260730000001")
+
+
+def test_dart_provider_filters_periodic_disclosures_before_fetching_the_document() -> None:
+    client: JsonHttpClientDouble = JsonHttpClientDouble(
+        {
+            "status": "000",
+            "list": [
+                {
+                    "corp_code": "00126380",
+                    "corp_name": "삼성전자",
+                    "stock_code": "005930",
+                    "corp_cls": "Y",
+                    "report_nm": "[기재정정]반기보고서",
+                    "rcept_no": "20260730000001",
+                    "flr_nm": "삼성전자",
+                    "rcept_dt": "20260730",
+                },
+                {
+                    "corp_code": "00164742",
+                    "corp_name": "SK하이닉스",
+                    "stock_code": "000660",
+                    "corp_cls": "Y",
+                    "report_nm": "유상증자결정",
+                    "rcept_no": "20260730000002",
+                    "flr_nm": "SK하이닉스",
+                    "rcept_dt": "20260730",
+                },
+            ],
+        }
+    )
+    document_client: CountingBytesHttpClientDouble = CountingBytesHttpClientDouble(
+        build_document_zip()
+    )
+    provider: DartDisclosureProvider = DartDisclosureProvider(
+        DartConfig(api_key="dart-key"), client, document_client
+    )
+    request: CollectPostsRequest = CollectPostsRequest(
+        sources=[CommunityType.DART], limit=5, period=timedelta(days=3)
+    )
+
+    raw_posts: List[RawPost] = asyncio.run(provider.collect(request))
+
+    assert len(raw_posts) == 1
+    assert isinstance(raw_posts[0], RawDartDisclosurePost)
+    assert raw_posts[0].report_name == "유상증자결정"
+    assert document_client.call_count == 1
+    assert document_client.query["rcept_no"] == "20260730000002"
 
 
 def test_dart_provider_uses_request_ended_at_with_korean_calendar_projection() -> None:

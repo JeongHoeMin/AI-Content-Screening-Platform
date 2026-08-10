@@ -4,6 +4,7 @@ import pytest
 
 from app.config.errors import ConfigurationError
 from app.config.trusted_sources import load_trusted_source_config
+from app.core.exceptions import ProviderNotFoundError
 from app.market_data import create_market_collect_posts_skill
 from app.models.community import CommunityType
 
@@ -55,3 +56,16 @@ def test_rss_only_collection_requires_an_operator_configured_feed(
 
     with pytest.raises(ConfigurationError, match="IR_RSS_FEEDS"):
         create_market_collect_posts_skill([CommunityType.IR_RSS])
+
+
+def test_dart_only_collection_does_not_require_ir_rss_feeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("IR_RSS_FEEDS", "[]")
+    monkeypatch.setenv("DART_API_KEY", "dart-key")
+
+    skill = create_market_collect_posts_skill([CommunityType.DART, CommunityType.IR_RSS])
+
+    skill._provider_registry.get(CommunityType.DART)
+    with pytest.raises(ProviderNotFoundError):
+        skill._provider_registry.get(CommunityType.IR_RSS)

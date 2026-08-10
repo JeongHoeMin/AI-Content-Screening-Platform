@@ -109,8 +109,8 @@ def test_dashboard_uses_low_default_collection_limit() -> None:
     assert request.limit == 10
 
 
-def test_dashboard_defaults_to_rss_only_analysis_source() -> None:
-    assert DEFAULT_ANALYSIS_SOURCES == (CommunityType.IR_RSS,)
+def test_dashboard_defaults_to_market_wide_dart_discovery_with_optional_rss() -> None:
+    assert DEFAULT_ANALYSIS_SOURCES == (CommunityType.DART, CommunityType.IR_RSS)
 
 
 def test_dashboard_manager_accepts_harness_owned_execution_audit_persistence() -> None:
