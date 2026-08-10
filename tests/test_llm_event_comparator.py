@@ -56,6 +56,21 @@ def _event(title: str) -> NewsEvent:
     )
 
 
+def test_deduplication_comparison_response_schema_types_every_property() -> None:
+    """Regression: OpenAI Structured Outputs strict mode rejects any schema
+    property without a 'type' key (BadRequestError). Every leaf field here
+    must resolve to a concrete type or anyOf-of-types, never a bare object."""
+    schema: dict[str, object] = DeduplicationComparisonResponse.model_json_schema()
+    definitions: dict[str, object] = schema["$defs"]  # type: ignore[assignment]
+    item_schema: dict[str, object] = definitions["DeduplicationComparisonResponseItem"]  # type: ignore[index,assignment]
+    properties: dict[str, object] = item_schema["properties"]  # type: ignore[index,assignment]
+
+    assert "anyOf" in properties["candidate_index"]  # type: ignore[operator]
+    assert "anyOf" in properties["relation"]  # type: ignore[operator]
+    assert "anyOf" in properties["confidence"]  # type: ignore[operator]
+    assert "anyOf" in properties["reasons"]["items"]  # type: ignore[index,operator]
+
+
 def test_llm_event_comparator_returns_validated_candidate_observation() -> None:
     now = datetime(2026, 8, 4, tzinfo=timezone.utc)
     candidates = EventCandidateGenerator().generate(
