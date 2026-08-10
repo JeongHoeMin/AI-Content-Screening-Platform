@@ -57,6 +57,7 @@ from app.market_prices import (
     KrxClosingPriceClient,
     MarketPriceService,
     RecommendationPerformanceResponse,
+    RecommendationRunHistoryResponse,
 )
 from app.models.collect_posts import CollectPostsRequest
 from app.models.article import Article
@@ -72,6 +73,7 @@ from app.models.post import Post
 from app.workflows import ScreeningResult, WorkflowProgressEvent, WorkflowStageCounts
 from app.workflows.screening.errors import WorkflowStageRetriesExhaustedError
 from app.web.dashboard_html import DASHBOARD_HTML
+from app.web.history_html import HISTORY_HTML
 from app.web.settings_html import SCHEDULE_SETTINGS_HTML
 from app.observability import configure_application_logging
 
@@ -427,6 +429,12 @@ class DashboardRunManager:
         if self._performance_service is None:
             return RecommendationPerformanceResponse(evaluated_at=datetime.now(timezone.utc))
         return await self._performance_service.refresh_and_query(run_id)
+
+    async def recommendation_history(self) -> RecommendationRunHistoryResponse:
+        """List every stored run's recommendations grouped with their performance."""
+        if self._performance_service is None:
+            return RecommendationRunHistoryResponse(evaluated_at=datetime.now(timezone.utc))
+        return await self._performance_service.list_run_histories()
 
     async def _execute(
         self,
@@ -1035,6 +1043,14 @@ def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
         run_id: Optional[str] = None,
     ) -> RecommendationPerformanceResponse:
         return await run_manager.recommendation_performance(run_id)
+
+    @app.get("/api/runs/history")
+    async def get_recommendation_history() -> RecommendationRunHistoryResponse:
+        return await run_manager.recommendation_history()
+
+    @app.get("/history", response_class=HTMLResponse)
+    async def history_page() -> str:
+        return HISTORY_HTML
 
     @app.get("/settings", response_class=HTMLResponse)
     async def schedule_settings_page() -> str:

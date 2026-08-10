@@ -68,6 +68,26 @@ class RecommendationPerformanceResponse(BaseModel):
     evaluated_at: datetime
 
 
+class RecommendationRunHistoryItem(BaseModel):
+    """One past run's recommendations and price-performance summary."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    run_id: str = Field(min_length=1)
+    observed_at: datetime
+    items: Tuple[RecommendationPerformanceItem, ...] = ()
+    summary: RecommendationPerformanceSummary = RecommendationPerformanceSummary()
+
+
+class RecommendationRunHistoryResponse(BaseModel):
+    """Every priced run, most recent first, for the history page."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    runs: Tuple[RecommendationRunHistoryItem, ...] = ()
+    evaluated_at: datetime
+
+
 class RecommendationPerformancePolicy:
     """Evaluate simple directional price changes without making investment decisions."""
 

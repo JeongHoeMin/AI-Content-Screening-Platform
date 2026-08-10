@@ -14,8 +14,14 @@ from app.market_prices.performance import (
     RecommendationPerformanceItem,
     RecommendationPerformancePolicy,
     RecommendationPerformanceResponse,
+    RecommendationRunHistoryItem,
+    RecommendationRunHistoryResponse,
 )
-from app.models.market_price import PriceErrorKind, RecommendationPriceSnapshot
+from app.models.market_price import (
+    PriceErrorKind,
+    RecommendationPerformance,
+    RecommendationPriceSnapshot,
+)
 from app.models.recommendation import RecommendationAction, RecommendationDecision
 from app.models.resolved_news_event import ResolvedCompany, ResolvedTicker
 from app.persistence.price_repository import RecommendationPriceEntry, SnapshotKind
@@ -162,6 +168,59 @@ class RecommendationPerformanceService:
     ) -> RecommendationPerformanceResponse:
         """Refresh and summarize either all entries or only one requested dashboard run."""
         evaluated_at: datetime = datetime.now(timezone.utc)
+        entries, items, performances = await self._collect(run_id, evaluated_at)
+        return RecommendationPerformanceResponse(
+            items=items,
+            summary=self._policy.summarize(performances),
+            evaluated_at=evaluated_at,
+        )
+
+    async def list_run_histories(self) -> RecommendationRunHistoryResponse:
+        """Group every stored run's recommendations with their price performance."""
+        evaluated_at: datetime = datetime.now(timezone.utc)
+        entries, items, performances = await self._collect(None, evaluated_at)
+        run_ids_in_order: list[str] = []
+        performances_by_run: dict[str, list[RecommendationPerformance]] = {}
+        items_by_run: dict[str, list[RecommendationPerformanceItem]] = {}
+        observed_at_by_run: dict[str, datetime] = {}
+        for entry, item, performance in zip(entries, items, performances):
+            run_id: str = entry.snapshot.run_id
+            if run_id not in items_by_run:
+                run_ids_in_order.append(run_id)
+                items_by_run[run_id] = []
+                performances_by_run[run_id] = []
+                observed_at_by_run[run_id] = entry.snapshot.observed_at
+            else:
+                observed_at_by_run[run_id] = min(
+                    observed_at_by_run[run_id], entry.snapshot.observed_at
+                )
+            items_by_run[run_id].append(item)
+            performances_by_run[run_id].append(performance)
+        runs: Tuple[RecommendationRunHistoryItem, ...] = tuple(
+            RecommendationRunHistoryItem(
+                run_id=run_id,
+                observed_at=observed_at_by_run[run_id],
+                items=tuple(items_by_run[run_id]),
+                summary=self._policy.summarize(tuple(performances_by_run[run_id])),
+            )
+            for run_id in sorted(
+                run_ids_in_order,
+                key=lambda candidate: observed_at_by_run[candidate],
+                reverse=True,
+            )
+        )
+        return RecommendationRunHistoryResponse(runs=runs, evaluated_at=evaluated_at)
+
+    async def _collect(
+        self,
+        run_id: str | None,
+        evaluated_at: datetime,
+    ) -> Tuple[
+        Tuple[RecommendationPriceEntry, ...],
+        Tuple[RecommendationPerformanceItem, ...],
+        Tuple[RecommendationPerformance, ...],
+    ]:
+        """Refresh latest prices and project entries into items/performances once."""
         stored: Tuple[RecommendationPriceEntry, ...] = await self._persistence.list_snapshots()
         entries: Tuple[RecommendationPriceEntry, ...] = tuple(
             item
@@ -190,11 +249,7 @@ class RecommendationPerformanceService:
             self._item(entry, performance.latest, performance.return_percent)
             for entry, performance in zip(entries, performances)
         )
-        return RecommendationPerformanceResponse(
-            items=items,
-            summary=self._policy.summarize(performances),
-            evaluated_at=evaluated_at,
-        )
+        return entries, items, performances
 
     async def _refresh_latest(
         self,

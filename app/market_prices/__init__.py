@@ -9,6 +9,8 @@ from app.market_prices.performance import (
     RecommendationPerformancePolicy,
     RecommendationPerformanceResponse,
     RecommendationPerformanceSummary,
+    RecommendationRunHistoryItem,
+    RecommendationRunHistoryResponse,
 )
 
 __all__ = [
@@ -21,4 +23,6 @@ __all__ = [
     "RecommendationPerformancePolicy",
     "RecommendationPerformanceResponse",
     "RecommendationPerformanceSummary",
+    "RecommendationRunHistoryItem",
+    "RecommendationRunHistoryResponse",
 ]

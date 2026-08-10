@@ -258,3 +258,82 @@ def test_service_exposes_entry_and_latest_unavailable_reasons() -> None:
     assert response.items[0].latest_price is None
     assert response.items[0].latest_error_kind is PriceErrorKind.AUTHENTICATION
     assert response.items[0].return_percent is None
+
+
+def test_service_lists_run_histories_grouped_most_recent_first() -> None:
+    from app.harness.recommendation_prices import RecommendationPerformanceService
+    from app.market_prices.contracts import PriceLookupObservation
+    from app.persistence.price_repository import RecommendationPriceEntry, SnapshotKind
+
+    older_entry_first = RecommendationPriceEntry(
+        snapshot=_snapshot(
+            run_id="run-older",
+            recommendation_index=0,
+            ticker="005930",
+            price=Decimal("100"),
+        ),
+        snapshot_kind=SnapshotKind.ENTRY,
+        company_id="company-samsung",
+        company_name="삼성전자",
+    )
+    older_entry_second = RecommendationPriceEntry(
+        snapshot=_snapshot(
+            run_id="run-older",
+            recommendation_index=1,
+            ticker="000660",
+            action=RecommendationAction.SELL,
+            price=Decimal("50"),
+        ),
+        snapshot_kind=SnapshotKind.ENTRY,
+        company_id="company-sk-hynix",
+        company_name="SK하이닉스",
+    )
+    newer_entry = RecommendationPriceEntry(
+        snapshot=_snapshot(
+            run_id="run-newer",
+            recommendation_index=0,
+            ticker="005930",
+            price=Decimal("200"),
+        ).model_copy(update={"observed_at": datetime(2026, 8, 6, tzinfo=timezone.utc)}),
+        snapshot_kind=SnapshotKind.ENTRY,
+        company_id="company-samsung",
+        company_name="삼성전자",
+    )
+
+    class _Capture:
+        async def capture(
+            self,
+            ticker: str,
+            observed_at: datetime,
+        ) -> PriceLookupObservation:
+            prices = {"005930": Decimal("220"), "000660": Decimal("40")}
+            return PriceLookupObservation(
+                status=PriceSnapshotStatus.AVAILABLE,
+                price=prices[ticker],
+                basis=PriceBasis.REALTIME,
+                provider=PriceProvider.KIS,
+                observed_at=observed_at,
+                trading_date=observed_at.date(),
+            )
+
+    class _Persistence:
+        async def list_snapshots(self) -> tuple[RecommendationPriceEntry, ...]:
+            return (older_entry_first, older_entry_second, newer_entry)
+
+        async def upsert_latest(
+            self,
+            snapshots: tuple[RecommendationPriceEntry, ...],
+        ) -> None:
+            return None
+
+    response = asyncio.run(
+        RecommendationPerformanceService(_Capture(), _Persistence()).list_run_histories()  # type: ignore[arg-type]
+    )
+
+    assert tuple(run.run_id for run in response.runs) == ("run-newer", "run-older")
+    assert len(response.runs[0].items) == 1
+    assert response.runs[0].summary.confirmed_count == 1
+    assert len(response.runs[1].items) == 2
+    assert response.runs[1].summary.confirmed_count == 2
+    assert response.runs[1].summary.buy_count == 1
+    assert response.runs[1].summary.sell_count == 1
