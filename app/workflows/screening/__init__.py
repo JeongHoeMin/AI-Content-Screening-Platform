@@ -7,6 +7,7 @@ from app.workflows.screening.result import (
     WorkflowEvidenceQuote,
     WorkflowEventEvidenceProgress,
     WorkflowProgressEvent,
+    WorkflowStageCounts,
     WorkflowStatistics,
     WorkflowScreeningAnalysisProgress,
     WorkflowValidationAnalysisProgress,
@@ -22,6 +23,7 @@ __all__ = [
     "WorkflowEventEvidenceProgress",
     "WorkflowProgressEvent",
     "WorkflowScreeningAnalysisProgress",
+    "WorkflowStageCounts",
     "WorkflowStatistics",
     "WorkflowValidationAnalysisProgress",
 ]

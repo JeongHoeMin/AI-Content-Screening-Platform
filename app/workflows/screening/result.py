@@ -113,6 +113,16 @@ class WorkflowContext(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
+class WorkflowStageCounts(BaseModel):
+    """Safe input/accepted/rejected counts for one completed workflow stage."""
+
+    model_config = ConfigDict(frozen=True)
+
+    input_count: int = Field(ge=0)
+    accepted_count: int = Field(ge=0)
+    rejected_count: int = Field(ge=0)
+
+
 class WorkflowProgressEvent(BaseModel):
     """Safe LangGraph node completion observation for a live consumer."""
 
@@ -125,6 +135,7 @@ class WorkflowProgressEvent(BaseModel):
     article_analyses: Tuple[WorkflowArticleAnalysisProgress, ...] = ()
     screening_analyses: Tuple[WorkflowScreeningAnalysisProgress, ...] = ()
     validation_analyses: Tuple[WorkflowValidationAnalysisProgress, ...] = ()
+    stage_counts: Optional[WorkflowStageCounts] = None
 
 
 class WorkflowStatistics(BaseModel):

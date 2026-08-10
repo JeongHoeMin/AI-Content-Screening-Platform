@@ -9,6 +9,7 @@ from app.workflows.screening import (
     WorkflowContext,
     WorkflowProgressEvent,
     WorkflowScreeningAnalysisProgress,
+    WorkflowStageCounts,
     WorkflowStatistics,
     WorkflowValidationAnalysisProgress,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "WorkflowContext",
     "WorkflowProgressEvent",
     "WorkflowScreeningAnalysisProgress",
+    "WorkflowStageCounts",
     "WorkflowStatistics",
     "WorkflowValidationAnalysisProgress",
 ]

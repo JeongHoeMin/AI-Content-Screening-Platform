@@ -67,3 +67,26 @@ def test_live_progress_emits_completed_langgraph_nodes_and_writes_audit(tmp_path
     assert len(screen_event.screening_analyses) == len(result.decisions)
     assert result.statistics.total_articles == len(articles)
     assert len(audit_path.read_text(encoding="utf-8").splitlines()) == 1
+
+    assert all(event.stage_counts is not None for event in events)
+    assert evaluate_event.stage_counts.input_count == len(articles)
+    assert (
+        evaluate_event.stage_counts.accepted_count
+        + evaluate_event.stage_counts.rejected_count
+        == len(articles)
+    )
+    select_candidates_event: WorkflowProgressEvent = events[-1]
+    assert select_candidates_event.node == "select_candidates"
+    assert (
+        select_candidates_event.stage_counts.accepted_count
+        == len(result.candidate_selection.candidates)
+    )
+    assert (
+        select_candidates_event.stage_counts.rejected_count
+        == len(result.candidate_selection.excluded)
+    )
+    assert (
+        select_candidates_event.stage_counts.accepted_count
+        + select_candidates_event.stage_counts.rejected_count
+        == select_candidates_event.stage_counts.input_count
+    )

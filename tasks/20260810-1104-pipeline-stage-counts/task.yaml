@@ -28,6 +28,7 @@ scope:
     - "docs/WORKFLOW.md"
     - "tests/test_web_dashboard.py"
     - "tests/test_live_workflow_progress.py"
+    - "tests/test_screening_workflow.py"
     - "tasks/20260810-1104-pipeline-stage-counts/**"
 
   deniedPaths:
@@ -60,11 +61,11 @@ plan:
 
     - id: 2
       description: "app/workflows/screening/result.py에 WorkflowStageCounts를 추가하고 WorkflowProgressEvent에 stage_counts 필드를 추가한다."
-      status: pending
+      status: completed
 
     - id: 3
       description: "app/workflows/screening/workflow.py의 run_with_progress에 노드별 이전 상태 스냅샷을 이용한 _stage_counts 프로젝터를 추가해 매 노드 완료마다 계산한다. tests/test_live_workflow_progress.py를 확장해 검증한다."
-      status: pending
+      status: completed
 
     - id: 4
       description: "app/web/app.py의 DashboardEvent·_RunState·_emit·on_progress·_execute(collect 단계)·DashboardRunResult에 stage_counts를 배선한다. tests/test_web_dashboard.py를 확장해 검증한다."
@@ -96,3 +97,7 @@ history:
   - at: "2026-08-10T11:04:51+09:00"
     status: planning
     message: "Task created after diagnosing a zero-recommendation run (narrow 24h period + narrow DART event filter + AND theme/topic filter) and the user asking for a 7-day default period plus per-stage collected/accepted/rejected visibility on the dashboard pipeline. User also asked to commit after each step of progress in this session."
+
+  - at: "2026-08-10T11:20:00+09:00"
+    status: in_progress
+    message: "Allowed paths expanded to include tests/test_screening_workflow.py: added a focused unit test there for the new WorkflowStageCounts projector (deduplicate passthrough, screen accept/reject split) alongside the existing run_with_progress-style workflow tests, in addition to the planned tests/test_live_workflow_progress.py extension."

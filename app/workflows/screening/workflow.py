@@ -15,10 +15,14 @@ from app.deduplicators.event_deduplicator import EventDeduplicator
 from app.llms.budget import ProviderRequestBudget
 from app.models.article import Article, ArticleEvaluationResult
 from app.models.candidate_selection import CandidateSelectionResult
-from app.models.cross_validation import CrossValidationResult
+from app.models.cross_validation import CrossValidationResult, CrossValidationStatus
+from app.models.evidence import EvidenceAggregation
+from app.models.impact_analysis import ImpactAnalysis
 from app.models.llm_inference import LLMInferenceResult
 from app.models.recommendation import RecommendationResult
-from app.models.screening import ScreeningDecision
+from app.models.resolved_news_event import ResolvedDecisionType, ResolvedNewsEvent
+from app.models.scoring import ScoringResult
+from app.models.screening import ScreeningDecision, ScreeningDecisionType
 from app.recommenders.recommendation_engine import RecommendationEngine
 from app.resolvers.base import TickerResolver
 from app.resolvers.policy import ResolvePolicy
@@ -40,6 +44,7 @@ from app.workflows.screening.result import (
     WorkflowProgressEvent,
     WorkflowScorecardProgress,
     WorkflowScreeningAnalysisProgress,
+    WorkflowStageCounts,
     WorkflowStatistics,
     WorkflowValidationAnalysisProgress,
 )
@@ -116,6 +121,7 @@ class ScreeningWorkflow:
                 for node, node_update in update.items():
                     if not isinstance(node_update, Mapping):
                         raise ValueError("LangGraph node update must be a mapping")
+                    previous_state: dict[str, object] = dict(state)
                     state.update(node_update)
                     completed_node_count += 1
                     (
@@ -126,6 +132,11 @@ class ScreeningWorkflow:
                         node,
                         state,
                         article_id_by_event_id,
+                    )
+                    stage_counts: Optional[WorkflowStageCounts] = self._stage_counts(
+                        node,
+                        previous_state,
+                        node_update,
                     )
                     logger.info(
                         "workflow_node_completed",
@@ -146,6 +157,7 @@ class ScreeningWorkflow:
                             article_analyses=article_analyses,
                             screening_analyses=screening_analyses,
                             validation_analyses=validation_analyses,
+                            stage_counts=stage_counts,
                         )
                     )
         except Exception as error:
@@ -317,6 +329,190 @@ class ScreeningWorkflow:
                 )
             return (), (), tuple(validation_analyses)
         return (), (), ()
+
+    @staticmethod
+    def _stage_counts(
+        node: str,
+        previous_state: Mapping[str, object],
+        node_update: Mapping[str, object],
+    ) -> Optional[WorkflowStageCounts]:
+        """Project safe input/accepted/rejected counts from one node's own output."""
+        if node == "evaluate":
+            evaluations = cast(
+                Tuple[ArticleEvaluationResult, ...],
+                node_update.get("evaluations", ()),
+            )
+            accepted: int = sum(1 for item in evaluations if item.accepted)
+            return WorkflowStageCounts(
+                input_count=len(cast(tuple, previous_state.get("articles", ()))),
+                accepted_count=accepted,
+                rejected_count=len(evaluations) - accepted,
+            )
+        if node == "extract":
+            prior_evaluations = cast(
+                Tuple[ArticleEvaluationResult, ...],
+                previous_state.get("evaluations", ()),
+            )
+            events = cast(tuple, node_update.get("events", ()))
+            extraction_errors = cast(tuple, node_update.get("extraction_errors", ()))
+            return WorkflowStageCounts(
+                input_count=sum(1 for item in prior_evaluations if item.accepted),
+                accepted_count=len(events),
+                rejected_count=len(extraction_errors),
+            )
+        if node == "deduplicate":
+            if "events" not in node_update:
+                passthrough: int = len(cast(tuple, previous_state.get("events", ())))
+                return WorkflowStageCounts(
+                    input_count=passthrough,
+                    accepted_count=passthrough,
+                    rejected_count=0,
+                )
+            prior_inferences = cast(
+                Tuple[LLMInferenceResult, ...],
+                previous_state.get("inferences", ()),
+            )
+            pre_dedup_count: int = sum(len(item.events) for item in prior_inferences)
+            canonical_count: int = len(cast(tuple, node_update.get("events", ())))
+            return WorkflowStageCounts(
+                input_count=pre_dedup_count,
+                accepted_count=canonical_count,
+                rejected_count=max(pre_dedup_count - canonical_count, 0),
+            )
+        if node == "screen":
+            decisions = cast(
+                Tuple[ScreeningDecision, ...],
+                node_update.get("decisions", ()),
+            )
+            passed: int = sum(
+                1
+                for item in decisions
+                if item.decision is not ScreeningDecisionType.REJECT
+            )
+            return WorkflowStageCounts(
+                input_count=len(decisions),
+                accepted_count=passed,
+                rejected_count=len(decisions) - passed,
+            )
+        if node == "cross_validate":
+            prior_decisions = cast(
+                Tuple[ScreeningDecision, ...],
+                previous_state.get("decisions", ()),
+            )
+            input_count: int = sum(
+                1
+                for item in prior_decisions
+                if item.decision is ScreeningDecisionType.REVIEW
+            )
+            results = cast(
+                Tuple[CrossValidationResult, ...],
+                node_update.get("cross_validation_results", ()),
+            )
+            verified: int = sum(
+                1
+                for item in results
+                if item.status
+                in (
+                    CrossValidationStatus.VERIFIED,
+                    CrossValidationStatus.PARTIALLY_VERIFIED,
+                )
+            )
+            return WorkflowStageCounts(
+                input_count=input_count,
+                accepted_count=verified,
+                rejected_count=len(results) - verified,
+            )
+        if node == "resolve":
+            prior_decisions = cast(
+                Tuple[ScreeningDecision, ...],
+                previous_state.get("decisions", ()),
+            )
+            resolved_events = cast(
+                Tuple[ResolvedNewsEvent, ...],
+                node_update.get("resolved_events", ()),
+            )
+            resolved_accepted: int = sum(
+                1
+                for item in resolved_events
+                if item.decision is not ResolvedDecisionType.REJECT
+            )
+            return WorkflowStageCounts(
+                input_count=len(prior_decisions),
+                accepted_count=resolved_accepted,
+                rejected_count=len(resolved_events) - resolved_accepted,
+            )
+        if node == "analyze":
+            prior_resolved_events = cast(
+                Tuple[ResolvedNewsEvent, ...],
+                previous_state.get("resolved_events", ()),
+            )
+            analyses = cast(Tuple[ImpactAnalysis, ...], node_update.get("analyses", ()))
+            return WorkflowStageCounts(
+                input_count=len(prior_resolved_events),
+                accepted_count=len(analyses),
+                rejected_count=max(len(prior_resolved_events) - len(analyses), 0),
+            )
+        if node == "aggregate":
+            prior_analyses = cast(
+                Tuple[ImpactAnalysis, ...],
+                previous_state.get("analyses", ()),
+            )
+            impact_evaluations = tuple(
+                evaluation
+                for analysis in prior_analyses
+                for evaluation in analysis.evaluations
+            )
+            eligible: int = sum(1 for item in impact_evaluations if item.eligible)
+            return WorkflowStageCounts(
+                input_count=len(impact_evaluations),
+                accepted_count=eligible,
+                rejected_count=len(impact_evaluations) - eligible,
+            )
+        if node == "score":
+            prior_evidence = cast(
+                Optional[EvidenceAggregation],
+                previous_state.get("evidence"),
+            )
+            input_companies: int = (
+                len(prior_evidence.companies) if prior_evidence is not None else 0
+            )
+            scoring = cast(Optional[ScoringResult], node_update.get("scoring"))
+            scored_companies: int = len(scoring.companies) if scoring is not None else 0
+            return WorkflowStageCounts(
+                input_count=input_companies,
+                accepted_count=scored_companies,
+                rejected_count=max(input_companies - scored_companies, 0),
+            )
+        if node == "recommend":
+            prior_scoring = cast(Optional[ScoringResult], previous_state.get("scoring"))
+            input_companies = (
+                len(prior_scoring.companies) if prior_scoring is not None else 0
+            )
+            recommendation = cast(
+                Optional[RecommendationResult],
+                node_update.get("recommendation"),
+            )
+            decided: int = (
+                len(recommendation.decisions) if recommendation is not None else 0
+            )
+            return WorkflowStageCounts(
+                input_count=input_companies,
+                accepted_count=decided,
+                rejected_count=max(input_companies - decided, 0),
+            )
+        if node == "select_candidates":
+            candidate_selection = cast(
+                Optional[CandidateSelectionResult],
+                node_update.get("candidate_selection"),
+            )
+            if candidate_selection is None:
+                return None
+            return WorkflowStageCounts(
+                input_count=len(candidate_selection.evaluations),
+                accepted_count=len(candidate_selection.candidates),
+                rejected_count=len(candidate_selection.excluded),
+            )
+        return None
 
     def _result_from_final_state(
         self,

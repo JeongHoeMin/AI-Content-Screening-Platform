@@ -42,6 +42,7 @@ from app.workflows import (
     ScreeningResult,
     ScreeningWorkflow,
     WorkflowContext,
+    WorkflowProgressEvent,
     WorkflowStatistics,
 )
 
@@ -366,6 +367,39 @@ async def test_workflow_runs_in_order_and_preserves_event_identity() -> None:
     assert result.statistics.impact_diagnostics.events_without_impact_observations == 0
     assert result.statistics.impact_diagnostics.eligible_impact_observations == 0
     assert result.statistics.impact_diagnostics.scored_company_count == 0
+
+
+@pytest.mark.anyio
+async def test_workflow_progress_reports_per_stage_input_accepted_rejected_counts() -> None:
+    articles: Tuple[Article, ...] = (build_article(1), build_article(2))
+    workflow, *_ = build_workflow(
+        ("article-1", "article-2"),
+        decisions=(ScreeningDecisionType.ACCEPT, ScreeningDecisionType.REJECT),
+    )
+    events: List[WorkflowProgressEvent] = []
+
+    async def record(event: WorkflowProgressEvent) -> None:
+        events.append(event)
+
+    await workflow.run_with_progress(articles, record, context=WorkflowContext())
+
+    by_node = {event.node: event for event in events}
+    assert by_node["evaluate"].stage_counts.input_count == 2
+    assert by_node["evaluate"].stage_counts.accepted_count == 2
+    assert by_node["evaluate"].stage_counts.rejected_count == 0
+
+    # No event_deduplicator is configured in build_workflow, so deduplicate is a passthrough.
+    dedup_counts = by_node["deduplicate"].stage_counts
+    assert dedup_counts.input_count == dedup_counts.accepted_count == 2
+    assert dedup_counts.rejected_count == 0
+
+    screen_counts = by_node["screen"].stage_counts
+    assert screen_counts.input_count == 2
+    assert screen_counts.accepted_count == 1
+    assert screen_counts.rejected_count == 1
+
+    select_counts = by_node["select_candidates"].stage_counts
+    assert select_counts.input_count == select_counts.accepted_count == select_counts.rejected_count == 0
 
 
 @pytest.mark.anyio
