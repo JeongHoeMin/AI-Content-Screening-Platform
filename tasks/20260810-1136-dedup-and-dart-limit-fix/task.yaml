@@ -4,10 +4,10 @@ id: "20260810-1136-dedup-and-dart-limit-fix"
 title: "deduplicate unexpected_error 및 DART page_count/period 결합 문제 조사·수정"
 description: "직전 작업에서 실제 대시보드 실행 중 발견하고 후속 과제로 남긴 두 가지 문제를 조사하고 수정한다. (1) deduplicate 단계가 매 실행마다 unexpected_error로 중단되는 문제 — 원인은 DeduplicationComparisonResponseItem이 candidate_index/relation/confidence/reasons 필드를 bare object로 선언해, OpenAI Structured Outputs strict mode가 'schema must have a type key' BadRequestError로 거부하기 때문임을 실제 API 호출로 재현·확인했다. (2) 대시보드 '분석 건수' 선택이 DART list.json 조회의 page_count를 그대로 결정해, period_hours를 7일로 늘려도 소규모 건수 선택 시 DART가 최신 소수 건만 반환해 event-type allowlist 통과 건이 0에 가까워지는 문제 — discovery 목록 조회를 표시 건수와 분리해 별도 상한으로 늘린다. 완료 후 docker compose로 재배포하고 실제 브라우저에서 확인한다."
 
-status: in_progress
+status: completed
 
 createdAt: "2026-08-10T11:36:35+09:00"
-updatedAt: "2026-08-10T11:37:00+09:00"
+updatedAt: "2026-08-10T11:56:00+09:00"
 
 agent:
   provider: "claude-code"
@@ -74,17 +74,40 @@ plan:
 
     - id: 5
       description: "docker compose로 재빌드·재배포하고 실제 브라우저에서 두 문제가 해결되었는지 확인한다."
-      status: in_progress
+      status: completed
 
     - id: 6
       description: "(범위 확장) dedup 수정 후 실제 실행에서 screen 단계가 새로 unexpected_error로 실패하는 것을 발견해 원인(requires_cross_validation 프롬프트 모호성으로 공식 DART 공시 콘텐츠에서 필드가 누락됨)을 실제 API 호출로 재현·확인하고 프롬프트를 수정한다."
       status: completed
 
 result:
-  summary: null
-  changedFiles: []
-  verifications: []
-  completedAt: null
+  summary: "직전 작업에서 후속 과제로 남긴 두 문제를 조사·수정했고, 수정 과정에서 실제 실행으로 드러난 세 번째 문제까지 추가로 고쳐 대시보드가 처음으로 13/13 단계 전체를 완주했다. (1) deduplicate: DeduplicationComparisonResponseItem이 bare object 필드를 써서 OpenAI Structured Outputs strict mode가 BadRequestError로 거부했다 — app/models/screening.py·cross_validation.py와 동일한 Union[Strict*, None] 패턴으로 교체. (2) DART discovery: page_count가 대시보드 표시 건수에 묶여 있어 7일로 기간을 늘려도 작은 건수 선택 시 DART가 최신 소수 건만 반환했다 — page_count=100 고정 + 최대 5페이지 페이지네이션으로 표시 건수와 분리. (3) (범위 확장) dedup 수정 후 실제 실행에서 screen 단계가 동일한 unexpected_error로 실패하는 것을 발견 — 원인은 requires_cross_validation 프롬프트 문구가 조건부로 읽혀 공식 DART 공시처럼 신뢰도 높은 콘텐츠에서 모델이 필드를 아예 생략(null)했고, Parser의 엄격한 bool 검사가 전량 거부한 것. 실제 API 호출로 재현·검증 후 프롬프트를 '항상 명시적 true/false' 요구로 수정. 세 수정 모두 실제 OpenAI API 호출로 직접 재현·검증했고, docker compose 재배포 후 브라우저에서 10건 선택 기준 전체 13단계가 완료되어 6개 종목이 스크리닝·추천까지 도달하는 것을 확인했다."
+
+  changedFiles:
+    - "app/models/deduplication_comparison.py"
+    - "app/providers/dart.py"
+    - "app/prompt_templates/screening.py"
+    - "docs/WORKFLOW.md"
+    - "tests/test_llm_event_comparator.py"
+    - "tests/test_market_data_providers.py"
+    - "tests/test_llm_event_screener.py"
+    - "tasks/20260810-1136-dedup-and-dart-limit-fix/task.yaml"
+
+  verifications:
+    - command: "uv run pytest -q (매 수정 단계마다 반복 실행)"
+      result: passed
+      summary: "최종 615 passed, 1 skipped(기존 무관 skip). WorkflowStageCounts·DART 페이지네이션·구조화 응답 스키마·프롬프트 문구 회귀 테스트 포함."
+    - command: "docker exec ... python -c \"client.responses.parse(...)\" (dedup, screen 각각 수정 전/후 실제 OpenAI API 직접 호출)"
+      result: passed
+      summary: "수정 전 BadRequestError('schema must have a type key')·requires_cross_validation=None을 각각 재현했고, 수정 후 동일 호출이 성공하고 requires_cross_validation=False로 정상 반환됨을 확인했다."
+    - command: "docker exec ... python -c \"await provider.collect(request)\" 및 총 3회 docker-compose build --no-cache + up -d 재배포"
+      result: passed
+      summary: "재배포마다 dashboard/postgres healthy, db-migrate ExitCode 0 확인."
+    - command: "실제 브라우저로 http://localhost:8000에서 '적게 10건' 선택 후 실행 (최종 재배포 이후)"
+      result: passed
+      summary: "13/13 단계 완료. 뉴스·공시 수집 입력10·통과10, 이벤트 추출 입력10·통과6·탈락4, 이벤트 중복판정 입력6·통과6·탈락0, AI Screening 입력6·통과6·탈락0으로 정상 진행되어 6개 이벤트가 추천 후보 6건으로 select_candidates까지 도달했다."
+
+  completedAt: "2026-08-10T11:56:00+09:00"
 
 blocker:
   reason: null
@@ -106,3 +129,11 @@ history:
   - at: "2026-08-10T12:00:00+09:00"
     status: in_progress
     message: "Allowed paths expanded to app/prompt_templates/screening.py and tests/test_llm_event_screener.py. After redeploying with both fixes, a live browser run got past deduplicate for the first time but then failed at screen with the same unexpected_error signature. Confirmed via a live API call with realistic official-DART-filing content (not synthetic short text) that gpt-4o-mini omits requires_cross_validation entirely (returns null) for exactly this kind of well-sourced primary-source content, because the prompt said 'Set requires_cross_validation when [conditions]' which reads as conditional presence rather than an always-required field; DefaultScreeningAssessmentParser's `type(value) is not bool` check then rejects every candidate in the batch, and NoValidScreeningDecisionsError's underlying provider error type isn't in the dashboard's safe-error allowlist so it renders as unexpected_error. This is a systemic, not one-off, bug: DART is now the default discovery source (ADR-026) and official filings are structurally exactly the 'well-sourced, not weak/anonymous/disputed' case the old wording invited the model to skip. Reworded the prompt to require an explicit true/false always. Re-verified with the same realistic content that the model now returns false correctly. Added a prompt-content regression test. Full pytest suite: 615 passed, 1 skipped."
+
+  - at: "2026-08-10T12:05:00+09:00"
+    status: testing
+    message: "Rebuilt (--no-cache) and redeployed dashboard/schedule-worker with all three fixes. Ran a live browser recommendation with the default '적게 10건' selection: completed all 13/13 workflow stages for the first time this session, screening 6 real DART-sourced events through to select_candidates (6 candidates, 0 excluded). Confirms all three fixes work together in the actual deployed service."
+
+  - at: "2026-08-10T11:56:00+09:00"
+    status: completed
+    message: "Task completed: all three bugs fixed, verified individually against the live OpenAI API, and verified together end-to-end in the redeployed docker service via a real browser run."
