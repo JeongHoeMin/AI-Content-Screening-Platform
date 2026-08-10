@@ -109,6 +109,12 @@ def test_dashboard_uses_low_default_collection_limit() -> None:
     assert request.limit == 10
 
 
+def test_dashboard_defaults_to_a_seven_day_collection_period() -> None:
+    request: RecommendationRunRequest = RecommendationRunRequest()
+
+    assert request.period_hours == 168
+
+
 def test_dashboard_defaults_to_market_wide_dart_discovery_with_optional_rss() -> None:
     assert DEFAULT_ANALYSIS_SOURCES == (CommunityType.DART, CommunityType.IR_RSS)
 

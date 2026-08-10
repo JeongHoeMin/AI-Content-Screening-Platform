@@ -106,7 +106,7 @@ class RecommendationRunRequest(BaseModel):
 
     category: str = Field(default="국내 증시", min_length=1, max_length=100)
     limit: Literal[10, 25, 50, 100] = 10
-    period_hours: int = Field(default=24, ge=1, le=168)
+    period_hours: int = Field(default=168, ge=1, le=168)
     themes: tuple[InvestmentTheme, ...] = ()
     topics: tuple[NewsTopic, ...] = ()
 
