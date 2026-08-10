@@ -22,7 +22,9 @@ event-type allowlist(`DartEventTypeAllowlist`, 대규모 공급계약·실적/�
 유상증자/CB/자사주·규제/소송 6개 카테고리)로 먼저 판정해 통과한 공시만 원문 문서를 조회한다. 이
 사전 필터는 LLM이 아니라 코드가 소유하며, 정기적·반복적 공시(사업보고서·최대주주변동신고 등)는 document
 API 호출 전에 제외된다. 전문 파일이 실제로 없는 공시(`014` 등)는 필터를 통과했더라도 재시도하지 않는
-item-local 오류로 폐기한다. `IR_RSS_FEEDS`는 특정 회사를 추가로 깊게 추적하고 싶을 때 쓰는 선택적 보강
+item-local 오류로 폐기한다. 목록 조회는 대시보드가 요청한 표시 건수(`CollectPostsRequest.limit`)와 무관하게
+페이지당 최대 100건, 최대 5페이지(최대 500건)까지 기간 내 후보를 스캔한다. 표시 건수는 최종 결과를
+자르는 별도의 하위 truncation일 뿐이며 discovery 스캔 폭을 줄이지 않는다. `IR_RSS_FEEDS`는 특정 회사를 추가로 깊게 추적하고 싶을 때 쓰는 선택적 보강
 source이며, 비어 있어도 DART discovery만으로 실행이 시작된다. DART·IR_RSS 모두 사용할 provider가
 하나도 없을 때만 실행을 시작하지 않고 configuration 오류를 반환한다. Naver 검색 결과는 기존과 동일하게
 탐색 전용이며 분석 입력으로 사용하지 않는다.

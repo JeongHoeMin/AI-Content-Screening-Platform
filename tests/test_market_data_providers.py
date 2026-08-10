@@ -43,6 +43,24 @@ class JsonHttpClientDouble(JsonHttpClient):
         return self.payload
 
 
+class SequencedJsonHttpClientDouble(JsonHttpClient):
+    """Returns one payload per call in order, recording every query made."""
+
+    def __init__(self, payloads: List[Mapping[str, Any]]) -> None:
+        self.payloads: List[Mapping[str, Any]] = payloads
+        self.queries: List[Mapping[str, str]] = []
+
+    async def get(
+        self,
+        url: str,
+        headers: Mapping[str, str],
+        query: Mapping[str, str],
+        timeout_seconds: float,
+    ) -> Mapping[str, Any]:
+        self.queries.append(query)
+        return self.payloads[len(self.queries) - 1]
+
+
 class BytesHttpClientDouble(BytesHttpClient):
     def __init__(self, payload: bytes) -> None:
         self.payload: bytes = payload
@@ -186,7 +204,8 @@ def test_dart_provider_uses_requested_period_and_preserves_disclosure_metadata()
 
     assert client.url == "https://opendart.fss.or.kr/api/list.json"
     assert client.query["crtfc_key"] == "dart-key"
-    assert client.query["page_count"] == "5"
+    assert client.query["page_count"] == "100"
+    assert client.query["page_no"] == "1"
     assert len(raw_posts) == 1
     assert isinstance(raw_posts[0], RawDartDisclosurePost)
     assert raw_posts[0].stock_code == "005930"
@@ -251,6 +270,76 @@ def test_dart_provider_filters_periodic_disclosures_before_fetching_the_document
     assert raw_posts[0].report_name == "유상증자결정"
     assert document_client.call_count == 1
     assert document_client.query["rcept_no"] == "20260730000002"
+
+
+def _dart_list_item(rcept_no: str, report_name: str) -> dict:
+    return {
+        "corp_code": "00126380",
+        "corp_name": "삼성전자",
+        "stock_code": "005930",
+        "corp_cls": "Y",
+        "report_nm": report_name,
+        "rcept_no": rcept_no,
+        "flr_nm": "삼성전자",
+        "rcept_dt": "20260730",
+    }
+
+
+def test_dart_provider_scans_a_large_display_limit_independent_discovery_page_size() -> None:
+    """A small dashboard '분석 건수' selection (small request.limit) must not also
+    shrink how much of the requested period DART scans for candidates."""
+    client: SequencedJsonHttpClientDouble = SequencedJsonHttpClientDouble(
+        [
+            {
+                "status": "000",
+                "list": [_dart_list_item("20260730000001", "유상증자결정")],
+                "total_page": 2,
+            },
+            {
+                "status": "000",
+                "list": [_dart_list_item("20260730000002", "합병결정")],
+                "total_page": 2,
+            },
+        ]
+    )
+    document_client: BytesHttpClientDouble = BytesHttpClientDouble(build_document_zip())
+    provider: DartDisclosureProvider = DartDisclosureProvider(
+        DartConfig(api_key="dart-key"), client, document_client
+    )
+    request: CollectPostsRequest = CollectPostsRequest(
+        sources=[CommunityType.DART], limit=5, period=timedelta(days=7)
+    )
+
+    raw_posts: List[RawPost] = asyncio.run(provider.collect(request))
+
+    assert len(client.queries) == 2
+    assert client.queries[0]["page_no"] == "1"
+    assert client.queries[0]["page_count"] == "100"
+    assert client.queries[1]["page_no"] == "2"
+    assert len(raw_posts) == 2
+
+
+def test_dart_provider_stops_pagination_at_the_safety_cap() -> None:
+    endless_page: Mapping[str, Any] = {
+        "status": "000",
+        "list": [_dart_list_item("20260730000001", "유상증자결정")],
+        "total_page": 999,
+    }
+    client: SequencedJsonHttpClientDouble = SequencedJsonHttpClientDouble(
+        [endless_page] * 5
+    )
+    document_client: BytesHttpClientDouble = BytesHttpClientDouble(build_document_zip())
+    provider: DartDisclosureProvider = DartDisclosureProvider(
+        DartConfig(api_key="dart-key"), client, document_client
+    )
+    request: CollectPostsRequest = CollectPostsRequest(
+        sources=[CommunityType.DART], limit=5, period=timedelta(days=7)
+    )
+
+    raw_posts: List[RawPost] = asyncio.run(provider.collect(request))
+
+    assert len(client.queries) == 5
+    assert len(raw_posts) == 5
 
 
 def test_dart_provider_uses_request_ended_at_with_korean_calendar_projection() -> None:

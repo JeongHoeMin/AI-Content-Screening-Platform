@@ -62,12 +62,12 @@ plan:
       status: completed
 
     - id: 3
-      description: "DartDisclosureProvider의 목록 조회 page_count를 request.limit과 분리해 discovery 단계에서 더 넓게 스캔하도록 수정한다(안전 상한 포함). 관련 테스트를 추가한다."
-      status: in_progress
+      description: "DartDisclosureProvider의 목록 조회 page_count를 request.limit과 분리해 discovery 단계에서 더 넓게 스캔하도록 수정한다(안전 상한 포함, 실제 OpenDART API로 total_page/total_count 필드명 확인 완료). 관련 테스트를 추가한다."
+      status: completed
 
     - id: 4
       description: "uv run pytest로 전체 테스트 스위트를 실행해 검증한다."
-      status: pending
+      status: completed
 
     - id: 5
       description: "docker compose로 재빌드·재배포하고 실제 브라우저에서 두 문제가 해결되었는지 확인한다."
@@ -91,3 +91,7 @@ history:
   - at: "2026-08-10T11:45:00+09:00"
     status: in_progress
     message: "Fixed DeduplicationComparisonResponseItem to use the Union[StrictInt/StrictStr/StrictBool/..., None] pattern already established in app/models/screening.py and app/models/cross_validation.py, instead of a plain Optional[int]/Optional[str] first attempt, for consistency with how this codebase keeps LLM response fields defensively typed for the Parser while still satisfying OpenAI strict-schema requirements. Verified via a real OpenAI API call inside the running dashboard container (docker cp of the fixed file) that the BadRequestError is gone and the call succeeds. Added a fast offline regression test (schema anyOf check, mirroring the existing pattern in tests/test_llm_cross_validator.py) so this class of bug is caught without needing a live API call. Full pytest suite: 612 passed, 1 skipped."
+
+  - at: "2026-08-10T11:55:00+09:00"
+    status: in_progress
+    message: "Confirmed OpenDART list.json's real response envelope (status/message/page_no/page_count/total_count/total_page/list) via a live call inside the container. Rewrote DartDisclosureProvider.collect to paginate at a fixed page_count=100 (independent of CollectPostsRequest.limit) up to a 5-page safety cap, using total_page to decide whether to continue. Updated the existing page_count=='5' assertion (now '100') and added two new tests: multi-page aggregation and the 5-page safety-cap stop. Updated docs/WORKFLOW.md to describe the discovery-scan-vs-display-limit split. Full pytest suite: 614 passed, 1 skipped."
