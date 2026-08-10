@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 import structlog
@@ -33,6 +34,7 @@ from app.harness.recommendation_prices import (
     RecommendationPerformanceService,
     RecommendationPriceRecorder,
 )
+from app.harness.worker_heartbeat import DEFAULT_HEARTBEAT_PATH, WorkerHeartbeat
 from app.market_prices import KisRealtimePriceClient, KrxClosingPriceClient, MarketPriceService
 from app.market_prices.performance import RecommendationPerformanceItem, RecommendationPerformanceResponse
 from app.web.app import DashboardRunManager, RecommendationRunRequest
@@ -122,11 +124,21 @@ async def run_forever() -> None:
         reporter=reporter,
         worker_id=worker_id or "schedule-worker",
     )
-    while True:
-        completed: int = await worker.run_due(datetime.now(timezone.utc))
-        if completed:
-            logger.info("scheduled_recommendation_runs_completed", count=completed)
-        await asyncio.sleep(30)
+    # Refreshed on its own interval so a legitimately long run is not mistaken
+    # for a stalled worker, while a dead process or blocked loop stops it.
+    heartbeat = WorkerHeartbeat(
+        Path(os.environ.get("SCHEDULE_WORKER_HEARTBEAT_PATH", DEFAULT_HEARTBEAT_PATH))
+    )
+    heartbeat.touch()
+    heartbeat_task: asyncio.Task[None] = asyncio.create_task(heartbeat.run_forever())
+    try:
+        while True:
+            completed: int = await worker.run_due(datetime.now(timezone.utc))
+            if completed:
+                logger.info("scheduled_recommendation_runs_completed", count=completed)
+            await asyncio.sleep(30)
+    finally:
+        heartbeat_task.cancel()
 
 
 def _create_optional_price_recorder(

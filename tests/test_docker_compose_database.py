@@ -39,6 +39,14 @@ def test_frontend_image_runs_the_standalone_server_as_a_non_root_user() -> None:
     assert 'CMD ["node", "server.js"]' in dockerfile
 
 
+def test_compose_healthchecks_the_worker_by_heartbeat_not_by_http() -> None:
+    """The worker serves no HTTP, so the image's request-based check never passes."""
+    compose: str = Path("docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "app.worker_healthcheck" in compose
+    assert "healthcheck:" in compose
+
+
 def test_compose_forwards_optional_kis_configuration_to_runtime_services() -> None:
     compose: str = Path("docker-compose.yml").read_text(encoding="utf-8")
 

@@ -85,6 +85,14 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       SCHEDULE_WORKER_ID: ${SCHEDULE_WORKER_ID:-schedule-worker}
+    # This service serves no HTTP, so it replaces the image's request-based
+    # healthcheck with the worker's own liveness heartbeat.
+    healthcheck:
+      test: ["CMD", "/app/.venv/bin/python", "-m", "app.worker_healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
     depends_on:
       db-migrate:
         condition: service_completed_successfully

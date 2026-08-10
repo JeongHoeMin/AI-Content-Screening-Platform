@@ -1,0 +1,179 @@
+schemaVersion: 1
+
+id: "20260810-1445-schedule-worker-heartbeat"
+title: "schedule-worker의 잘못된 HTTP healthcheck를 실제 liveness heartbeat로 교체"
+description: |
+  schedule-worker 컨테이너가 영구적으로 unhealthy 상태다(연속 실패 52회 관측). 원인은 이 서비스가
+  루트 Dockerfile을 그대로 사용하면서 그 안의 HEALTHCHECK(http://127.0.0.1:8000/api/health 호출)를
+  상속받기 때문이다. 하지만 schedule-worker는 command를 `python -m app.scheduled_worker`로
+  덮어써서 HTTP를 서빙하지 않으므로 이 healthcheck는 영원히 Connection refused로 실패한다.
+  이 상태의 실질적 문제는 빨간 표시 자체가 아니라, 워커가 정상일 때와 실제로 죽었을 때를 구분할
+  수 없다는 점이다. healthcheck를 단순히 끄면 표시만 사라지고 이 문제는 그대로 남는다.
+  코드를 확인한 결과 워커는 30초 폴링 루프이며 실행이 발생했을 때만 로그를 남기고 유휴 시에는
+  아무 관측 신호도 남기지 않는다. 따라서 워커가 주기적으로 heartbeat 파일을 갱신하도록 하고,
+  healthcheck가 그 파일의 신선도를 검사하도록 바꾼다. heartbeat는 run_due와 독립된 asyncio task로
+  기록해, 정상적으로 오래 걸리는 추천 실행 중에 거짓 unhealthy가 나지 않으면서도 이벤트 루프가
+  멈추거나 프로세스가 죽으면 감지되도록 한다.
+  이 작업은 이번 세션에서 발견한 기존 결함을 수정하는 것이며, Next.js 전환 작업과는 무관하다.
+
+status: completed
+
+createdAt: "2026-08-10T14:50:26+09:00"
+updatedAt: "2026-08-10T14:54:44+09:00"
+
+agent:
+  provider: "claude-code"
+  model: "claude-opus-5"
+  sessionId: null
+
+request:
+  summary: "schedule-worker가 영구 unhealthy로 표시되는 문제를 수정하되, 워커 생존 여부를 실제로 판별할 수 있게 만든다."
+  originalPrompt: "발견한문제에 대해수정해"
+
+scope:
+  allowedPaths:
+    - "app/harness/worker_heartbeat.py"
+    - "app/worker_healthcheck.py"
+    - "app/scheduled_worker.py"
+    - "docker-compose.yml"
+    - "tests/test_worker_heartbeat.py"
+    - "tests/test_docker_compose_database.py"
+    - "tasks/20260810-1445-schedule-worker-heartbeat/**"
+
+  deniedPaths:
+    - ".env"
+    - ".env.*"
+    - "secrets/**"
+    - ".venv/**"
+    - "__pycache__/**"
+    - ".git/**"
+    - "runtime/**"
+    - "dist/**"
+    - "build/**"
+    - ".agent/**"
+
+requirements:
+  items:
+    - "schedule-worker 컨테이너가 정상 동작 중일 때 healthy로 표시되어야 한다."
+    - "워커가 주기적으로 heartbeat를 기록해야 한다."
+    - "heartbeat 기록은 추천 실행(run_due)과 독립적으로 동작해 오래 걸리는 실행 중에도 갱신되어야 한다."
+    - "healthcheck는 heartbeat가 정해진 시간보다 오래되면 실패해야 한다."
+    - "heartbeat 파일에 민감 정보를 기록하지 않아야 한다."
+    - "heartbeat 신선도 판정 로직에 단위 테스트가 있어야 한다."
+    - "uv run pytest 전체가 통과해야 한다."
+    - "재배포 후 docker ps에서 schedule-worker가 더 이상 unhealthy가 아니어야 한다."
+
+plan:
+  steps:
+    - id: 1
+      description: "app/harness/worker_heartbeat.py에 heartbeat 기록과 신선도 판정 로직을 작성한다."
+      status: completed
+
+    - id: 2
+      description: "app/worker_healthcheck.py에 healthcheck 진입점을 작성한다."
+      status: completed
+
+    - id: 3
+      description: "app/scheduled_worker.py의 run_forever에서 heartbeat task를 함께 실행한다."
+      status: completed
+
+    - id: 4
+      description: "docker-compose.yml의 schedule-worker에 heartbeat 기반 healthcheck를 정의한다."
+      status: completed
+
+    - id: 5
+      description: "단위 테스트를 작성하고 uv run pytest로 검증한다."
+      status: completed
+
+    - id: 6
+      description: "컨테이너를 재빌드·재배포해 healthy로 전환되는지, 그리고 heartbeat가 오래되면 실패하는지 확인한다."
+      status: completed
+
+result:
+  summary: >
+    schedule-worker가 루트 Dockerfile의 HTTP healthcheck를 상속받아 영구 unhealthy(연속 실패 52회)
+    이던 문제를 실제 liveness 신호로 교체해 해결했다. healthcheck를 끄는 대신 heartbeat를 도입한
+    이유는, 끄면 표시만 사라질 뿐 워커가 실제로 죽었을 때와 정상일 때를 구분할 수 없다는 원래
+    문제가 그대로 남기 때문이다.
+    app/harness/worker_heartbeat.py가 heartbeat 기록·읽기·신선도 판정을 담당하고,
+    app/worker_healthcheck.py가 컨테이너 healthcheck 진입점으로 동작한다. 워커의 run_forever는
+    heartbeat를 run_due와 분리된 asyncio task로 10초마다 갱신하므로, 몇 분씩 걸리는 정상적인 추천
+    실행 중에도 거짓 unhealthy가 발생하지 않으면서 프로세스가 죽거나 이벤트 루프가 막히면 감지된다.
+    heartbeat에는 관측 시각만 기록하고 실행 내용·자격 증명은 담지 않는다. 미래 시각 heartbeat는
+    기록 측과 검사 측 시계가 어긋났다는 뜻이라 신뢰할 수 없으므로 실패로 처리한다. heartbeat 쓰기
+    실패는 경고 로그만 남기고 워커 루프를 중단시키지 않는다.
+    heartbeat 파일은 볼륨이 아닌 컨테이너 로컬 경로(/tmp)에 두어 호스트를 오염시키지 않고 컨테이너
+    단위 liveness를 정확히 반영하게 했다.
+
+  changedFiles:
+    - "app/harness/worker_heartbeat.py"
+    - "app/worker_healthcheck.py"
+    - "app/scheduled_worker.py"
+    - "docker-compose.yml"
+    - "tests/test_worker_heartbeat.py"
+    - "tests/test_docker_compose_database.py"
+    - "tasks/20260810-1445-schedule-worker-heartbeat/task.yaml"
+
+  verifications:
+    - command: "uv run pytest tests/test_worker_heartbeat.py -q"
+      result: passed
+      summary: >
+        8건 통과. 왕복 기록·읽기, 타임스탬프만 기록되는지, 파일 없음/빈 값/형식 오류/naive 시각의
+        오류 처리, 경계값(90초 이내 fresh·91초 stale), 미래 시각 거부, 시간대가 달라도 같은 순간이면
+        fresh 판정, 쓰기 불가 경로에서도 touch가 예외를 던지지 않는지, run_forever가 반복 갱신하는지를 검증했다.
+
+    - command: "uv run pytest tests/test_docker_compose_database.py -q"
+      result: passed
+      summary: "worker healthcheck가 HTTP가 아닌 app.worker_healthcheck를 사용하는지 검증하는 테스트를 추가해 5건 모두 통과했다."
+
+    - command: "uv run pytest -q"
+      result: passed
+      summary: "전체 627개 통과, 1개 skip(실계약 opt-in). 이전 618개에서 heartbeat 테스트 8건과 compose 테스트 1건이 늘었다."
+
+    - command: "uv run python -m compileall app tests -q"
+      result: passed
+      summary: "구문 오류 없이 전체 컴파일에 성공했다."
+
+    - command: "SCHEDULE_WORKER_HEARTBEAT_PATH를 바꿔가며 uv run python -m app.worker_healthcheck 종료 코드 확인"
+      result: passed
+      summary: >
+        파일 없음 exit 1, 최신 heartbeat exit 0, 5분 지난 heartbeat exit 1, 미래 시각 exit 1,
+        SCHEDULE_WORKER_HEARTBEAT_MAX_AGE_SECONDS로 임계값을 줄였을 때 exit 1로 다섯 경우 모두
+        기대대로 동작했다.
+
+    - command: "docker-compose up -d --build schedule-worker 후 docker inspect로 health 상태 확인"
+      result: passed
+      summary: >
+        재배포 10초 만에 unhealthy(연속 실패 52회)에서 healthy(failing streak 0)로 전환되었고,
+        dashboard·frontend·postgres를 포함한 4개 컨테이너가 모두 healthy 상태가 되었다.
+
+    - command: "컨테이너 내부에서 heartbeat를 인위적으로 10분 전으로 조작한 뒤 healthcheck 실행 및 자동 복구 확인"
+      result: passed
+      summary: >
+        조작 직후 healthcheck가 'Worker heartbeat is stale'과 함께 exit 1을 반환해 죽은 워커를 실제로
+        감지할 수 있음을 확인했다. 이어서 15초 뒤 heartbeat가 05:54:08에서 05:54:38로 워커에 의해
+        자동 갱신되고 healthcheck가 다시 exit 0이 되어, heartbeat task가 기동 시 한 번만 쓰는 것이
+        아니라 실제로 주기 실행 중임을 확인했다.
+
+  completedAt: "2026-08-10T14:54:44+09:00"
+
+blocker:
+  reason: null
+  requiredAction: null
+
+history:
+  - at: "2026-08-10T14:50:26+09:00"
+    status: planning
+    message: "Task created after diagnosing the permanently unhealthy schedule-worker: it inherits the API image's HTTP healthcheck but serves no HTTP. Chose a real heartbeat over disabling the check, because disabling would hide a genuinely dead worker just as effectively as the current broken check does."
+
+  - at: "2026-08-10T14:52:00+09:00"
+    status: in_progress
+    message: "Implemented the heartbeat module, the healthcheck entry point, and the worker wiring. Ran the heartbeat refresh as a separate asyncio task rather than inside the polling loop, so a recommendation run that legitimately takes minutes cannot be mistaken for a stall."
+
+  - at: "2026-08-10T14:53:30+09:00"
+    status: testing
+    message: "Verified the healthcheck exit codes for missing, fresh, stale, future, and custom-threshold heartbeats. An earlier attempt reported exit 0 for every case because the shell captured the exit status of a piped tail rather than the python command; re-measured without the pipe to get accurate codes."
+
+  - at: "2026-08-10T14:54:44+09:00"
+    status: completed
+    message: "Task completed and verified. The container reached healthy within 10 seconds of redeploy, a deliberately staled heartbeat made the same check fail, and the worker then refreshed it on its own, proving the heartbeat task keeps running rather than writing once at startup."
