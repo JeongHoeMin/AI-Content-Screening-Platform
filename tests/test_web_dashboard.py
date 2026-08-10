@@ -279,6 +279,25 @@ def test_dashboard_rejects_unknown_event_stream_before_response_starts() -> None
     assert response.status_code == 404
 
 
+def test_event_stream_forbids_intermediaries_from_buffering_or_compressing() -> None:
+    """A proxy that gzips or buffers this stream freezes the progress UI."""
+
+    class _SingleEventManager(DashboardRunManager):
+        def ensure_exists(self, run_id: str) -> None:
+            return None
+
+        async def events(self, run_id: str):  # type: ignore[override]
+            yield DashboardEvent(type="heartbeat", message="probe")
+
+    client: TestClient = TestClient(create_web_app(_SingleEventManager()))
+
+    with client.stream("GET", "/api/runs/any/events") as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        assert "no-transform" in response.headers["cache-control"]
+        assert response.headers["x-accel-buffering"] == "no"
+
+
 def test_dashboard_health_endpoint_is_ready_without_credentials() -> None:
     client: TestClient = TestClient(create_web_app())
 

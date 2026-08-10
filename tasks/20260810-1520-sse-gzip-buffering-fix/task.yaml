@@ -1,0 +1,172 @@
+schemaVersion: 1
+
+id: "20260810-1520-sse-gzip-buffering-fix"
+title: "Next.js gzip 압축이 SSE 진행 상황 스트림을 막는 문제 수정"
+description: |
+  사용자가 React 화면에서 추천 분석을 실행했을 때 경과 시간만 흐르고 진행 상황이 전혀 갱신되지
+  않는다고 보고했다.
+  원인 규명 과정에서 처음 두 가설(백엔드가 수집 완료 전에는 heartbeat를 보내지 않는다, 수집이
+  이벤트 루프를 블로킹한다)은 모두 코드 확인으로 반증되었다. `_emit_heartbeats`는 수집 시작 전에
+  이미 기동하고, HTTP 클라이언트는 asyncio.to_thread를 사용해 루프를 막지 않는다. 백엔드 SSE를
+  직접 관찰한 결과 heartbeat가 5초 간격으로 정확히 송신되고 있었고, Next.js 프록시를 거친 curl
+  에서도 45초에 14개 이벤트가 정상 수신되었다.
+  결정적 차이는 Accept-Encoding이었다. curl은 압축을 요청하지 않지만 브라우저는 gzip을 요청한다.
+  Next.js는 기본적으로 응답을 gzip 압축하며(`compress` 기본값 true), 압축 버퍼가 SSE 청크를
+  붙잡아 스트림을 사실상 무력화한다. 동일 실행을 Accept-Encoding만 바꿔 비교한 결과,
+  identity는 5초마다 데이터가 도착했고 gzip은 t+0에 15바이트(gzip 헤더)만 온 뒤 84초 동안 아무
+  데이터도 오지 않다가 실행이 끝날 때 한꺼번에 도착했다. 브라우저에서 raw EventSource로 확인했을
+  때도 readyState=1(OPEN), 오류 0인데 이벤트 수신은 0이었다.
+  이 문제는 개발 서버에서는 재현되지 않는다. Next.js 압축은 프로덕션 서버에만 적용되므로
+  `npm run dev`로 검증했던 이전 작업에서는 드러나지 않았고, frontend 컨테이너 배포 이후 처음
+  나타났다. 이전 compose 작업에서 페이지 로드와 API 프록시는 확인했지만 컨테이너에서 실제 추천
+  실행(SSE)까지 확인하지 않은 것이 검증 공백이었다.
+  next.config에서 압축을 끄고, 백엔드 SSE 응답에도 표준 no-transform·버퍼링 금지 헤더를 붙여
+  향후 다른 리버스 프록시 뒤에 배치되더라도 같은 문제가 재발하지 않게 한다.
+
+status: completed
+
+createdAt: "2026-08-10T15:22:00+09:00"
+updatedAt: "2026-08-10T15:29:08+09:00"
+
+agent:
+  provider: "claude-code"
+  model: "claude-opus-5"
+  sessionId: null
+
+request:
+  summary: "React 화면에서 추천 분석 실행 시 진행 상황이 갱신되지 않는 문제를 수정한다."
+  originalPrompt: "지금근데 react 화면에서 추천분석을돌렸는데 시간만 흐로고 실제로 작업이되는지 모르겠어"
+
+scope:
+  allowedPaths:
+    - "frontend/next.config.ts"
+    - "app/web/app.py"
+    - "tests/test_web_dashboard.py"
+    - "tasks/20260810-1520-sse-gzip-buffering-fix/**"
+
+  deniedPaths:
+    - ".env"
+    - ".env.*"
+    - "secrets/**"
+    - ".venv/**"
+    - "__pycache__/**"
+    - ".git/**"
+    - "runtime/**"
+    - "dist/**"
+    - "build/**"
+    - ".agent/**"
+
+requirements:
+  items:
+    - "브라우저에서 추천 분석을 실행하면 진행 상황이 실행 중에 실시간으로 갱신되어야 한다."
+    - "SSE 응답이 gzip으로 압축되지 않아야 한다."
+    - "SSE 응답에 프록시 변형과 버퍼링을 금지하는 헤더가 포함되어야 한다."
+    - "SSE 응답 헤더를 검증하는 테스트가 있어야 한다."
+    - "uv run pytest 전체와 frontend의 lint·build·test가 통과해야 한다."
+    - "컨테이너로 배포된 프로덕션 빌드에서 브라우저 실행을 직접 확인한다."
+
+plan:
+  steps:
+    - id: 1
+      description: "frontend/next.config.ts에서 compress를 끄고 이유를 주석으로 남긴다."
+      status: completed
+
+    - id: 2
+      description: "app/web/app.py의 SSE 응답에 no-transform·no-cache·X-Accel-Buffering 헤더를 추가한다."
+      status: completed
+
+    - id: 3
+      description: "SSE 응답 헤더 테스트를 추가하고 uv run pytest로 검증한다."
+      status: completed
+
+    - id: 4
+      description: "frontend와 dashboard 컨테이너를 재빌드·재배포한다."
+      status: completed
+
+    - id: 5
+      description: "Accept-Encoding: gzip으로 스트리밍이 정상인지 확인하고, 브라우저에서 추천 실행 중 진행 상황이 갱신되는지 직접 확인한다."
+      status: completed
+
+result:
+  summary: >
+    Next.js가 프록시 응답을 기본 gzip 압축하면서 SSE 청크를 압축 버퍼에 붙잡아 진행 상황 스트림이
+    사실상 무력화되던 문제를 수정했다. frontend/next.config.ts에 compress: false를 설정하고,
+    백엔드 SSE 응답에도 Cache-Control: no-cache, no-transform과 X-Accel-Buffering: no를 추가해
+    향후 nginx 등 다른 리버스 프록시 뒤에 배치되더라도 같은 증상이 재발하지 않도록 했다.
+    원인 규명 과정에서 두 개의 가설이 반증되었다는 점을 기록해 둔다. (1) 백엔드가 수집 완료 전에는
+    heartbeat를 보내지 않는다 -> `_emit_heartbeats`가 수집 시작 전에 이미 기동함을 코드로 확인해
+    반증. (2) 수집 단계가 이벤트 루프를 블로킹한다 -> HTTP 클라이언트가 asyncio.to_thread를 쓰는
+    것을 확인해 반증. 백엔드 SSE를 직접 관찰하니 heartbeat가 5초 간격으로 정확히 나오고 있었고,
+    프록시를 거친 curl도 45초에 14개를 정상 수신했다. 브라우저 raw EventSource만 readyState=1,
+    오류 0인 상태에서 수신 0이었고, curl과 브라우저의 유일한 차이인 Accept-Encoding을 바꿔
+    비교하면서 원인을 확정했다.
+    이 결함이 이전 작업에서 드러나지 않은 이유도 확인했다. Next.js 압축은 프로덕션 서버에만
+    적용되므로 `npm run dev`로 브라우저 실행을 검증했던 대시보드 포팅 작업에서는 정상 동작했고,
+    frontend 컨테이너 배포 이후에만 나타난다. compose 작업에서 페이지 로드와 API 프록시는
+    확인했지만 컨테이너에서 SSE 추천 실행까지 확인하지 않은 것이 검증 공백이었다.
+    부수적으로, 백그라운드 탭에서는 브라우저가 setInterval을 스로틀링해 "경과 시간" 표시가 멈추는
+    것을 관찰했다. 이는 SSE와 무관한 브라우저 기본 동작이며(같은 시점에 heartbeat 시각은 계속
+    갱신됨) 이번 작업에서 수정하지 않았다.
+
+  changedFiles:
+    - "frontend/next.config.ts"
+    - "app/web/app.py"
+    - "tests/test_web_dashboard.py"
+    - "tasks/20260810-1520-sse-gzip-buffering-fix/task.yaml"
+
+  verifications:
+    - command: "동일 실행에 대해 Accept-Encoding만 바꿔 :3000 SSE 스트림 비교 (수정 전)"
+      result: passed
+      summary: >
+        원인 확정 근거. identity는 t+0, 5, 10, 15, 20초에 데이터가 도착했고 gzip은 Content-Encoding:
+        gzip이 붙은 채 t+0에 15바이트(gzip 헤더)만 오고 84초 동안 아무 데이터도 오지 않다가 실행
+        종료 시 2807바이트가 한꺼번에 도착했다.
+
+    - command: "uv run pytest -q"
+      result: passed
+      summary: >
+        628개 통과, 1개 skip. SSE 응답이 no-transform과 X-Accel-Buffering: no를 반환하는지 검증하는
+        테스트를 추가했다. 최초 작성한 테스트는 _RunState()를 이벤트 루프 밖에서 만들어
+        RuntimeError로 실패했고, asyncio.Queue에 의존하지 않도록 events()를 오버라이드한 매니저로
+        다시 작성해 통과시켰다.
+
+    - command: "cd frontend && npm run lint && npm run build && npm test"
+      result: passed
+      summary: "lint 오류 0건, 4개 라우트 빌드 성공, vitest 13건 통과."
+
+    - command: "docker-compose up -d --build dashboard frontend 후 Accept-Encoding: gzip 스트림 재확인"
+      result: passed
+      summary: >
+        수정 후 gzip을 요청해도 Content-Encoding이 없고 t+0, 5, 10, 15초에 데이터가 정상 도착했다.
+        수정 전 84초 정적이던 것과 대비된다.
+
+    - command: "브라우저(컨테이너 프로덕션 빌드)에서 추천 실행 후 진행 상황 관찰"
+      result: passed
+      summary: >
+        t+21초에 타임라인 5건·3/13 단계 완료·서버 확인 2초 전으로 갱신되어 실행 중 실시간 반영을
+        확인했다. 긴 extract 단계 동안에도 heartbeat 시각이 계속 갱신되었고, 최종적으로 타임라인
+        16건·13/13 단계 완료·버튼 복구·결과 렌더링까지 정상 동작했다. 수정 전 동일 화면에서는
+        타임라인 0건·0/13 단계·서버 확인이 시작 시각에 멈춰 있었다.
+
+  completedAt: "2026-08-10T15:29:08+09:00"
+
+blocker:
+  reason: null
+  requiredAction: null
+
+history:
+  - at: "2026-08-10T15:22:00+09:00"
+    status: planning
+    message: "Task created after isolating the cause by elimination: backend SSE emission and the proxy path were both proven healthy with curl, and the only remaining difference was Accept-Encoding. A same-run comparison showed identity streams every 5s while gzip delivers nothing for 84s."
+
+  - at: "2026-08-10T15:23:00+09:00"
+    status: in_progress
+    message: "Set compress: false in next.config.ts and added no-transform / X-Accel-Buffering headers to the SSE response so the stream also survives other reverse proxies."
+
+  - at: "2026-08-10T15:25:00+09:00"
+    status: testing
+    message: "The first version of the SSE header test failed with 'no current event loop' because it built _RunState() outside a loop; rewrote it with a manager that overrides events() so it does not need the asyncio queue."
+
+  - at: "2026-08-10T15:29:08+09:00"
+    status: completed
+    message: "Task completed and verified in the deployed production containers: gzip requests now stream every 5s, and a browser run showed the timeline and stage counts advancing live through to completion."

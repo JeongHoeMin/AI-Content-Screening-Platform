@@ -1099,7 +1099,16 @@ def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
             async for event in run_manager.events(run_id):
                 payload: str = json.dumps(event.model_dump(mode="json"), ensure_ascii=False)
                 yield f"event: {event.type}\ndata: {payload}\n\n"
-        return StreamingResponse(stream(), media_type="text/event-stream")
+        return StreamingResponse(
+            stream(),
+            media_type="text/event-stream",
+            # An intermediary that compresses or buffers this response holds the
+            # progress events until the run ends, which reads as a frozen UI.
+            headers={
+                "Cache-Control": "no-cache, no-transform",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     @app.get("/api/runs/{run_id}")
     async def get_result(run_id: str) -> DashboardRunResult:
