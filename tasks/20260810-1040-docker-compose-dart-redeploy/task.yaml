@@ -1,0 +1,113 @@
+schemaVersion: 1
+
+id: "20260810-1040-docker-compose-dart-redeploy"
+title: "docker-compose.yml에 DART_API_KEY 전달 추가 후 서비스 재배포"
+description: "사용자가 현재 서비스가 실제로 운영 가능한 상태인지 확인하고, 가능하면 docker compose로 서비스를 갱신해 달라고 요청했다. 점검 결과 docker-compose.yml의 dashboard/schedule-worker environment 블록에 DART_API_KEY가 빠져 있어(335ec0e에서 env_file 대신 명시적 allowlist로 바뀌며 누락), 방금 구현한 ADR-026 DART 기본 discovery가 컨테이너 안에서는 ConfigurationError로 실패하는 상태였다. 또한 postgres 컨테이너가 4일째 정지되어 있었다(대시보드 헬스체크는 DB 상태를 보지 않아 겉보기엔 healthy로 표시됨). 이 작업은 DART_API_KEY를 compose 환경변수로 추가하고, 이미지를 재빌드해 postgres·db-migrate·dashboard·schedule-worker를 정상 기동 상태로 재배포한다."
+
+status: completed
+
+createdAt: "2026-08-10T10:40:53+09:00"
+updatedAt: "2026-08-10T10:46:00+09:00"
+
+agent:
+  provider: "claude-code"
+  model: "claude-sonnet-5"
+  sessionId: null
+
+request:
+  summary: "현재 서비스가 실제로 운영 가능한 상태인지 점검하고, 가능하면 docker compose로 서비스를 갱신한다."
+  originalPrompt: "그럼 현재 실제로 서비스를운영할수있는 상태야? 운영할수있다면 docker compose를 이용해서 서비스를갱신하고알려줘"
+
+scope:
+  allowedPaths:
+    - "docker-compose.yml"
+    - "tasks/20260810-1040-docker-compose-dart-redeploy/**"
+
+  deniedPaths:
+    - ".env"
+    - ".env.*"
+    - "secrets/**"
+    - ".venv/**"
+    - "__pycache__/**"
+    - ".git/**"
+    - "runtime/**"
+    - "dist/**"
+    - "build/**"
+    - ".agent/**"
+
+requirements:
+  items:
+    - "현재 로컬 docker 상태(실행 중인 컨테이너, DB 상태, 최근 코드 변경 반영 여부)를 점검해 실제 운영 가능 여부를 사실대로 판단한다."
+    - "docker-compose.yml의 dashboard·schedule-worker 서비스가 DART_API_KEY를 컨테이너 환경변수로 전달하도록 수정한다(현재 누락되어 이번에 구현한 DART 기본 discovery가 컨테이너에서 ConfigurationError로 실패함)."
+    - "docker compose로 이미지를 재빌드하고 postgres·db-migrate·dashboard·schedule-worker 스택을 갱신한다. 기존 postgres_data 볼륨은 삭제하지 않는다."
+    - "재배포 후 각 컨테이너 상태와 대시보드 헬스체크, 로그 상 configuration 오류 여부를 확인한다."
+    - "점검 결과와 재배포 결과를 사용자에게 사실대로 보고하고, 검증하지 못한 부분은 숨기지 않는다."
+
+plan:
+  steps:
+    - id: 1
+      description: "docker ps, docker logs, docker inspect로 현재 실행 중인 컨테이너 상태와 코드/설정 반영 여부를 점검한다(완료: postgres 4일째 정지, docker-compose.yml에 DART_API_KEY 미전달 확인)."
+      status: completed
+
+    - id: 2
+      description: "docker-compose.yml의 dashboard·schedule-worker environment에 DART_API_KEY: ${DART_API_KEY:?DART_API_KEY is required}를 추가한다."
+      status: completed
+
+    - id: 3
+      description: "docker-compose build로 최신 코드(ADR-026 구현 포함)를 반영한 이미지를 빌드한다."
+      status: completed
+
+    - id: 4
+      description: "docker-compose up -d로 postgres 기동, db-migrate 실행, dashboard·schedule-worker를 새 이미지·환경변수로 재기동한다."
+      status: completed
+
+    - id: 5
+      description: "docker-compose ps, 헬스체크 응답, 컨테이너 로그로 정상 기동과 DART_API_KEY 관련 configuration 오류 부재를 확인한다."
+      status: completed
+
+result:
+  summary: "재배포 전 점검에서 두 가지 문제를 발견했다: (1) docker-compose.yml이 DART_API_KEY를 컨테이너에 전달하지 않아 방금 구현한 ADR-026 DART 기본 discovery가 컨테이너 안에서는 ConfigurationError로 실패하는 상태였고, (2) postgres 컨테이너가 4일째 정지되어 있었다(대시보드 헬스체크가 DB 상태를 확인하지 않아 겉보기엔 healthy로 표시됨). docker-compose.yml의 dashboard·schedule-worker environment에 DART_API_KEY를 필수 환경변수로 추가하고, --no-cache로 이미지를 재빌드해 최신 코드를 반영했다. docker-compose up -d로 postgres를 재기동(기존 postgres_data 볼륨 유지, 삭제 없음)하고 db-migrate를 실행(ExitCode 0, 추가 마이그레이션 없음)한 뒤 dashboard·schedule-worker를 새 이미지로 재생성했다. 컨테이너 내부에서 DEFAULT_ANALYSIS_SOURCES(DART, IR_RSS)로 create_market_collect_posts_skill을 직접 실행해 DART provider가 오류 없이 등록됨을 확인했다."
+
+  changedFiles:
+    - "docker-compose.yml"
+    - "tasks/20260810-1040-docker-compose-dart-redeploy/task.yaml"
+
+  verifications:
+    - command: "docker-compose config --quiet"
+      result: passed
+      summary: "수정한 docker-compose.yml 문법과 필수 환경변수 치환이 유효함을 확인했다."
+    - command: "docker-compose build --no-cache"
+      result: passed
+      summary: "dashboard, schedule-worker 이미지가 최신 소스로 캐시 없이 재빌드됨을 확인했다."
+    - command: "docker-compose up -d"
+      result: passed
+      summary: "postgres Healthy, db-migrate ExitCode 0, dashboard·schedule-worker가 새 이미지로 재생성되어 기동됨을 확인했다."
+    - command: "docker-compose ps / docker logs / curl -sf http://localhost:8000/api/health"
+      result: passed
+      summary: "dashboard와 postgres는 healthy, /api/health는 {\"status\":\"ok\"} 반환. dashboard 로그에 configuration 오류 없음."
+    - command: "docker exec ai-content-screening-platform-dashboard-1 /app/.venv/bin/python -c \"from app.market_data import create_market_collect_posts_skill; from app.web.app import DEFAULT_ANALYSIS_SOURCES; create_market_collect_posts_skill(list(DEFAULT_ANALYSIS_SOURCES))\""
+      result: passed
+      summary: "실제 재배포된 컨테이너 안에서 DART_API_KEY가 정상 주입되어 DART provider가 ConfigurationError 없이 등록됨을 직접 확인했다."
+
+  completedAt: "2026-08-10T10:46:00+09:00"
+
+blocker:
+  reason: null
+  requiredAction: null
+
+history:
+  - at: "2026-08-10T10:40:53+09:00"
+    status: planning
+    message: "Task created after discovering docker-compose.yml does not pass DART_API_KEY into containers and the postgres container has been stopped for 4 days, while investigating whether the service is currently operable."
+
+  - at: "2026-08-10T10:41:30+09:00"
+    status: in_progress
+    message: "Added DART_API_KEY to docker-compose.yml dashboard and schedule-worker environment blocks; docker-compose config validated cleanly."
+
+  - at: "2026-08-10T10:44:00+09:00"
+    status: in_progress
+    message: "Rebuilt images with --no-cache and ran docker-compose up -d: postgres restarted (existing postgres_data volume preserved), db-migrate exited 0, dashboard and schedule-worker recreated with the new image and DART_API_KEY."
+
+  - at: "2026-08-10T10:46:00+09:00"
+    status: completed
+    message: "Verified dashboard healthy, /api/health OK, and DART provider registers without ConfigurationError inside the running container. Noted (not fixed, out of scope) that schedule-worker inherits the Dockerfile's port-8000 HEALTHCHECK even though it does not serve HTTP, so docker-compose ps will show it as unhealthy despite the process running correctly; this predates this task."

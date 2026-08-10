@@ -24,6 +24,7 @@ services:
       WORKFLOW_AUDIT_LOG_PATH: /app/runtime/logs/execution-audit.jsonl
       OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
       KRX_API_KEY: ${KRX_API_KEY:?KRX_API_KEY is required}
+      DART_API_KEY: ${DART_API_KEY:?DART_API_KEY is required}
       KIS_APP_KEY: ${KIS_APP_KEY:-}
       KIS_APP_SECRET: ${KIS_APP_SECRET:-}
       KIS_ACCOUNT_PRODUCT_CODE: ${KIS_ACCOUNT_PRODUCT_CODE:-01}
@@ -61,6 +62,7 @@ services:
       WORKFLOW_AUDIT_LOG_PATH: /app/runtime/logs/execution-audit.jsonl
       OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
       KRX_API_KEY: ${KRX_API_KEY:?KRX_API_KEY is required}
+      DART_API_KEY: ${DART_API_KEY:?DART_API_KEY is required}
       KIS_APP_KEY: ${KIS_APP_KEY:-}
       KIS_APP_SECRET: ${KIS_APP_SECRET:-}
       KIS_ACCOUNT_PRODUCT_CODE: ${KIS_ACCOUNT_PRODUCT_CODE:-01}
