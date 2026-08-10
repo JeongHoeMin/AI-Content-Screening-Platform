@@ -1,0 +1,187 @@
+schemaVersion: 1
+
+id: "20260810-1355-nextjs-dashboard-scaffold"
+title: "Next.js 프론트엔드 스캐폴딩 및 메인 대시보드 페이지 포팅"
+description: |
+  사용자 요청 3번(Next.js 전환)의 첫 번째 하위 작업. 사용자가 확인한 방향대로 백엔드(FastAPI,
+  app/web/app.py)는 그대로 유지하고, 새 frontend/ 디렉토리에 Next.js(App Router, TypeScript) 앱을
+  만들어 기존 app/web/dashboard_html.py의 정적 단일 페이지(오늘의 투자 인사이트: 실행 트리거,
+  SSE 실시간 진행상황, 워크플로우 그래프, 분석 카드, 추천 테이블+가격 성과)를 React로 포팅한다.
+  브라우저-백엔드 간 쿠키(SameSite=strict) 문제를 피하기 위해 CORS를 여는 대신 Next.js
+  next.config의 rewrites로 /api/* 요청을 FastAPI(API_BASE_URL 환경변수, 기본 http://localhost:8000)로
+  프록시해 브라우저 입장에서는 항상 동일 출처로 보이게 한다. 이 방식은 FastAPI 쪽 코드를 전혀
+  건드리지 않는다. 설정 페이지(/settings)와 이력 페이지(/history) 포팅, docker-compose 서비스
+  추가는 각각 별도 후속 작업으로 분리한다. 정적 HTML(app/web/*_html.py) 제거 여부는 모든 페이지
+  포팅이 끝난 뒤 사용자와 확인한다.
+
+status: completed
+
+createdAt: "2026-08-10T13:42:51+09:00"
+updatedAt: "2026-08-10T14:10:56+09:00"
+
+agent:
+  provider: "claude-code"
+  model: "claude-sonnet-5"
+  sessionId: null
+
+request:
+  summary: "프론트를 Next.js로 전환한다. 첫 단계로 Next.js 앱을 만들고 메인 대시보드(추천 실행) 페이지를 포팅한다. (사용자 3개 요청 중 우선순위 3번, 그 중 첫 하위 작업)"
+  originalPrompt: "3. 프론트를 Next.js 로 컨버전진행. (작업 단위가 커서 여러 개의 하위 작업으로 분리 진행)"
+
+scope:
+  allowedPaths:
+    - "frontend/**"
+    - ".claude/launch.json"
+    - "tasks/20260810-1355-nextjs-dashboard-scaffold/**"
+
+  deniedPaths:
+    - ".env"
+    - ".env.*"
+    - "secrets/**"
+    - ".venv/**"
+    - "__pycache__/**"
+    - ".git/**"
+    - "runtime/**"
+    - "dist/**"
+    - "build/**"
+    - ".agent/**"
+
+requirements:
+  items:
+    - "frontend/ 디렉토리에 TypeScript + App Router 기반 Next.js 앱을 생성한다."
+    - "브라우저에서 보내는 /api/* 요청이 Next.js rewrites를 통해 FastAPI 백엔드로 프록시되어야 한다(FastAPI 코드는 변경하지 않는다)."
+    - "메인 대시보드 페이지가 추천 실행 트리거(분석 건수·테마·주제 선택), SSE 기반 실시간 진행 상황(워크플로우 그래프·타임라인), 분석 카드, 후보 제외 진단, 선택된 뉴스, 추천 성과 요약, 매수·매도 추천 테이블(가격 성과 포함)을 기존 대시보드와 동등하게 표시해야 한다."
+    - "/history, /settings로 가는 nav 링크를 유지한다(다음 하위 작업에서 해당 페이지들을 Next.js로 포팅하기 전까지는 기존 FastAPI 정적 페이지를 가리킨다)."
+    - "npm run build(프로덕션 빌드)와 npm run lint가 오류 없이 통과해야 한다."
+    - "실행 중인 실제 FastAPI 백엔드(docker, localhost:8000)를 대상으로 브라우저에서 추천 실행 흐름이 동작하는지 직접 확인한다."
+
+plan:
+  steps:
+    - id: 1
+      description: "frontend/에 create-next-app으로 TypeScript App Router 프로젝트를 생성한다."
+      status: completed
+
+    - id: 2
+      description: "next.config에 /api/* rewrites 프록시를 설정한다."
+      status: completed
+
+    - id: 3
+      description: "기존 dashboard_html.py의 상태 모델·워크플로우 단계 정의·SSE 이벤트 처리 로직을 React 컴포넌트/훅으로 옮긴다."
+      status: completed
+
+    - id: 4
+      description: "실행 트리거 폼, 진행 상황(워크플로우 그래프·타임라인), 분석 카드, 진단, 추천 테이블(가격 성과 포함)을 렌더링하는 컴포넌트를 작성한다."
+      status: completed
+
+    - id: 5
+      description: "npm run build, npm run lint로 검증한다."
+      status: completed
+
+    - id: 6
+      description: "Browser 도구로 실제 백엔드(localhost:8000)에 프록시 연결한 Next.js 개발 서버(localhost:3000)에서 추천 실행을 직접 수행해 동작을 확인한다."
+      status: completed
+
+result:
+  summary: >
+    frontend/에 Next.js 16(App Router, TypeScript, ESLint) 앱을 만들고 기존
+    app/web/dashboard_html.py의 단일 정적 페이지를 React로 포팅했다. FastAPI 백엔드는 전혀
+    변경하지 않았고, next.config.ts의 rewrites로 /api/*를 API_BASE_URL(기본 http://localhost:8000)로
+    프록시해 브라우저 입장에서 동일 출처가 되도록 했다(설정 페이지 세션 쿠키가 SameSite=strict라
+    CORS 대신 프록시를 선택했다). 워크플로우 13단계 정의·재시도 경로·단계별 입출력 카운트,
+    SSE 이벤트 누적 로직(수집 이벤트의 단계 완료 처리와 workflow 노드 완료 시 이전 단계 skip 처리)을
+    lib/stages.ts와 lib/useRecommendationRun.ts로 옮겼고, 실행 트리거·진행 상황·타임라인·분석 카드·
+    후보 제외 진단·선택된 뉴스·성과 요약·추천 테이블을 컴포넌트로 분리했다. 외부 기사 URL은
+    safeHref로 http(s)만 렌더링한다. 실제 docker 백엔드를 대상으로 브라우저에서 추천 실행을 끝까지
+    수행해 13단계 완료·타임라인 15건·추천 종목(일성건설 013360 buy)·성과 요약이 정상 표시되는 것을
+    확인했다. 가격 성과가 "사유 미상"으로 나오는데, 이는 실행 중인 docker 이미지가 Task 1의
+    entry_error_kind 필드를 포함하기 전 코드라서이며 프론트가 필드 부재를 안전하게 처리한 결과다.
+    (컨테이너 재빌드는 이 작업 범위가 아니다.)
+    남은 제한사항: /history와 /settings 페이지는 아직 Next.js로 포팅하지 않아 nav 링크가 기존
+    FastAPI 정적 페이지를 가리키며, Next.js 개발 서버에서는 해당 경로가 404다. docker-compose
+    서비스 추가와 정적 HTML 제거 여부도 후속 작업으로 남는다.
+
+  changedFiles:
+    - "frontend/package.json"
+    - "frontend/package-lock.json"
+    - "frontend/tsconfig.json"
+    - "frontend/next.config.ts"
+    - "frontend/eslint.config.mjs"
+    - "frontend/.gitignore"
+    - "frontend/README.md"
+    - "frontend/AGENTS.md"
+    - "frontend/CLAUDE.md"
+    - "frontend/src/app/layout.tsx"
+    - "frontend/src/app/page.tsx"
+    - "frontend/src/app/globals.css"
+    - "frontend/src/app/favicon.ico"
+    - "frontend/src/components/RunControls.tsx"
+    - "frontend/src/components/ProgressPanel.tsx"
+    - "frontend/src/components/AnalysisCards.tsx"
+    - "frontend/src/components/DiagnosticsTable.tsx"
+    - "frontend/src/components/RecommendationsTable.tsx"
+    - "frontend/src/lib/types.ts"
+    - "frontend/src/lib/format.ts"
+    - "frontend/src/lib/stages.ts"
+    - "frontend/src/lib/useRecommendationRun.ts"
+    - "frontend/public/file.svg"
+    - "frontend/public/globe.svg"
+    - "frontend/public/next.svg"
+    - "frontend/public/vercel.svg"
+    - "frontend/public/window.svg"
+    - "tasks/20260810-1355-nextjs-dashboard-scaffold/task.yaml"
+
+  verifications:
+    - command: "npx tsc --noEmit"
+      result: passed
+      summary: "타입 오류 없이 통과했다."
+
+    - command: "npm run lint"
+      result: passed
+      summary: "최초 실행에서 react-hooks/set-state-in-effect 오류 1건이 발생해 effect 내부의 동기 setState를 제거한 뒤 재실행해 오류 0건으로 통과했다."
+
+    - command: "npm run build"
+      result: passed
+      summary: "Next.js 16 프로덕션 빌드가 성공했고 / 경로가 정적으로 프리렌더링되었다."
+
+    - command: "curl -s http://localhost:3000/api/health"
+      result: passed
+      summary: "Next.js rewrites 프록시를 통해 FastAPI 백엔드의 {\"status\":\"ok\"}가 200으로 반환되어 프록시 연결을 확인했다."
+
+    - command: "브라우저(localhost:3000)에서 '오늘의 뉴스를 기준으로 추천받기' 실행 후 완료까지 관찰"
+      result: passed
+      summary: "SSE로 13/13 단계 완료, 단계별 입력·통과·탈락 카운트, 타임라인 15건, 추천 종목 1건(일성건설 013360 buy)과 성과 요약이 정상 렌더링되는 것을 직접 확인했다. 콘솔 오류는 없었다."
+
+    - command: "SSE 스트림 직접 비교 (curl --max-time 12, port 8000 직결 vs port 3000 프록시)"
+      result: passed
+      summary: "두 경로 모두 연결 즉시 heartbeat 이벤트를 전달해 프록시가 SSE를 버퍼링하지 않음을 확인했다. 수집 단계에서 화면이 멈춘 것처럼 보인 것은 백엔드가 수집 완료 이후부터 heartbeat를 보내기 때문이며 프론트 버그가 아니었다."
+
+  completedAt: "2026-08-10T14:10:56+09:00"
+
+blocker:
+  reason: null
+  requiredAction: null
+
+history:
+  - at: "2026-08-10T13:42:51+09:00"
+    status: planning
+    message: "Task created as the first of several Next.js sub-tasks, after completing the price-fetch fix and history page tasks. Decided to use Next.js rewrites as a same-origin proxy to FastAPI instead of CORS, to avoid the SameSite=strict cross-origin cookie problem already seen in tasks/20260810-1305-local-http-cookie-fix."
+
+  - at: "2026-08-10T13:44:00+09:00"
+    status: in_progress
+    message: "Scaffolded Next.js 16 with create-next-app (TypeScript, App Router, ESLint, src dir) and read node_modules/next/dist/docs for the version-specific rewrites contract before configuring the proxy."
+
+  - at: "2026-08-10T14:02:00+09:00"
+    status: in_progress
+    message: "Scope expanded to include .claude/launch.json, created so the browser preview tool could start the Next.js dev server. It is intentionally left untracked because the sibling .claude/settings*.json files are pre-existing local machine config that this task did not author."
+
+  - at: "2026-08-10T14:04:00+09:00"
+    status: testing
+    message: "npm run lint failed with react-hooks/set-state-in-effect on the elapsed-time effect; removed the synchronous setState since start() already resets the counter, then lint and build both passed."
+
+  - at: "2026-08-10T14:09:00+09:00"
+    status: testing
+    message: "Browser run against the live docker backend completed all 13 stages. Investigated an apparent SSE stall by streaming the same run through port 8000 and port 3000 with curl: both delivered heartbeats immediately, confirming the proxy does not buffer and that the backend simply emits no heartbeats until collection finishes."
+
+  - at: "2026-08-10T14:10:56+09:00"
+    status: completed
+    message: "Task completed and verified. Remaining out-of-scope follow-ups recorded in result.summary: porting /history and /settings, adding a docker-compose service, and deciding whether to retire the static *_html.py pages."
