@@ -22,6 +22,23 @@ def test_compose_defines_healthy_postgres_with_persistent_volume() -> None:
     assert "service_completed_successfully" in compose
 
 
+def test_compose_serves_the_next_frontend_against_the_dashboard_api() -> None:
+    compose: str = Path("docker-compose.yml").read_text(encoding="utf-8")
+
+    assert "frontend:" in compose
+    assert "context: ./frontend" in compose
+    assert "API_BASE_URL: http://dashboard:8000" in compose
+    assert '"3000:3000"' in compose
+
+
+def test_frontend_image_runs_the_standalone_server_as_a_non_root_user() -> None:
+    dockerfile: str = Path("frontend/Dockerfile").read_text(encoding="utf-8")
+
+    assert "ARG API_BASE_URL" in dockerfile
+    assert "USER nextjs" in dockerfile
+    assert 'CMD ["node", "server.js"]' in dockerfile
+
+
 def test_compose_forwards_optional_kis_configuration_to_runtime_services() -> None:
     compose: str = Path("docker-compose.yml").read_text(encoding="utf-8")
 

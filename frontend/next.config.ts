@@ -6,6 +6,8 @@ import type { NextConfig } from "next";
 const apiBaseUrl = process.env.API_BASE_URL ?? "http://localhost:8000";
 
 const nextConfig: NextConfig = {
+  // Ship a self-contained server so the runtime image does not need node_modules.
+  output: "standalone",
   async rewrites() {
     return [
       {

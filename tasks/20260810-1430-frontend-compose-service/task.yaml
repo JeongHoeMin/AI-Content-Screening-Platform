@@ -1,0 +1,155 @@
+schemaVersion: 1
+
+id: "20260810-1430-frontend-compose-service"
+title: "Next.js 프론트엔드 Docker 이미지와 docker-compose frontend 서비스 추가"
+description: |
+  사용자 요청 3번(Next.js 전환)의 세 번째 하위 작업. 지금까지 Next.js 앱은 로컬 `npm run dev`
+  로만 실행할 수 있어 배포 경로가 없었다. frontend/에 멀티스테이지 Dockerfile을 추가하고
+  docker-compose에 frontend 서비스를 등록해 나머지 서비스와 함께 기동되도록 한다.
+  Next.js의 output: "standalone"을 사용해 런타임에 node_modules 전체가 필요 없는 최소 이미지를
+  만든다. 브라우저가 /api/*를 동일 출처로 보게 하는 next.config rewrites는 그대로 사용하되,
+  compose 네트워크에서는 destination이 http://dashboard:8000이어야 하므로 API_BASE_URL을 빌드
+  인자로 주입한다(rewrites destination은 next build 시점에 routes-manifest에 기록되므로 런타임
+  환경변수로는 바꿀 수 없다. 이 제약을 실제 빌드 산출물로 확인한다).
+  이 작업에서는 기존 FastAPI 정적 HTML 라우트를 제거하지 않는다. 제거는 frontend 컨테이너가
+  정상 동작하는 것을 확인한 뒤 다음 작업에서 수행한다.
+
+status: completed
+
+createdAt: "2026-08-10T14:29:44+09:00"
+updatedAt: "2026-08-10T14:33:24+09:00"
+
+agent:
+  provider: "claude-code"
+  model: "claude-opus-5"
+  sessionId: null
+
+request:
+  summary: "Next.js 앱을 docker-compose로 배포할 수 있도록 Dockerfile과 frontend 서비스를 추가한다. (사용자가 요청한 남은 작업 중 첫 번째)"
+  originalPrompt: "정리해 앞으로화면은 Next.js로 개발하도록 하고 그리고 남은작업 모두진행 하도록해"
+
+scope:
+  allowedPaths:
+    - "frontend/**"
+    - "docker-compose.yml"
+    - "tests/test_docker_compose_database.py"
+    - "tasks/20260810-1430-frontend-compose-service/**"
+
+  deniedPaths:
+    - ".env"
+    - ".env.*"
+    - "secrets/**"
+    - ".venv/**"
+    - "__pycache__/**"
+    - ".git/**"
+    - "runtime/**"
+    - "dist/**"
+    - "build/**"
+    - ".agent/**"
+
+requirements:
+  items:
+    - "frontend/Dockerfile이 Next.js standalone 출력으로 프로덕션 이미지를 빌드해야 한다."
+    - "이미지가 root가 아닌 사용자로 실행되어야 한다."
+    - "docker-compose에 frontend 서비스가 추가되어 3000 포트로 접근할 수 있어야 한다."
+    - "frontend 서비스가 dashboard 서비스에 의존하고, compose 네트워크에서 http://dashboard:8000으로 API를 프록시해야 한다."
+    - "frontend 컨테이너에서 /api/health 프록시 요청이 성공해야 한다."
+    - "브라우저에서 컨테이너로 서빙된 대시보드·이력 페이지가 정상 동작해야 한다."
+    - "docker-compose 구성 테스트가 frontend 서비스를 검증해야 하고 기존 KIS 환경변수 개수 단정이 깨지지 않아야 한다."
+
+plan:
+  steps:
+    - id: 1
+      description: "next.config.ts에 output: standalone을 추가하고 frontend/.dockerignore를 만든다."
+      status: completed
+
+    - id: 2
+      description: "frontend/Dockerfile을 멀티스테이지(deps/builder/runner)로 작성한다."
+      status: completed
+
+    - id: 3
+      description: "docker-compose.yml에 frontend 서비스를 추가한다."
+      status: completed
+
+    - id: 4
+      description: "tests/test_docker_compose_database.py에 frontend 서비스 검증을 추가하고 pytest로 확인한다."
+      status: completed
+
+    - id: 5
+      description: "이미지를 빌드해 기동하고 컨테이너의 /api/health 프록시와 브라우저 화면을 확인한다."
+      status: completed
+
+result:
+  summary: >
+    Next.js 앱에 배포 경로를 만들었다. next.config.ts에 output: "standalone"을 켜고 멀티스테이지
+    Dockerfile(deps/builder/runner)로 런타임에 node_modules 없이 동작하는 이미지를 만들었으며,
+    비-root 사용자(nextjs)로 실행하고 healthcheck를 붙였다. docker-compose에 frontend 서비스를
+    추가해 3000 포트로 노출하고 dashboard에 의존하도록 했다.
+    rewrites destination이 런타임 환경변수로 바뀌지 않고 next build 시점에 routes-manifest.json에
+    기록된다는 점을 실제 이미지 안에서 확인했다(destination이 http://dashboard:8000/api/:path*로
+    고정). 그래서 API_BASE_URL을 런타임 env가 아닌 build arg로 주입했고, 이 값을 바꾸려면 이미지를
+    다시 빌드해야 한다는 제약이 있다.
+    컨테이너로 기동한 뒤 /api/health 프록시 성공, /·/history·/settings 세 경로 200,
+    프록시된 /api/runs/history 응답, 브라우저에서 이력 페이지의 실제 손익률 렌더링을 확인했다.
+    이 작업에서는 기존 FastAPI 정적 HTML 라우트를 제거하지 않았다(다음 작업).
+
+  changedFiles:
+    - "frontend/next.config.ts"
+    - "frontend/Dockerfile"
+    - "frontend/.dockerignore"
+    - "docker-compose.yml"
+    - "tests/test_docker_compose_database.py"
+    - "tasks/20260810-1430-frontend-compose-service/task.yaml"
+
+  verifications:
+    - command: "uv run pytest tests/test_docker_compose_database.py -q"
+      result: passed
+      summary: "frontend 서비스·Dockerfile 검증 2건을 추가해 4건 모두 통과했고, 기존 KIS 환경변수 개수 단정(2회)도 그대로 유지되었다."
+
+    - command: "uv run pytest -q"
+      result: passed
+      summary: "전체 스위트 623개 통과, 1개 skip(실계약 opt-in 테스트)."
+
+    - command: "docker-compose build frontend"
+      result: passed
+      summary: "멀티스테이지 이미지 빌드에 성공했다."
+
+    - command: "docker run --rm ai-content-screening-platform-frontend:latest node -e \"...routes-manifest.json...\""
+      result: passed
+      summary: >
+        이미지 안의 routes-manifest.json에서 rewrite destination이
+        http://dashboard:8000/api/:path*로 기록된 것을 확인해, build arg 방식이 올바르며
+        런타임 환경변수로는 변경되지 않는다는 가정을 실증했다.
+
+    - command: "docker-compose up -d frontend 후 curl /api/health, / , /history, /settings, /api/runs/history"
+      result: passed
+      summary: >
+        컨테이너가 healthy로 기동했고 프록시된 /api/health가 {\"status\":\"ok\"}를 반환했으며
+        세 페이지 모두 200, 프록시된 이력 API도 정상 응답했다.
+
+    - command: "브라우저에서 http://localhost:3000/history (컨테이너 서빙) 확인"
+      result: passed
+      summary: "컨테이너가 서빙한 이력 페이지에서 회차별 손익률(일성건설 +0.3%, 다보링크 +0.4%)과 과거 회차의 미확인 사유가 정상 렌더링되었다."
+
+  completedAt: "2026-08-10T14:33:24+09:00"
+
+blocker:
+  reason: null
+  requiredAction: null
+
+history:
+  - at: "2026-08-10T14:29:44+09:00"
+    status: planning
+    message: "Task created as the third Next.js sub-task. Ordered before the static-HTML removal task on purpose so a working containerized frontend exists before the FastAPI-served pages are deleted."
+
+  - at: "2026-08-10T14:31:00+09:00"
+    status: in_progress
+    message: "Enabled standalone output, wrote the multi-stage Dockerfile and .dockerignore, added the compose frontend service, and extended the compose configuration tests."
+
+  - at: "2026-08-10T14:32:30+09:00"
+    status: testing
+    message: "Inspected routes-manifest.json inside the built image to confirm the rewrite destination is baked at build time, which is why API_BASE_URL is a build arg rather than a runtime variable."
+
+  - at: "2026-08-10T14:33:24+09:00"
+    status: completed
+    message: "Task completed and verified: image builds, container runs healthy as a non-root user, proxies the API, and serves all three routes with live data in the browser."

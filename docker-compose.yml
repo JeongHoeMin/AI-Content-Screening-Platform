@@ -42,6 +42,17 @@ services:
       - ./runtime/logs:/app/runtime/logs
     restart: unless-stopped
 
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        API_BASE_URL: http://dashboard:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - dashboard
+    restart: unless-stopped
+
   db-migrate:
     build: .
     command: ["/app/.venv/bin/alembic", "upgrade", "head"]
