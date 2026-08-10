@@ -1,0 +1,109 @@
+schemaVersion: 1
+
+id: "20260810-1022-market-wide-discovery-design"
+title: "시장 전체 뉴스/공시 후보 발견 설계(ADR) 작성"
+description: "사용자가 개별 기업을 몰라도 IR RSS를 수동 등록하지 않고 시장 전체에서 추천 후보를 자동 발견할 수 있도록, DART 공시 목록을 discovery 소스로 삼는 v1 설계를 ADR과 ROADMAP에 기록한다. 이번 작업은 설계 문서 작성까지만 다루며 실제 provider/workflow 코드 구현은 포함하지 않는다."
+
+status: completed
+
+createdAt: "2026-08-10T10:22:16+09:00"
+updatedAt: "2026-08-10T10:35:00+09:00"
+
+agent:
+  provider: "claude-code"
+  model: "claude-sonnet-5"
+  sessionId: null
+
+request:
+  summary: "기업/주식시장 지식이 없어도 RSS를 수동 등록하지 않고 시장 전체에서 추천 후보를 자동 발견하도록 뉴스 수집 단계를 어떻게 바꿀지 설계하고, 합의된 v1 범위를 ADR과 ROADMAP 문서로 작성한다."
+  originalPrompt: "그럼 너는어떤 방식을 추천하는데? / (사용자가 제시한 발견→검증 2단 퍼널 설명) / 이 말에대해선 어떻게생각해? → 이 v1 범위로 정리해서 task.yaml 만들고 설계 문서(ADR)부터 작성할까요? 라는 제안에 사용자가 '작성해'로 승인함."
+
+scope:
+  allowedPaths:
+    - "docs/DECISION_LOG.md"
+    - "docs/ROADMAP.md"
+    - "tasks/20260810-1022-market-wide-discovery-design/**"
+
+  deniedPaths:
+    - ".env"
+    - ".env.*"
+    - "secrets/**"
+    - ".venv/**"
+    - "__pycache__/**"
+    - ".git/**"
+    - "runtime/**"
+    - "dist/**"
+    - "build/**"
+    - ".agent/**"
+
+requirements:
+  items:
+    - "회사명을 몰라도 시장 전체에서 추천 후보를 발견할 수 있는 discovery 방향을 ADR로 기록한다."
+    - "discovery(후보 발견)와 evidence fetch(근거 원문 확보)를 분리하는 v1 범위를 정의하고, 원문 없는 공시는 그대로 폐기한다는 기존 ADR-022의 계약을 유지함을 명시한다."
+    - "신규성/서프라이즈 점수화와 공급망·경쟁사 확장 연결은 v1 범위에서 명시적으로 제외한다."
+    - "새 ADR이 ADR-022의 어떤 부분을 대체하는지 밝히고 ADR-022 상태를 Superseded로 변경한다."
+    - "docs/ROADMAP.md에 이번 설계에 해당하는 신규 phase를 예정 상태로 추가한다."
+    - "이번 작업 범위에는 실제 provider/workflow 코드 구현을 포함하지 않는다."
+
+plan:
+  steps:
+    - id: 1
+      description: "AGENTS.md, .agent/docs/task-schema.md, docs/PROJECT_GUIDE.md, docs/WORKFLOW.md, docs/ROADMAP.md, docs/DECISION_LOG.md(ADR-021~025)를 읽고 기존 계약과 ADR 형식을 확인한다."
+      status: completed
+
+    - id: 2
+      description: "docs/DECISION_LOG.md에 새 ADR(ADR-026)을 추가해 discovery/evidence 분리 v1 설계를 기록하고, ADR-022 상태를 Superseded로 변경해 ADR-026을 연결한다."
+      status: completed
+
+    - id: 3
+      description: "docs/ROADMAP.md에 이번 설계에 대응하는 신규 phase를 '예정' 상태로 추가하고 v1에서 제외한 범위를 명시한다."
+      status: completed
+
+    - id: 4
+      description: "ADR 번호 중복/누락 여부와 문서 구조 일관성을 확인한다."
+      status: completed
+
+result:
+  summary: "회사를 몰라도 시장 전체에서 추천 후보를 자동 발견할 수 있도록, DART 공시목록을 discovery source로 쓰고 첨부 전문 확보(evidence fetch)를 별도 단계로 분리하는 v1 설계를 ADR-026으로 기록했다. ADR-022는 Superseded로 표시하고 ADR-026을 연결했으며, docs/ROADMAP.md에 Phase 10으로 신규성 점수화·공급망 확장을 v1에서 제외한다는 범위 제한과 함께 추가했다. 코드 구현은 이번 작업 범위에 포함하지 않았다."
+
+  changedFiles:
+    - "docs/DECISION_LOG.md"
+    - "docs/ROADMAP.md"
+    - "tasks/20260810-1022-market-wide-discovery-design/task.yaml"
+
+  verifications:
+    - command: "grep -n \"^# ADR-\" docs/DECISION_LOG.md | 육안 순번/중복 확인 + grep -o \"^# ADR-[0-9]*\" docs/DECISION_LOG.md | sort | uniq -d"
+      result: passed
+      summary: "ADR-001~ADR-026까지 번호가 중복 없이 순차적으로 이어짐을 확인했다."
+    - command: "grep -n -A9 \"^# ADR-022$\" docs/DECISION_LOG.md / grep -n -A9 \"^# ADR-026$\" docs/DECISION_LOG.md"
+      result: passed
+      summary: "ADR-022 Status가 'Superseded by ADR-026', 신규 ADR-026 Status가 'Accepted'로 정확히 반영됨을 확인했다."
+    - command: "grep -n \"^# Phase\" docs/ROADMAP.md"
+      result: passed
+      summary: "Phase 10 — 시장 전체 후보 Discovery가 기존 Phase 1~9 뒤에 정상적으로 추가됨을 확인했다."
+    - command: "git status --short"
+      result: passed
+      summary: "docs/DECISION_LOG.md, docs/ROADMAP.md, 그리고 이번 작업 디렉토리만 변경되어 scope.allowedPaths와 일치함을 확인했다. 자동화된 테스트 스위트(uv run pytest)는 이번 작업이 문서(ADR/ROADMAP)만 변경하고 애플리케이션 코드를 변경하지 않았으므로 실행하지 않았다."
+
+  completedAt: "2026-08-10T10:35:00+09:00"
+
+blocker:
+  reason: null
+  requiredAction: null
+
+history:
+  - at: "2026-08-10T10:22:16+09:00"
+    status: planning
+    message: "Task created after user approved v1 scope (DART discovery + rule-based event filter, deferring novelty scoring and supply-chain expansion) and asked to write the design/ADR."
+
+  - at: "2026-08-10T10:24:00+09:00"
+    status: in_progress
+    message: "Started writing ADR-026 in docs/DECISION_LOG.md and marking ADR-022 as superseded."
+
+  - at: "2026-08-10T10:30:00+09:00"
+    status: testing
+    message: "Added Phase 10 to docs/ROADMAP.md; moved to testing to verify ADR numbering, status fields, and changed-file scope."
+
+  - at: "2026-08-10T10:35:00+09:00"
+    status: completed
+    message: "All verification checks passed; task completed with only docs/DECISION_LOG.md and docs/ROADMAP.md changed alongside this task.yaml."

@@ -518,7 +518,7 @@ Accepted
 
 ## Status
 
-Accepted
+Superseded by ADR-026
 
 ## Context
 
@@ -620,3 +620,69 @@ authorization header, raw HTTP payload는 설정 오류·로그·DB·SSE·Telegr
 dashboard와 scheduled worker는 KIS 자격 증명이 모두 설정되면 KIS를 호출하고, 그렇지 않거나 KIS 관측을
 사용할 수 없으면 KRX fallback을 사용한다. `RUN_LIVE_MARKET_DATA_TESTS=1` opt-in은 기본 CI에서 외부 호출을
 막기 위한 live 계약 테스트에만 적용한다.
+
+# ADR-026
+
+## Title
+
+시장 전체 후보 발견은 DART 공시목록을 discovery source로 사용하고, discovery와 evidence fetch를 분리한다.
+
+## Status
+
+Accepted
+
+## Context
+
+ADR-022는 원문 없는 공시(`014`)와 snippet뿐인 Naver 검색 결과를 분석 입력에서 배제하기 위해 운영 기본
+분석 source를 `IR_RSS_FEEDS`로 제한했다. 그 결과 어떤 회사가 분석 대상이 될지는 운영자가 개별 기업의
+IR RSS URL을 직접 찾아 등록하는 작업에 전적으로 의존하게 됐다. 사용자는 기업 종류나 주식시장 구조를
+잘 모르기 때문에 이 등록 작업 자체가 비합리적이며, 등록되지 않은 회사는 실제로 유의미한 이벤트가
+발생해도 애초에 수집 대상에 들지 못한다. 즉 현재 추천 후보의 universe는 시장 전체가 아니라 "누군가
+RSS를 등록해 둔 회사"로 제한되어 있다.
+
+한편 DART는 이미 이 프로젝트에 구현되어 있고(`DartDisclosureProvider`, `DartDocumentExtractor`) 상장사
+전체의 공시 목록을 매일 커버하며, 공시 자체에 회사명이 명확히 붙어 있어 회사를 몰라도 후보를 발견할 수
+있는 유일한 기존 자산이다. 다만 ADR-022가 지적한 대로 다수 공시는 첨부 전문이 없고(`014`), 모든 공시를
+그대로 LLM에 보내면 비용·노이즈가 커지고 근거 전문 계약도 깨진다. 따라서 "DART를 discovery에 쓰되
+ADR-022의 전문 계약은 그대로 유지"하려면 발견과 근거 확보를 같은 단계로 묶지 않아야 한다.
+
+## Decision
+
+수집 단계를 `Discovery`와 `Evidence Fetch` 두 단계로 분리한다.
+
+1. **Discovery**: 매일 DART 공시 전체 목록을 조회한다. 이 목록은 결정적 event-type allowlist(예: 대규모
+   공급계약·수주, 실적 전망·잠정실적·가이던스 변경, 설비투자·증설, 인수합병·지분취득, 유상증자·전환사채·
+   자사주, 규제 승인·제재·소송)로 사전 필터한다. 이 필터는 DART가 제공하는 보고서유형 코드/보고서명
+   기준의 결정적 코드로 판정하며, `PROJECT_GUIDE.md` 2.6 원칙에 따라 LLM이 통과·제외를 결정하지 않는다.
+   반복적·정기적·영향이 작은 공시 유형은 이 단계에서 제외한다.
+2. **Evidence Fetch**: Discovery를 통과한 공시만 원문 확보 대상이 된다. 첨부 전문이 있으면 기존
+   `DartDocumentExtractor`로 전문을 가져오고, 없으면(`014`) 그 건은 폐기하며 재시도하지 않는다. 이는
+   ADR-022가 정한 "전문 없는 공시는 분석하지 않는다"는 계약을 그대로 유지하는 것이며, 이번 결정으로
+   완화하지 않는다.
+3. 전문이 확보된 공시만 기존 `Evaluate` 이후 파이프라인(`Evaluate → Extract → ... → Recommend`,
+   `docs/WORKFLOW.md`)에 투입한다. 이 노드들의 계약과 책임 분리는 변경하지 않는다.
+4. `IR_RSS_FEEDS`는 계속 지원하되 역할을 재정의한다. 더 이상 "회사를 모르는 사용자가 먼저 등록해야 하는
+   필수 조건"이 아니라, 특정 회사를 더 깊게 추적하고 싶을 때 선택적으로 추가하는 보강 source로 둔다.
+   운영 기본 실행은 DART discovery만으로 시작할 수 있어야 하며, DART discovery와 `IR_RSS_FEEDS`가 모두
+   비어 있을 때만 configuration 오류로 중단한다.
+5. Naver 뉴스 검색은 기존과 동일하게 탐색 전용으로 유지하고 분석 입력으로 사용하지 않는다.
+6. v1 범위는 공시 회사 "자기 자신"에게 미치는 직접 영향만 다룬다. 다음 두 확장은 이번 결정의 범위에
+   포함하지 않고 각각 별도 ADR로 분리한다.
+   - 같은 유형의 공시라도 이미 알려진 정보인지 비교하는 신규성·서프라이즈 점수화(과거 공시 이력 대비
+     변화율 계산).
+   - 공급사·고객사·경쟁사 등 공시 회사 외 기업으로 영향을 확장 연결하는 것. 확장할 경우에도 LLM 추측이
+     아니라 검증된 산업/공급망 카탈로그를 근거로 해야 하며, 카탈로그 자체는 아직 이 프로젝트에 없다.
+7. 이벤트 유형별 추천 성과(예: 추천 다음 거래일 대비 N거래일 수익률, 지수 대비 초과수익)를 관측해 낮은
+   적중률의 이벤트 유형 가중치를 조정하는 feedback loop는 별도 ADR과 phase에서 다룬다. 이번 결정은 그
+   전 단계인 discovery 방식만 정의한다.
+
+## Consequences
+
+사용자는 개별 기업을 사전에 알거나 RSS를 등록하지 않아도 매일 시장 전체에서 추천 후보가 자동으로
+발견된다. 첨부 전문이 없는 공시는 여전히 폐기되므로 재현율은 100%가 아니며, 이는 근거 품질을 지키기
+위한 의도된 trade-off다. `Screen`·`Cross Validate`·`Resolve`·`Score`·`Recommend` 등 기존 workflow 노드
+계약(`docs/WORKFLOW.md`)은 이번 결정으로 변경되지 않으며, 새로 추가되는 것은 `Evaluate` 이전의
+discovery/evidence-fetch 단계뿐이다. `IR_RSS_FEEDS`가 비어 있다는 이유만으로 더 이상 실행이 중단되지
+않으므로, 운영자가 RSS를 전혀 등록하지 않은 상태에서도 DART 기반 discovery만으로 정상 운영할 수 있어야
+한다. 신규성 점수화, 공급망 확장 연결, 이벤트 유형별 성과 기반 자동 가중치 조정은 v1에 포함하지 않으며
+후속 ADR과 `docs/ROADMAP.md`의 별도 phase에서 설계와 승인을 거친 뒤 구현한다.

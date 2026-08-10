@@ -164,3 +164,32 @@ UTC daily scheduler, JSONL persistence/audit·metrics·alerting, request-cap cos
 대시보드는 현재 구현 단위에 포함한다. 가격은 KIS 실시간 현재가를 우선하고 KRX 최근 거래일 종가로 fallback하며,
 KIS 미설정·휴장일·외부 오류는 recommendation 실행을 중단하지 않는 `가격 미확인` 관측으로 남긴다. 성과는
 수수료·세금·배당을 제외한 사후 단순 가격 비교로 제한한다.
+
+# Phase 10 — 시장 전체 후보 Discovery
+
+**Status:** Planned
+
+## 목적
+
+사용자가 개별 기업명을 알거나 `IR_RSS_FEEDS`를 직접 등록하지 않아도, 시장 전체에서 추천 후보를 자동으로
+발견한다. 설계 결정은 `docs/DECISION_LOG.md`의 ADR-026을 따른다.
+
+## 완료 조건
+
+DART 공시 전체 목록에서 결정적 event-type allowlist로 사전 필터한 뒤, 첨부 전문이 있는 공시만 evidence
+fetch로 확보해 기존 `Evaluate` 이후 workflow(`docs/WORKFLOW.md`)에 그대로 투입한다. 전문이 없는 공시(`014`)는
+ADR-022의 계약대로 폐기하고 재시도하지 않는다. `IR_RSS_FEEDS`가 비어 있어도 DART discovery만으로 실행이
+시작되며, DART discovery와 `IR_RSS_FEEDS`가 모두 비어 있을 때만 configuration 오류로 중단한다.
+
+## 산출물
+
+DART 공시 목록 discovery provider, 결정적 event-type allowlist 정책, evidence fetch 단계(전문 있음/없음
+분기), `IR_RSS_FEEDS`를 보강 source로 재배치한 source 조립, 관련 문서(`docs/WORKFLOW.md`,
+`docs/DECISION_LOG.md`) 갱신.
+
+## v1 범위 제한
+
+이벤트의 신규성·서프라이즈 정도를 과거 공시 이력과 비교해 점수화하는 것과, 공시 회사 외 공급사·고객사·
+경쟁사로 영향을 확장 연결하는 것은 v1에 포함하지 않는다. 두 확장 모두 검증된 이력·카탈로그 데이터가
+선행되어야 하며 각각 별도 ADR과 phase로 설계한다. 이벤트 유형별 추천 성과를 관측해 가중치를 자동 보정하는
+feedback loop도 이번 phase의 범위가 아니다.
