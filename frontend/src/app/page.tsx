@@ -10,6 +10,7 @@ import {
   RecommendationsTable,
 } from "@/components/RecommendationsTable";
 import { RunControls } from "@/components/RunControls";
+import { SiteNav } from "@/components/SiteNav";
 import { safeHref } from "@/lib/format";
 import { useRecommendationRun } from "@/lib/useRecommendationRun";
 
@@ -44,10 +45,7 @@ export default function DashboardPage() {
     <main>
       <h1>오늘의 투자 인사이트</h1>
       <p>공식 RSS 전문을 수집하고 LangGraph 분석을 거쳐 Policy 기반 후보를 생성합니다.</p>
-      <nav>
-        <a href="/history">추천 이력 보기</a>
-        <a href="/settings">정기 실행 설정</a>
-      </nav>
+      <SiteNav current="/" />
 
       <RunControls
         limit={limit}

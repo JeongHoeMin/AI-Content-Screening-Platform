@@ -1,23 +1,12 @@
 "use client";
 
+import { THEMES, TOPICS, toggle } from "@/lib/catalog";
+
 const COLLECTION_SIZES = [
   { value: 10, label: "적게 · 10건" },
   { value: 25, label: "중간 · 25건" },
   { value: 50, label: "많이 · 50건" },
   { value: 100, label: "최대 · 100건" },
-];
-
-const THEMES = [
-  { value: "semiconductor", label: "반도체" },
-  { value: "artificial_intelligence", label: "AI" },
-  { value: "renewable_energy", label: "대체에너지" },
-];
-
-const TOPICS = [
-  { value: "earnings", label: "실적" },
-  { value: "policy", label: "정책" },
-  { value: "supply_chain", label: "공급망" },
-  { value: "technology", label: "기술" },
 ];
 
 interface RunControlsProps {
@@ -30,12 +19,6 @@ interface RunControlsProps {
   onThemesChange: (themes: string[]) => void;
   onTopicsChange: (topics: string[]) => void;
   onRun: () => void;
-}
-
-function toggle(values: string[], value: string): string[] {
-  return values.includes(value)
-    ? values.filter((item) => item !== value)
-    : [...values, value];
 }
 
 export function RunControls({

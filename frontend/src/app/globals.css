@@ -328,6 +328,35 @@ th {
   text-align: left;
 }
 
+.panel label {
+  display: block;
+  margin: 12px 0;
+}
+
+.panel fieldset {
+  border: 1px solid #29415f;
+  border-radius: 8px;
+  margin: 12px 0;
+}
+
+.panel fieldset legend {
+  color: #c7d8ee;
+}
+
+.panel input[type="password"],
+.panel input[type="text"],
+.panel input:not([type]),
+.panel select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 10px;
+  margin-top: 5px;
+  border-radius: 7px;
+  border: 1px solid #385474;
+  background: #07111e;
+  color: #edf3ff;
+}
+
 .run-header {
   display: flex;
   justify-content: space-between;
