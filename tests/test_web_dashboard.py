@@ -4,8 +4,6 @@ from fastapi.testclient import TestClient
 
 import asyncio
 from datetime import datetime, timezone
-import shutil
-import subprocess
 from typing import Optional
 
 import pytest
@@ -30,83 +28,9 @@ class RecordingExecutionAuditPersistence:
         return None
 
 
-def test_dashboard_page_exposes_recommendation_controls() -> None:
-    client: TestClient = TestClient(create_web_app())
-
-    response = client.get("/")
-
-    assert response.status_code == 200
-    assert "오늘의 뉴스를 기준으로 추천받기" in response.text
-    assert "실시간 작업" in response.text
-    assert "전체 진행 상황" in response.text
-    assert "AI Screening" in response.text
-    assert "교차검증 필요 시 REVIEW" in response.text
-    assert "선택된 뉴스" in response.text
-    assert "매수 · 판매 추천" in response.text
-    assert "전체 수집 뉴스 분석" in response.text
-    assert "analysisById" in response.text
-    assert "적게 · 10건" in response.text
-    assert "중간 · 25건" in response.text
-    assert "많이 · 50건" in response.text
-    assert "최대 · 100건" in response.text
-    assert "JSON.stringify({limit:selectedSize,themes:selectedThemes,topics:selectedTopics})" in response.text
-    assert "추천 실행 후 선택된 뉴스를 표시합니다." in response.text
-    assert "문단 ${escapeHtml(quote.paragraph_index)}" in response.text
-    assert "event_evidence" in response.text
 
 
-def test_dashboard_renders_server_summary_with_korean_kst_labels() -> None:
-    response = TestClient(create_web_app()).get("/")
 
-    assert "성과 요약" in response.text
-    assert "확인" in response.text
-    assert "미확인" in response.text
-    assert "승률" in response.text
-    assert "중앙값" in response.text
-    assert "KST" in response.text
-
-
-def test_dashboard_formats_utc_time_as_a_deterministic_kst_value() -> None:
-    from app.web.dashboard_html import DASHBOARD_HTML
-
-    node: str | None = shutil.which("node")
-    assert node is not None
-    formatter: str = DASHBOARD_HTML.split("const formatKst=")[1].split(
-        ";const formatPricePerformance"
-    )[0]
-    completed = subprocess.run(
-        [node, "-e", f"const formatKst={formatter};process.stdout.write(formatKst('2026-08-05T15:00:00Z'));"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-
-    assert completed.stdout == "2026-08-06 00:00 KST"
-
-
-def test_dashboard_page_exposes_actual_workflow_graph_and_retry_path() -> None:
-    response = TestClient(create_web_app()).get("/")
-
-    assert 'id="workflow-graph"' in response.text
-    assert 'id="graph-deduplicate"' in response.text
-    assert 'id="retry-path"' in response.text
-    assert "renderWorkflowGraph" in response.text
-    assert "failure_attempts" in response.text
-    assert "renderStageCounts" in response.text
-    assert "graph-counts" in response.text
-    assert "stage_counts" in response.text
-
-
-def test_dashboard_exposes_theme_and_news_topic_filters() -> None:
-    client: TestClient = TestClient(create_web_app())
-
-    response = client.get("/")
-
-    assert "투자 테마" in response.text
-    assert "반도체" in response.text
-    assert "뉴스 주제" in response.text
-    assert "themes:selectedThemes" in response.text
-    assert "topics:selectedTopics" in response.text
 
 
 def test_dashboard_uses_low_default_collection_limit() -> None:
@@ -424,16 +348,22 @@ def test_schedule_settings_can_be_saved_and_read(monkeypatch: pytest.MonkeyPatch
     assert stale.status_code == 409
 
 
-def test_schedule_page_requires_password_before_schedule_api_access(
+def test_schedule_api_requires_password_before_schedule_access(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("SCHEDULE_SETTINGS_PASSWORD", "x" * 32)
     monkeypatch.setenv("SCHEDULE_COOKIE_SECURE", "false")
     client = TestClient(create_web_app(DashboardRunManager(schedule_persistence=SchedulePersistence())))
 
-    page = client.get("/settings")
     response = client.get("/api/settings/schedule")
 
-    assert page.status_code == 200
-    assert "정기 실행 설정" in page.text
     assert response.status_code == 401
+
+
+def test_web_app_serves_only_the_api_and_not_the_removed_html_pages() -> None:
+    """The Next.js app owns the UI; FastAPI must not serve pages any more."""
+    client = TestClient(create_web_app())
+
+    assert client.get("/api/health").status_code == 200
+    for page in ("/", "/history", "/settings"):
+        assert client.get(page).status_code == 404

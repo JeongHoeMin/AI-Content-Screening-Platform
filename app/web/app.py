@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Literal, Optional
 from uuid import uuid4
 
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.bootstrap import ExecutionMode
@@ -72,9 +72,6 @@ from app.models.community import CommunityType
 from app.models.post import Post
 from app.workflows import ScreeningResult, WorkflowProgressEvent, WorkflowStageCounts
 from app.workflows.screening.errors import WorkflowStageRetriesExhaustedError
-from app.web.dashboard_html import DASHBOARD_HTML
-from app.web.history_html import HISTORY_HTML
-from app.web.settings_html import SCHEDULE_SETTINGS_HTML
 from app.observability import configure_application_logging
 
 import structlog
@@ -1030,10 +1027,6 @@ def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
     )
     app = FastAPI(title="AI Content Screening Dashboard")
 
-    @app.get("/", response_class=HTMLResponse)
-    async def dashboard() -> str:
-        return DASHBOARD_HTML
-
     @app.get("/api/health")
     async def health() -> Dict[str, str]:
         return {"status": "ok"}
@@ -1047,14 +1040,6 @@ def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
     @app.get("/api/runs/history")
     async def get_recommendation_history() -> RecommendationRunHistoryResponse:
         return await run_manager.recommendation_history()
-
-    @app.get("/history", response_class=HTMLResponse)
-    async def history_page() -> str:
-        return HISTORY_HTML
-
-    @app.get("/settings", response_class=HTMLResponse)
-    async def schedule_settings_page() -> str:
-        return SCHEDULE_SETTINGS_HTML
 
     @app.post("/api/settings/login", status_code=204)
     async def login_schedule_settings(
@@ -1125,5 +1110,3 @@ def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
 
 app: FastAPI = create_web_app()
 
-
-_DASHBOARD_HTML: str = """<!doctype html><html lang='ko'><head><meta charset='utf-8'><title>오늘의 투자 인사이트</title><style>body{font-family:system-ui;margin:0;background:#07111e;color:#edf3ff}main{max-width:1100px;margin:auto;padding:32px}button{background:#4f8cff;color:white;border:0;border-radius:8px;padding:12px 18px;font-weight:700}button:disabled{background:#5a6d86}.panel{background:#101d2d;border:1px solid #253852;border-radius:12px;padding:20px;margin:18px 0}.timeline li{margin:8px 0}.cards{display:flex;gap:14px;overflow-x:auto}.card{min-width:260px;background:#17263a;border-radius:10px;padding:16px}.empty{color:#aec0d8}.buy{color:#7ae5a1}.sell{color:#ff8c9b}table{width:100%;border-collapse:collapse}td,th{padding:10px;border-bottom:1px solid #29415f;text-align:left}</style></head><body><main><h1>오늘의 투자 인사이트</h1><p>실제 뉴스·공시를 수집하고 LangGraph 분석을 거쳐 Policy 기반 종목 후보를 생성합니다.</p><button id='run'>오늘의 뉴스를 기준으로 추천받기</button><section class='panel'><h2>실시간 작업</h2><ol id='timeline' class='timeline'></ol></section><section class='panel'><h2>선택된 뉴스</h2><div id='cards' class='cards'><p class='empty'>추천 실행 후 선택된 뉴스를 표시합니다.</p></div></section><section class='panel'><h2>매수 · 판매 추천</h2><table><thead><tr><th>종목</th><th>코드</th><th>점수</th><th>추천</th><th>근거</th></tr></thead><tbody id='recommendations'><tr><td colspan='5' class='empty'>추천 실행 후 결과를 표시합니다.</td></tr></tbody></table></section><script>const t=document.querySelector('#timeline'),c=document.querySelector('#cards'),r=document.querySelector('#recommendations'),b=document.querySelector('#run');const e=v=>String(v).replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));const empty=(m)=>`<p class='empty'>${e(m)}</p>`;const emptyRow=m=>`<tr><td colspan='5' class='empty'>${e(m)}</td></tr>`;const reset=()=>{b.disabled=false;b.textContent='오늘의 뉴스를 기준으로 추천받기'};b.onclick=async()=>{t.innerHTML='';c.innerHTML=empty('뉴스를 수집하고 있습니다.');r.innerHTML=emptyRow('추천 분석을 진행하고 있습니다.');b.disabled=true;b.textContent='추천 분석 중…';try{const x=await fetch('/api/runs',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({limit:3})});if(!x.ok)throw new Error('run_start_failed');const {run_id}=await x.json();let terminal=false;const es=new EventSource(`/api/runs/${run_id}/events`);for(const n of ['collecting','collected','directory','workflow','completed','failed'])es.addEventListener(n,async q=>{const d=JSON.parse(q.data);t.insertAdjacentHTML('beforeend',`<li>${e(d.message)}</li>`);if(d.type==='completed'){terminal=true;es.close();try{await load(run_id)}catch(_){c.innerHTML=empty('결과를 불러오지 못했습니다.');r.innerHTML=emptyRow('결과를 다시 실행해 주세요.')}reset()}if(d.type==='failed'){terminal=true;es.close();c.innerHTML=empty('뉴스 분석이 완료되지 않았습니다.');r.innerHTML=emptyRow('실행 환경을 확인한 뒤 다시 시도해 주세요.');reset()}});es.onerror=()=>{if(!terminal){es.close();c.innerHTML=empty('실시간 연결이 끊겼습니다.');r.innerHTML=emptyRow('다시 실행해 주세요.');reset()}}}catch(_){c.innerHTML=empty('추천 실행을 시작하지 못했습니다.');r.innerHTML=emptyRow('잠시 후 다시 시도해 주세요.');reset()}};async function load(id){const response=await fetch(`/api/runs/${id}`);if(!response.ok)throw new Error('result_load_failed');const d=await response.json();c.innerHTML=d.news_cards.length?d.news_cards.map(n=>`<article class='card'><small>${e(n.source)}</small><h3>${e(n.title)}</h3><p>${e(n.excerpt)}</p><a href='${e(n.url)}' target='_blank' rel='noreferrer'>원문 보기</a></article>`).join(''):empty('선택된 뉴스가 없습니다.');r.innerHTML=d.recommendations.length?d.recommendations.map(x=>`<tr><td>${e(x.company_name)}</td><td>${e(x.ticker||'-')}</td><td>${e(x.score)}</td><td class='${x.action.includes('buy')?'buy':x.action.includes('sell')?'sell':''}'>${e(x.action)}</td><td>${e(x.reason_code)}</td></tr>`).join(''):emptyRow('현재 정책 기준을 통과한 추천 종목이 없습니다.')}</script></main></body></html>"""

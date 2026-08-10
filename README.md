@@ -70,7 +70,9 @@ IR RSS 전문 수집 → 정규화 → 투자 테마·뉴스 주제 Filter → �
 
 ### 1. 웹 대시보드 + 정기 실행 (Docker, 권장)
 
-`docker compose`는 4개 서비스를 함께 기동합니다: `postgres`, `db-migrate`(Alembic 마이그레이션 후 종료), `dashboard`(웹 UI), `schedule-worker`(정기 추천 + 텔레그램 알림).
+`docker compose`는 5개 서비스를 함께 기동합니다: `postgres`, `db-migrate`(Alembic 마이그레이션 후 종료), `dashboard`(FastAPI JSON/SSE API), `frontend`(Next.js 웹 UI), `schedule-worker`(정기 추천 + 텔레그램 알림).
+
+화면은 Next.js(`frontend/`)가 담당하고 `dashboard`는 API만 제공합니다. 브라우저는 `frontend`의 `/api/*` 프록시를 통해 API를 호출하므로 API 포트를 따로 열지 않아도 됩니다.
 
 환경변수 파일을 준비합니다. 기본 파일명은 `.env`이며, 다른 보안 경로의 파일은 Compose 표준 `--env-file` 옵션으로 지정할 수 있습니다.
 
@@ -106,13 +108,15 @@ docker compose up --build -d
 docker compose --env-file /secure/screening.env up --build -d
 ```
 
-`http://<server>:8000`에서 **"오늘의 뉴스를 기준으로 추천받기"** 를 누르면 다음을 확인할 수 있습니다.
+`http://<server>:3000`에서 **"오늘의 뉴스를 기준으로 추천받기"** 를 누르면 다음을 확인할 수 있습니다. 추천 이력은 `/history`, 정기 실행 설정은 `/settings`입니다.
 
 환경 파일의 KIS 설정을 추가하거나 변경했다면 dashboard와 worker를 재생성해 적용한다.
 
 ```bash
 docker compose --env-file /secure/screening.env up --build -d --force-recreate dashboard schedule-worker
 ```
+
+`frontend`는 빌드 시점에 API 주소를 굽습니다(Next.js rewrites 제약). compose 기본값은 `http://dashboard:8000`이며, 바꾸려면 `docker-compose.yml`의 `API_BASE_URL` build arg를 수정하고 이미지를 다시 빌드해야 합니다.
 
 - 운영자가 등록한 기업 IR RSS 전문 수집 (`IR_RSS_FEEDS`에는 승인한 기업·기관의 RSS/Atom URL만 등록)
 - KRX OpenAPI 종목 snapshot (실행마다 `KRX_API_KEY`로 API를 호출해 생성, CSV 마운트/캐시 없음)
@@ -212,7 +216,7 @@ uv run python -m compileall app tests
 
 ## 프로젝트 상태
 
-완료된 영역: Provider(IR RSS 중심) · Normalizer · Collection Filter(투자 테마/뉴스 주제) · Event Extraction · AI Screening(scorecard 포함) · Cross Validation · Resolve · Company Resolver · Impact Analyzer · Stock Scoring · Recommendation · Candidate Selection · 실행 감사/재시도 분석 · PostgreSQL 기반 정기 스케줄러 · 텔레그램 알림 · 웹 대시보드(SSE 워크플로우 그래프).
+완료된 영역: Provider(IR RSS 중심) · Normalizer · Collection Filter(투자 테마/뉴스 주제) · Event Extraction · AI Screening(scorecard 포함) · Cross Validation · Resolve · Company Resolver · Impact Analyzer · Stock Scoring · Recommendation · Candidate Selection · 실행 감사/재시도 분석 · PostgreSQL 기반 정기 스케줄러 · 텔레그램 알림 · Next.js 웹 UI(SSE 워크플로우 그래프, 추천 이력·손익률).
 
 추천 시점과 사후 조회 가격은 화면에서 KST로 표시한다. KIS 실시간 가격을 우선 사용하고 조회할 수 없으면 KRX의 최근 거래일 종가를 사용한다. 둘 다 확인할 수 없으면 `가격 미확인`으로 표시하며 수익률을 추정하지 않는다. 표시는 수수료·세금·배당을 반영하지 않는 사후 단순 가격 비교이며 투자 조언이나 실제 체결 성과가 아니다.
 

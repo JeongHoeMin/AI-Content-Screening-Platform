@@ -59,15 +59,6 @@ class _TwoRunHistoryService:
         )
 
 
-def test_history_page_is_served_at_history_route() -> None:
-    client = TestClient(create_web_app(DashboardRunManager()))
-
-    response = client.get("/history")
-
-    assert response.status_code == 200
-    assert "추천 이력" in response.text
-
-
 def test_history_api_returns_empty_runs_when_no_performance_service_is_configured() -> None:
     client = TestClient(create_web_app(DashboardRunManager()))
 

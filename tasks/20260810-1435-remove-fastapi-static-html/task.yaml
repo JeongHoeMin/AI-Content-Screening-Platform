@@ -1,0 +1,177 @@
+schemaVersion: 1
+
+id: "20260810-1435-remove-fastapi-static-html"
+title: "FastAPI 정적 HTML 페이지 제거 및 프론트엔드 테스트 도입"
+description: |
+  사용자가 "앞으로 화면은 Next.js로 개발"하기로 결정했으므로, FastAPI가 서빙하던 정적 HTML
+  페이지를 제거해 화면이 두 곳에 중복 존재하는 상태를 정리한다. 대상은
+  app/web/dashboard_html.py, app/web/history_html.py, app/web/settings_html.py와 이를 서빙하는
+  GET /, GET /history, GET /settings 라우트다. FastAPI는 JSON/SSE API만 제공하게 된다.
+  제거로 인해 잃게 되는 테스트 커버리지가 하나 있다: tests/test_web_dashboard.py의
+  test_dashboard_formats_utc_time_as_a_deterministic_kst_value는 DASHBOARD_HTML에서 formatKst
+  JS를 문자열로 잘라내 node로 실행해 UTC→KST 변환을 검증했다. 이 로직은 이제
+  frontend/src/lib/format.ts에 있으므로, 커버리지를 잃지 않도록 frontend에 vitest를 도입해
+  동등한 테스트로 대체한다. 이는 앞으로 화면 개발이 Next.js에서 이루어지는 만큼 프론트엔드에
+  테스트 실행 경로를 만드는 의미도 있다.
+  README의 서비스 구성 설명과 접속 포트 안내도 frontend 서비스 추가에 맞게 갱신한다.
+
+status: completed
+
+createdAt: "2026-08-10T14:34:37+09:00"
+updatedAt: "2026-08-10T14:39:54+09:00"
+
+agent:
+  provider: "claude-code"
+  model: "claude-opus-5"
+  sessionId: null
+
+request:
+  summary: "Next.js를 유일한 화면으로 확정하고 FastAPI의 정적 HTML 페이지와 라우트를 제거한다. (사용자가 요청한 남은 작업 중 두 번째)"
+  originalPrompt: "정리해 앞으로화면은 Next.js로 개발하도록 하고 그리고 남은작업 모두진행 하도록해"
+
+scope:
+  allowedPaths:
+    - "app/web/app.py"
+    - "app/web/dashboard_html.py"
+    - "app/web/history_html.py"
+    - "app/web/settings_html.py"
+    - "tests/test_web_dashboard.py"
+    - "tests/test_dashboard_history_page.py"
+    - "frontend/**"
+    - "README.md"
+    - "tasks/20260810-1435-remove-fastapi-static-html/**"
+
+  deniedPaths:
+    - ".env"
+    - ".env.*"
+    - "secrets/**"
+    - ".venv/**"
+    - "__pycache__/**"
+    - ".git/**"
+    - "runtime/**"
+    - "dist/**"
+    - "build/**"
+    - ".agent/**"
+
+requirements:
+  items:
+    - "app/web/dashboard_html.py, app/web/history_html.py, app/web/settings_html.py를 삭제한다."
+    - "FastAPI에서 GET /, GET /history, GET /settings 라우트를 제거한다."
+    - "기존 JSON/SSE API 라우트와 인증 동작(쿠키 없는 설정 조회 시 401)은 그대로 유지되어야 한다."
+    - "삭제된 HTML에 의존하던 테스트를 제거하거나 API 동작 검증으로 대체한다."
+    - "UTC→KST 변환 검증 커버리지를 frontend 테스트로 대체하고 실제로 실행해 통과시킨다."
+    - "README의 서비스 구성과 접속 안내를 frontend 서비스 기준으로 갱신한다."
+    - "uv run pytest 전체와 frontend의 lint·build·test가 모두 통과해야 한다."
+
+plan:
+  steps:
+    - id: 1
+      description: "frontend에 vitest를 도입하고 format.ts의 KST 변환 등을 검증하는 테스트를 작성한다."
+      status: completed
+
+    - id: 2
+      description: "app/web/app.py에서 세 개의 HTML 라우트와 import를 제거하고 *_html.py 파일을 삭제한다."
+      status: completed
+
+    - id: 3
+      description: "tests/test_web_dashboard.py와 tests/test_dashboard_history_page.py에서 HTML 의존 테스트를 정리한다."
+      status: completed
+
+    - id: 4
+      description: "README의 서비스 구성·접속 포트 안내를 갱신한다."
+      status: completed
+
+    - id: 5
+      description: "uv run pytest, frontend의 lint/build/test를 실행하고 컨테이너를 재배포해 실제 동작을 확인한다."
+      status: completed
+
+result:
+  summary: >
+    화면이 FastAPI 정적 HTML과 Next.js 두 곳에 중복 존재하던 상태를 정리했다.
+    app/web/dashboard_html.py, history_html.py, settings_html.py를 삭제하고 GET /, /history,
+    /settings 라우트와 HTMLResponse import를 제거해 FastAPI가 JSON/SSE API만 제공하도록 했다.
+    작업 중 app/web/app.py 끝에 어디서도 참조되지 않는 구버전 대시보드 HTML 상수(_DASHBOARD_HTML)가
+    남아 있는 것을 발견해 함께 제거했다(사용처가 없음을 grep으로 확인한 뒤 삭제).
+    삭제로 잃게 되는 커버리지를 그대로 버리지 않았다. 기존
+    test_dashboard_formats_utc_time_as_a_deterministic_kst_value는 DASHBOARD_HTML에서 formatKst
+    JS를 잘라내 node로 실행하는 방식이었는데, 해당 로직이 frontend/src/lib/format.ts로 옮겨졌으므로
+    frontend에 vitest를 도입해 동등 이상의 테스트 13건으로 대체했다. UTC→KST 변환 검증은
+    TZ=America/New_York 환경에서도 실행해 호스트 시간대와 무관하게 통과하는 것을 확인했으며,
+    이는 원본 테스트보다 강한 검증이다. safeHref의 javascript: 스킴 차단, 매수/매도 문구 전환,
+    진입가·현재가 실패 사유 구분 등도 함께 덮었다.
+    README는 5개 서비스 구성, 접속 포트가 3000이라는 점, API_BASE_URL이 빌드 시점에 고정된다는
+    제약을 반영해 갱신했다.
+
+  changedFiles:
+    - "app/web/app.py"
+    - "app/web/dashboard_html.py (삭제)"
+    - "app/web/history_html.py (삭제)"
+    - "app/web/settings_html.py (삭제)"
+    - "tests/test_web_dashboard.py"
+    - "tests/test_dashboard_history_page.py"
+    - "frontend/package.json"
+    - "frontend/package-lock.json"
+    - "frontend/src/lib/format.test.ts"
+    - "README.md"
+    - "tasks/20260810-1435-remove-fastapi-static-html/task.yaml"
+
+  verifications:
+    - command: "cd frontend && TZ=America/New_York npm test"
+      result: passed
+      summary: >
+        vitest 13건이 모두 통과했다. 호스트 시간대를 일부러 KST가 아닌 America/New_York로 두고
+        실행해 formatKst의 UTC→KST 변환이 '2026-08-06 00:00 KST'로 결정적으로 나오는 것을 확인했다.
+
+    - command: "cd frontend && npm run lint"
+      result: passed
+      summary: "테스트 파일 추가 후에도 ESLint 오류 0건이다."
+
+    - command: "uv run pytest -q"
+      result: passed
+      summary: >
+        618개 통과, 1개 skip(실계약 opt-in). HTML에 의존하던 테스트 6건을 제거하고,
+        FastAPI가 /·/history·/settings에 404를 반환하는지 검증하는 테스트와 쿠키 없는 설정 조회가
+        401인지 검증하는 테스트로 대체했다(이전 623개에서 감소한 것은 이 정리 때문이다).
+
+    - command: "uv run python -m compileall app tests -q"
+      result: passed
+      summary: "삭제된 모듈을 참조하는 잔여 import 없이 전체 컴파일에 성공했다."
+
+    - command: "docker-compose up -d --build dashboard 후 :8000과 :3000 경로 비교"
+      result: passed
+      summary: >
+        재배포 후 FastAPI(:8000)의 /·/history·/settings가 모두 404, /api/health는 200이고,
+        Next.js(:3000)의 세 페이지는 모두 200으로 응답해 화면 소유권이 완전히 이전되었음을 확인했다.
+
+    - command: "브라우저에서 http://localhost:3000/history 확인"
+      result: passed
+      summary: >
+        컨테이너가 서빙한 이력 페이지가 정상 동작했다. 이번 확인에서는 다보링크가 -0.6%로 바뀌어
+        음수 손익률 표시 경로까지 함께 확인되었다.
+
+  completedAt: "2026-08-10T14:39:54+09:00"
+
+blocker:
+  reason: null
+  requiredAction: null
+
+history:
+  - at: "2026-08-10T14:34:37+09:00"
+    status: planning
+    message: "Task created after the frontend compose service was verified working, so removing the FastAPI-served pages no longer leaves the project without a UI. Identified one test that would lose coverage (the node-based formatKst check) and planned a frontend test to replace it rather than silently dropping it."
+
+  - at: "2026-08-10T14:36:00+09:00"
+    status: in_progress
+    message: "Added vitest and src/lib/format.test.ts first, so the replacement coverage existed before deleting the HTML that the old node-based test read from."
+
+  - at: "2026-08-10T14:37:30+09:00"
+    status: in_progress
+    message: "Deleted the three *_html.py modules and their routes. Also found and removed a dead _DASHBOARD_HTML constant left at the end of app/web/app.py from an earlier iteration, after confirming with grep that nothing referenced it."
+
+  - at: "2026-08-10T14:38:30+09:00"
+    status: testing
+    message: "Ran the frontend suite under TZ=America/New_York to prove the KST assertion does not pass merely because the host is in Seoul, then ran the full pytest suite and compileall."
+
+  - at: "2026-08-10T14:39:54+09:00"
+    status: completed
+    message: "Task completed and verified. After redeploying, FastAPI returns 404 for the three page routes while Next.js serves them, confirming the UI now lives in exactly one place."
