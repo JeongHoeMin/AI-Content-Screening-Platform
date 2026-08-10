@@ -9,12 +9,12 @@ from app.web.app import DashboardRunManager, create_web_app
 
 
 class _HistoryService(Protocol):
-    async def list_run_histories(self) -> object:
+    async def list_run_histories(self, refresh: bool = False) -> object:
         """Return the safe response projected by the dashboard history API."""
 
 
 class _EmptyHistoryService:
-    async def list_run_histories(self) -> object:
+    async def list_run_histories(self, refresh: bool = False) -> object:
         from app.market_prices.performance import RecommendationRunHistoryResponse
 
         return RecommendationRunHistoryResponse(
@@ -23,7 +23,7 @@ class _EmptyHistoryService:
 
 
 class _TwoRunHistoryService:
-    async def list_run_histories(self) -> object:
+    async def list_run_histories(self, refresh: bool = False) -> object:
         from app.market_prices.performance import (
             RecommendationPerformanceItem,
             RecommendationPerformanceSummary,

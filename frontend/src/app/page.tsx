@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { AnalysisCards } from "@/components/AnalysisCards";
+import { AppShell } from "@/components/AppShell";
 import { DiagnosticsTable } from "@/components/DiagnosticsTable";
 import { ProgressPanel } from "@/components/ProgressPanel";
 import {
@@ -10,7 +11,7 @@ import {
   RecommendationsTable,
 } from "@/components/RecommendationsTable";
 import { RunControls } from "@/components/RunControls";
-import { SiteNav } from "@/components/SiteNav";
+import { Card, EmptyState } from "@/components/ui";
 import { safeHref } from "@/lib/format";
 import { useRecommendationRun } from "@/lib/useRecommendationRun";
 
@@ -42,10 +43,11 @@ export default function DashboardPage() {
         : "추천 실행 후 결과를 표시합니다.";
 
   return (
-    <main>
-      <h1>오늘의 투자 인사이트</h1>
-      <p>공식 RSS 전문을 수집하고 LangGraph 분석을 거쳐 Policy 기반 후보를 생성합니다.</p>
-      <SiteNav current="/" />
+    <AppShell
+      current="/"
+      title="오늘의 투자 인사이트"
+      description="공식 RSS를 수집하고 LangGraph 분석을 거쳐 Policy 기반 후보를 생성합니다. 실행 결과는 Telegram 자격 증명이 설정된 경우에도 안전한 요약으로 발송됩니다."
+    >
 
       <RunControls
         limit={limit}
@@ -61,14 +63,13 @@ export default function DashboardPage() {
 
       <ProgressPanel progress={progress} elapsedMs={elapsedMs} />
 
-      <section className="panel">
-        <h2>실시간 작업 기록</h2>
-        <ol className="timeline">
+      <Card title="실시간 작업 기록" description="서버가 전달하는 안전한 진행 상태만 표시합니다.">
+        {timeline.length === 0 ? <EmptyState>추천 실행을 시작하면 진행 기록이 여기에 표시됩니다.</EmptyState> : <ol className="space-y-2 text-sm text-ink-muted">
           {timeline.map((message, index) => (
-            <li key={`${index}-${message}`}>{message}</li>
+            <li key={`${index}-${message}`} className="rounded-lg border border-line bg-surface-sunken px-3 py-2">{message}</li>
           ))}
-        </ol>
-      </section>
+        </ol>}
+      </Card>
 
       <AnalysisCards analyses={analyses} />
 
@@ -77,31 +78,30 @@ export default function DashboardPage() {
         hasResult={result !== null}
       />
 
-      <section className="panel">
-        <h2>선택된 뉴스</h2>
-        <div className="cards">
+      <Card title="선택된 뉴스" description="추천 판단에 사용된 기사 목록입니다.">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {!result ? (
-            <p className="empty">
+            <EmptyState>
               {isRunning
                 ? "뉴스를 수집하고 있습니다."
                 : (loadError ?? "추천 실행 후 선택된 뉴스를 표시합니다.")}
-            </p>
+            </EmptyState>
           ) : result.news_cards.length === 0 ? (
-            <p className="empty">선택된 뉴스가 없습니다.</p>
+            <EmptyState>선택된 뉴스가 없습니다.</EmptyState>
           ) : (
             result.news_cards.map((news, index) => (
-              <article key={`${index}-${news.url}`} className="card">
-                <small>{news.source}</small>
-                <h3>{news.title}</h3>
-                <p>{news.excerpt}</p>
-                <a href={safeHref(news.url)} target="_blank" rel="noreferrer">
+              <article key={`${index}-${news.url}`} className="rounded-xl border border-line bg-surface-sunken p-4">
+                <small className="text-xs font-medium text-ink-subtle">{news.source}</small>
+                <h3 className="mt-1 font-semibold text-ink">{news.title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-ink-muted">{news.excerpt}</p>
+                <a className="mt-3 inline-flex text-sm font-medium text-accent-strong hover:text-ink" href={safeHref(news.url)} target="_blank" rel="noreferrer">
                   원문 보기
                 </a>
               </article>
             ))
           )}
         </div>
-      </section>
+      </Card>
 
       <PerformanceSummaryPanel
         summary={performanceSummary}
@@ -114,6 +114,6 @@ export default function DashboardPage() {
         performanceByIdentity={performanceByIdentity}
         emptyMessage={recommendationsEmptyMessage}
       />
-    </main>
+    </AppShell>
   );
 }

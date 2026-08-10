@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional, Protocol, Tuple
+from typing import Literal, Optional, Protocol, Tuple
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -11,9 +11,16 @@ from app.providers.http import ExternalServiceError, JsonHttpClient, StdlibJsonH
 
 _KST: ZoneInfo = ZoneInfo("Asia/Seoul")
 
+RecommendationTrigger = Literal["scheduled", "dashboard"]
+
+_TRIGGER_TITLES: dict[str, str] = {
+    "scheduled": "AI 콘텐츠 스크리닝 정기 실행 완료",
+    "dashboard": "AI 콘텐츠 스크리닝 실시간 추천 완료",
+}
+
 
 class TelegramRecommendationSummary(BaseModel):
-    """Bounded, content-safe terminal observation for one scheduled run."""
+    """Bounded, content-safe terminal observation for one recommendation run."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -21,6 +28,7 @@ class TelegramRecommendationSummary(BaseModel):
     scheduled_for: datetime
     recommendation_count: int = Field(ge=0)
     recommendations: Tuple[str, ...] = ()
+    trigger: RecommendationTrigger = "scheduled"
 
     @field_validator("recommendations", mode="before")
     @classmethod
@@ -76,7 +84,7 @@ class TelegramBotReporter:
             "%Y-%m-%d %H:%M KST"
         )
         lines: list[str] = [
-            "AI 콘텐츠 스크리닝 정기 실행 완료",
+            _TRIGGER_TITLES[summary.trigger],
             f"기준 시각: {scheduled_kst}",
             f"분석 후보: {summary.recommendation_count}건",
         ]

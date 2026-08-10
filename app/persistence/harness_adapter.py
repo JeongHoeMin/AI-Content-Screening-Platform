@@ -110,6 +110,12 @@ class RecommendationPricePersistence(Protocol):
     ) -> None:
         """Store safe latest snapshots without modifying entry observations."""
 
+    async def backfill_entries(
+        self,
+        snapshots: Tuple[RecommendationPriceEntry, ...],
+    ) -> int:
+        """Recover entry snapshots whose original lookup produced no price."""
+
     async def list_snapshots(self) -> Tuple[RecommendationPriceEntry, ...]:
         """Load safe snapshots for a Harness-owned performance query."""
 
@@ -266,6 +272,15 @@ class SqlAlchemyRecommendationPricePersistence:
         async with self._session_factory.begin() as session:
             repository = SqlAlchemyRecommendationPriceRepository(session)
             await repository.upsert_latest(snapshots)
+
+    async def backfill_entries(
+        self,
+        snapshots: Tuple[RecommendationPriceEntry, ...],
+    ) -> int:
+        """Recover unpriced ENTRY observations in a Harness-owned transaction."""
+        async with self._session_factory.begin() as session:
+            repository = SqlAlchemyRecommendationPriceRepository(session)
+            return await repository.backfill_entries(snapshots)
 
     async def list_snapshots(self) -> Tuple[RecommendationPriceEntry, ...]:
         """Read snapshots through the database adapter, not from Policy or API code."""

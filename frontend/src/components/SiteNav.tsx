@@ -6,14 +6,35 @@ const LINKS = [
   { href: "/settings", label: "정기 실행 설정" },
 ] as const;
 
-export function SiteNav({ current }: { current: (typeof LINKS)[number]["href"] }) {
+export type NavHref = (typeof LINKS)[number]["href"];
+
+/**
+ * Every destination stays visible and the current one is marked, so the nav
+ * keeps the same shape on all three pages instead of shifting as links drop out.
+ */
+export function SiteNav({ current }: { current: NavHref }) {
   return (
-    <nav>
-      {LINKS.filter((link) => link.href !== current).map((link) => (
-        <Link key={link.href} href={link.href}>
-          {link.label}
-        </Link>
-      ))}
+    <nav aria-label="주요 화면">
+      <ul className="flex flex-wrap items-center gap-1">
+        {LINKS.map((link) => {
+          const isCurrent = link.href === current;
+          return (
+            <li key={link.href}>
+              <Link
+                href={link.href}
+                aria-current={isCurrent ? "page" : undefined}
+                className={`inline-block rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                  isCurrent
+                    ? "bg-accent/15 text-accent-strong"
+                    : "text-ink-muted hover:bg-surface-raised hover:text-ink"
+                }`}
+              >
+                {link.label}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
     </nav>
   );
 }

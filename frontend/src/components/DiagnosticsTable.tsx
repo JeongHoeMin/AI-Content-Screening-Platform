@@ -1,6 +1,7 @@
 "use client";
 
 import type { ImpactDiagnostics } from "@/lib/types";
+import { Card, EmptyState, Td, TableScroll, Th } from "@/components/ui";
 
 const DIAGNOSTIC_ROWS: Array<[string, keyof ImpactDiagnostics]> = [
   ["실패한 이벤트 추출 배치", "failed_extraction_batches"],
@@ -22,32 +23,36 @@ interface DiagnosticsTableProps {
 
 export function DiagnosticsTable({ diagnostics, hasResult }: DiagnosticsTableProps) {
   return (
-    <section className="panel">
-      <h2>후보 제외 진단</h2>
+    <Card
+      title="후보 제외 진단"
+      description="점수화 단계에서 후보가 걸러진 지점을 건수로 보여줍니다."
+    >
       {!diagnostics ? (
-        <p className="empty">
+        <EmptyState>
           {hasResult
             ? "후보 제외 진단을 만들지 못했습니다."
             : "추천 실행 후 후보가 점수화되지 않은 이유를 표시합니다."}
-        </p>
+        </EmptyState>
       ) : (
-        <table>
+        <TableScroll>
           <thead>
             <tr>
-              <th>단계별 판단</th>
-              <th>건수</th>
+              <Th>단계별 판단</Th>
+              <Th align="right">건수</Th>
             </tr>
           </thead>
           <tbody>
             {DIAGNOSTIC_ROWS.map(([label, key]) => (
-              <tr key={key}>
-                <td>{label}</td>
-                <td>{diagnostics[key]}</td>
+              <tr key={key} className="hover:bg-surface-raised/50">
+                <Td className="text-ink-muted">{label}</Td>
+                <Td align="right" className="font-semibold">
+                  {diagnostics[key]}
+                </Td>
               </tr>
             ))}
           </tbody>
-        </table>
+        </TableScroll>
       )}
-    </section>
+    </Card>
   );
 }

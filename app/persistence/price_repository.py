@@ -9,10 +9,10 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.dialects.postgresql import insert as postgresql_insert
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.market_price import RecommendationPriceSnapshot
+from app.models.market_price import PriceSnapshotStatus, RecommendationPriceSnapshot
 from app.persistence.schema import recommendation_price_snapshots
 
 
@@ -48,6 +48,12 @@ class RecommendationPriceRepository(Protocol):
         snapshots: Tuple[RecommendationPriceEntry, ...],
     ) -> None:
         """Persist latest snapshots while retaining immutable entry observations."""
+
+    async def backfill_entries(
+        self,
+        snapshots: Tuple[RecommendationPriceEntry, ...],
+    ) -> int:
+        """Fill in entry rows that never obtained a price, leaving priced rows alone."""
 
     async def list_snapshots(self) -> Tuple[RecommendationPriceEntry, ...]:
         """Load safe entry and latest observations for Harness performance evaluation."""
@@ -105,6 +111,59 @@ class SqlAlchemyRecommendationPriceRepository:
                     },
                 )
             )
+
+    async def backfill_entries(
+        self,
+        snapshots: Tuple[RecommendationPriceEntry, ...],
+    ) -> int:
+        """Update only entry rows still stored as UNAVAILABLE, never a priced one.
+
+        An entry price is the immutable basis of every later return, so a
+        recovered observation may replace a failed lookup but must not overwrite
+        a price that was already recorded.
+        """
+        updated_count: int = 0
+        snapshot: RecommendationPriceEntry
+        for snapshot in snapshots:
+            if snapshot.snapshot_kind is not SnapshotKind.ENTRY:
+                raise ValueError("Only ENTRY snapshots may be backfilled")
+            price_snapshot: RecommendationPriceSnapshot = snapshot.snapshot
+            result = await self._session.execute(
+                update(recommendation_price_snapshots)
+                .where(
+                    recommendation_price_snapshots.c.run_id == price_snapshot.run_id,
+                    recommendation_price_snapshots.c.recommendation_index
+                    == price_snapshot.recommendation_index,
+                    recommendation_price_snapshots.c.snapshot_kind
+                    == SnapshotKind.ENTRY.value,
+                    recommendation_price_snapshots.c.status
+                    == PriceSnapshotStatus.UNAVAILABLE.value,
+                )
+                .values(
+                    status=price_snapshot.status.value,
+                    price=price_snapshot.price,
+                    currency=price_snapshot.currency,
+                    basis=(
+                        price_snapshot.basis.value
+                        if price_snapshot.basis is not None
+                        else None
+                    ),
+                    provider=(
+                        price_snapshot.provider.value
+                        if price_snapshot.provider is not None
+                        else None
+                    ),
+                    observed_at=price_snapshot.observed_at,
+                    trading_date=price_snapshot.trading_date,
+                    error_kind=(
+                        price_snapshot.error_kind.value
+                        if price_snapshot.error_kind is not None
+                        else None
+                    ),
+                )
+            )
+            updated_count += result.rowcount or 0
+        return updated_count
 
     async def list_snapshots(self) -> Tuple[RecommendationPriceEntry, ...]:
         """Read only validated price columns, ordered for deterministic projections."""

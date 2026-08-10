@@ -1,0 +1,262 @@
+schemaVersion: 1
+
+id: "20260810-1540-ui-overhaul-and-price-backfill"
+title: "UI 전면 개편과 추천 이력 점진 로딩, 미확인 진입가 백필, 실시간 실행 Telegram 발송"
+description: >-
+  Next.js 프런트엔드를 Tailwind CSS 기반 디자인 시스템으로 재작성해 버튼·링크·라벨 겹침을 제거하고
+  세 화면의 정보 구조를 통일한다. 추천 이력 API가 저장된 스냅샷만으로 즉시 응답하도록 분리해
+  화면이 먼저 데이터를 그린 뒤 손익률을 회차 단위로 채우게 한다. 진입가가 미확인인 추천에는
+  추천 시각 기준 KRX 과거 종가를 다시 조회하는 셀 단위 재조회 버튼과 schedule-worker의 일 1회
+  배치를 추가하고, 대시보드 실시간 추천 실행 결과도 Telegram으로 발송한다.
+
+status: completed
+
+createdAt: "2026-08-10T15:40:00+09:00"
+updatedAt: "2026-08-10T16:16:05+09:00"
+
+agent:
+  provider: "codex"
+  model: "gpt-5.6"
+  sessionId: null
+
+request:
+  summary: >-
+    디자인 겹침 해소를 포함한 UX/UI 전면 개편, 추천 이력 즉시 표시와 손익률 점진 갱신,
+    미확인 진입가의 셀 단위 재조회 버튼과 일 1회 배치, 대시보드 실시간 추천의 Telegram 발송.
+  originalPrompt: |
+    수정이필요해.
+
+    1. 전체적인 디자인 수정. 현재 버튼이나 링크, 라벨이 겹쳐보이는 이슈있음.
+    2. 좀더 시각적으로 사용자가 보기 편한 디자인설계구조였으면함. UX/UI 전체를 손봐야함.
+    3. 추천이력페이지에서 이력을불러오는동안 아무것도 화면에 나오지않아 적재된데이터도 없는것처럼 보임. 먼저 데이터를 화면에 보여주고 손익률 계산은 실시간으로 계산된 것 부터 업데이트 하는것이 좋을것같음.
+    4. 과거에 손익률 미확인된 종목에 대해선 과거 추천 시각때의 가격을 확인할 수 있도록 진행 필요(이 부분에대해선 각 미확인 칸에 리로딩 버튼이있었으면 하고 일배치로 하루에 한번 조회 할수 있었으면 함.)
+    5. 대시보드에서 "추천받기"버튼으로 실시간 추천을 확인해도 텔레그램으로 결과를 쏴줘야함.
+
+    (대화 중 확정한 선택: Telegram은 자격 증명이 설정되어 있으면 항상 발송, 스타일링은 Tailwind CSS 도입,
+    일 1회 배치는 기존 schedule-worker 안에서 실행, Hook 런처의 macOS Python 탐색 오류 수정 승인.)
+
+scope:
+  allowedPaths:
+    - "tasks/20260810-1540-ui-overhaul-and-price-backfill/**"
+    - "frontend/src/**"
+    - "frontend/package.json"
+    - "frontend/package-lock.json"
+    - "frontend/postcss.config.mjs"
+    - "app/web/app.py"
+    - "app/harness/__init__.py"
+    - "app/harness/entry_price_backfill.py"
+    - "app/harness/recommendation_prices.py"
+    - "app/harness/recommendation_summary.py"
+    - "app/harness/telegram.py"
+    - "app/market_prices/__init__.py"
+    - "app/market_prices/performance.py"
+    - "app/persistence/harness_adapter.py"
+    - "app/persistence/price_repository.py"
+    - "app/scheduled_worker.py"
+    - "docker-compose.yml"
+    - "docs/ARCHITECTURE.md"
+    - "docs/DECISION_LOG.md"
+    - "tests/**"
+    # 사용자가 명시적으로 승인한 예외: macOS에서 Hook 런처가 PyYAML을 가진 Python을
+    # 찾지 못해 모든 파일 변경이 차단되던 문제를 고치기 위해서만 허용한다.
+    - ".agent/hooks/run-validate-before-write.sh"
+
+  deniedPaths:
+    - ".env"
+    - ".env.*"
+    - "secrets/**"
+    - ".venv/**"
+    - "__pycache__/**"
+    - ".git/**"
+    - "runtime/**"
+    - "dist/**"
+    - "build/**"
+    - ".agent/docs/**"
+    - ".agent/templates/**"
+    - ".agent/hooks/validate-before-write.py"
+
+requirements:
+  items:
+    - "모든 화면에서 버튼, 링크, 라벨이 서로 겹치지 않는다. 특히 실행 옵션의 숨김 radio/checkbox input이 문서 좌상단에 절대배치되어 다른 요소 위에 겹치던 문제가 제거된다."
+    - "대시보드, 추천 이력, 정기 실행 설정 세 화면이 공통 상단 네비게이션, 페이지 셸, 카드, 표 스타일을 공유하는 Tailwind 기반 디자인 시스템으로 재작성된다."
+    - "GET /api/runs/history 는 외부 가격 API를 호출하지 않고 저장된 스냅샷만으로 즉시 응답한다."
+    - "추천 이력 페이지는 응답을 받는 즉시 모든 회차와 종목을 표시하고, 손익률은 회차별 갱신이 끝나는 순서대로 화면에 반영된다."
+    - "회차 단위 최신가 갱신 endpoint가 해당 회차만 갱신하고 갱신된 회차 항목을 반환한다."
+    - "진입가가 미확인인 항목은 추천 시각 기준 KRX 과거 종가로 재조회되며 KIS 실시간 시세를 사용하지 않는다."
+    - "이미 가격이 확인된 entry 스냅샷은 재조회로 덮어쓰이지 않는다."
+    - "추천 이력의 각 미확인 진입가 칸에 재조회 버튼이 있고, 버튼을 누르면 해당 항목만 갱신된다."
+    - "schedule-worker가 하루에 한 번 미확인 진입가 백필을 실행하고 같은 KST 날짜에는 중복 실행하지 않는다."
+    - "대시보드 추천받기로 시작한 실행이 완료되면 Telegram 자격 증명이 설정된 경우 결과 요약이 발송된다."
+    - "정기 실행 경로에서는 Telegram 발송이 중복되지 않는다."
+    - "Telegram 발송 실패가 추천 실행 결과나 SSE 완료 이벤트를 바꾸지 않는다."
+    - "dashboard compose 서비스가 TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID 환경변수를 전달받는다."
+    - "새 API 경계와 entry 백필 정책이 docs/ARCHITECTURE.md 와 docs/DECISION_LOG.md 에 기록된다."
+
+plan:
+  steps:
+    - id: 1
+      description: "persistence에 UNAVAILABLE entry 스냅샷만 갱신하는 backfill_entries를 추가한다."
+      status: completed
+
+    - id: 2
+      description: "가격 도메인에 저장 전용 조회, 회차 단위 갱신, 추천 시각 기준 entry 백필 서비스를 추가한다."
+      status: completed
+
+    - id: 3
+      description: "web API에서 history를 즉시 응답으로 바꾸고 회차 갱신·항목 백필 endpoint를 추가한다."
+      status: completed
+
+    - id: 4
+      description: "Telegram 요약 빌더를 공용 모듈로 분리하고 대시보드 실시간 실행 발송과 compose 환경변수를 추가한다."
+      status: completed
+
+    - id: 5
+      description: "schedule-worker에 KST 기준 일 1회 미확인 진입가 백필 배치를 추가한다."
+      status: completed
+
+    - id: 6
+      description: "frontend에 Tailwind v4를 도입하고 디자인 토큰과 공통 셸 컴포넌트를 만든다."
+      status: completed
+
+    - id: 7
+      description: "대시보드, 이력, 설정 화면을 재작성하며 숨김 input 절대배치로 인한 겹침을 제거한다."
+      status: completed
+
+    - id: 8
+      description: "이력 화면의 즉시 렌더와 회차별·항목별 점진 갱신을 구현한다."
+      status: completed
+
+    - id: 9
+      description: "docs/ARCHITECTURE.md 와 docs/DECISION_LOG.md 를 갱신한다."
+      status: completed
+
+    - id: 10
+      description: "pytest, tsc, eslint, vitest, next build 와 브라우저 확인으로 검증한다."
+      status: completed
+
+result:
+  summary: "저장 스냅샷 우선 이력 API와 회차·항목 단위 가격 갱신, KRX 과거 종가 기반 entry 백필 및 KST 일일 배치, dashboard Telegram 요약 발송을 구현했다. Tailwind 기반 공통 셸로 대시보드·이력·설정 화면을 재구성하고 새 경계를 문서화했다."
+  changedFiles:
+    - ".agent/hooks/run-validate-before-write.sh"
+    - "app/harness/__init__.py"
+    - "app/harness/entry_price_backfill.py"
+    - "app/harness/recommendation_prices.py"
+    - "app/harness/recommendation_summary.py"
+    - "app/harness/telegram.py"
+    - "app/persistence/harness_adapter.py"
+    - "app/persistence/price_repository.py"
+    - "app/scheduled_worker.py"
+    - "app/web/app.py"
+    - "docker-compose.yml"
+    - "docs/ARCHITECTURE.md"
+    - "docs/DECISION_LOG.md"
+    - "frontend/package.json"
+    - "frontend/package-lock.json"
+    - "frontend/postcss.config.mjs"
+    - "frontend/src/app/globals.css"
+    - "frontend/src/app/history/page.tsx"
+    - "frontend/src/app/page.tsx"
+    - "frontend/src/app/settings/page.tsx"
+    - "frontend/src/components/AppShell.tsx"
+    - "frontend/src/components/DiagnosticsTable.tsx"
+    - "frontend/src/components/ProgressPanel.tsx"
+    - "frontend/src/components/RecommendationsTable.tsx"
+    - "frontend/src/components/RunControls.tsx"
+    - "frontend/src/components/SiteNav.tsx"
+    - "frontend/src/components/ui.tsx"
+    - "frontend/src/lib/history.test.ts"
+    - "frontend/src/lib/history.ts"
+    - "tests/test_dashboard_history_page.py"
+    - "tests/test_dashboard_price_recording.py"
+    - "tests/test_entry_price_backfill.py"
+    - "tests/test_recommendation_performance.py"
+    - "tasks/20260810-1540-ui-overhaul-and-price-backfill/task.yaml"
+  verifications:
+    - command: "uv run pytest -q"
+      result: passed
+      summary: "630 passed, 1 skipped; LibreSSL compatibility warning 1건만 출력됐다."
+    - command: "npm run lint"
+      result: passed
+      summary: "frontend ESLint 오류가 없었다."
+    - command: "npm test"
+      result: passed
+      summary: "Vitest 2 files, 15 tests가 통과했다."
+    - command: "npx next build --webpack"
+      result: passed
+      summary: "TypeScript 검사와 /, /history, /settings 정적 생성이 성공했다."
+    - command: "in-app browser local UI inspection"
+      result: passed
+      summary: "localhost:3000에서 dashboard와 settings의 공통 셸, nav, chip input, button 및 password input 배치를 확인했다. frontend 단독 서버에는 backend API가 연결되지 않아 history는 loading 상태까지만 직접 확인했고 API 동작은 pytest로 검증했다."
+    - command: "git diff --check"
+      result: passed
+      summary: "공백 오류가 없었다."
+  completedAt: "2026-08-10T16:16:05+09:00"
+
+blocker:
+  reason: null
+  requiredAction: null
+
+history:
+  - at: "2026-08-10T15:40:00+09:00"
+    status: planning
+    message: "Task created: UI 전면 개편, 이력 점진 로딩, 미확인 진입가 백필, 실시간 실행 Telegram 발송의 요구사항과 계획을 기록했다."
+
+  - at: "2026-08-10T15:45:00+09:00"
+    status: planning
+    message: "Hook 차단 확인: .agent/hooks/run-validate-before-write.sh 가 macOS에서 PyYAML이 있는 .venv/bin/python 을 탐색하지 않아 검증기가 ModuleNotFoundError 로 죽고 모든 Write/Edit 가 차단되었다."
+
+  - at: "2026-08-10T15:50:00+09:00"
+    status: planning
+    message: "작업 범위 변경: 사용자가 런처 수정을 명시적으로 승인해 .agent/hooks/run-validate-before-write.sh 를 allowedPaths 에 추가하고, deniedPaths 는 .agent/docs/**, .agent/templates/**, .agent/hooks/validate-before-write.py 로 좁혔다. 검증 로직과 차단 정책은 변경하지 않는다."
+
+  - at: "2026-08-10T15:52:00+09:00"
+    status: planning
+    message: "Hook 런처에 .venv/bin/python 탐색을 추가하고, in_progress 작업이 없을 때 정상적으로 차단되는지 self-test 로 확인했다."
+
+  - at: "2026-08-10T15:56:00+09:00"
+    status: in_progress
+    message: "구현 시작: entry 스냅샷 백필을 위한 persistence 경계부터 변경한다."
+
+  - at: "2026-08-10T16:04:29+09:00"
+    status: in_progress
+    message: "사용자 요청으로 작업을 재개했다. 기존 미완료 변경과 요구사항 경계를 점검한 뒤, persistence 백필 계약부터 테스트로 검증·보완한다."
+
+  - at: "2026-08-10T16:05:00+09:00"
+    status: testing
+    message: "기존 구현의 가격 이력·schedule-worker·dashboard API 관련 회귀 테스트를 시작한다."
+
+  - at: "2026-08-10T16:05:12+09:00"
+    status: in_progress
+    message: "회귀 테스트에서 새 history 읽기 계약과 기존 테스트 기대값의 불일치를 확인했다. history API 테스트 double은 refresh 인자를 수용하도록, 가격 서비스 테스트는 외부 조회가 필요한 경우 refresh=True를 명시하도록 보완한다."
+
+  - at: "2026-08-10T16:09:51+09:00"
+    status: testing
+    message: "이력의 회차별·항목별 점진 갱신과 세 화면의 공통 Tailwind 셸 적용 후 frontend lint·unit test·production build 검증을 시작한다."
+
+  - at: "2026-08-10T16:10:54+09:00"
+    status: in_progress
+    message: "frontend lint·unit test와 webpack production build를 통과했다. 새 history API 경계와 entry 백필 정책을 아키텍처·결정 기록에 반영한다. Turbopack build는 환경의 포트 바인딩 제한으로 실행되지 않았다."
+
+  - at: "2026-08-10T16:11:36+09:00"
+    status: testing
+    message: "작업 범위 전체의 backend regression suite, frontend lint·unit test·webpack production build, diff 검증을 시작한다."
+
+  - at: "2026-08-10T16:12:02+09:00"
+    status: in_progress
+    message: "전체 pytest에서 dashboard 실행 테스트 double이 새 notify keyword를 수용하지 않아 1건 실패했다. 실행 동작은 유지하고 double의 함수 서명을 현재 내부 호출 계약에 맞춘다."
+
+  - at: "2026-08-10T16:12:16+09:00"
+    status: testing
+    message: "notify 호출 계약을 반영한 뒤 전체 backend 및 frontend 검증을 재시작한다."
+
+  - at: "2026-08-10T16:14:08+09:00"
+    status: in_progress
+    message: "전체 backend 628개와 frontend lint·15개 unit test·webpack build를 통과했고, 브라우저에서 dashboard·settings 셸을 확인했다. entry backfill의 과거 시점 조회와 KST 일일 중복 방지 계약을 전용 회귀 테스트로 추가한다."
+
+  - at: "2026-08-10T16:15:03+09:00"
+    status: testing
+    message: "entry backfill 전용 회귀 테스트 2개를 통과했다. 전체 backend 및 frontend 검증과 최종 diff 검증을 다시 실행한다."
+
+  - at: "2026-08-10T16:16:05+09:00"
+    status: completed
+    message: "전체 backend 630개 통과(1 skipped), frontend lint·15개 unit test·webpack build 통과, diff 검증 및 로컬 browser UI 확인을 마쳤다. 결과와 변경 경로를 기록하고 작업을 완료했다."

@@ -38,7 +38,16 @@ reason code, policy version을 출력하지 않는다. v1 action eligibility는 
 KIS가 미설정이거나 제한된 오류 관측을 반환하면 KRX 최근 거래일 종가를 fallback으로 관측한다. KIS/KRX adapter와
 Parser는 외부 응답을 검증된 관측으로만 만들고, Workflow·Policy·LLM은 가격 API나 가격 저장소를 호출하지 않는다.
 entry snapshot은 변경하지 않으며 latest snapshot은 별도 identity로 저장한다. 한 종목의 가격 확인 실패는
-`UNAVAILABLE` 관측으로 남고 다른 추천이나 원래 recommendation 실행을 실패시키지 않는다.
+`UNAVAILABLE` 관측으로 남고 다른 추천이나 원래 recommendation 실행을 실패시키지 않는다. 과거에
+`UNAVAILABLE`로 저장된 entry만 `RecommendationEntryPriceBackfill`이 원래 추천 시각을 기준으로
+`KrxClosingPriceClient`의 일 종가로 회복한다. 이미 확인된 entry는 절대 덮어쓰지 않고, daily worker는
+KST 날짜마다 한 번만 이 best-effort 백필을 실행한다.
+
+`GET /api/runs/history`는 저장된 entry/latest 스냅샷만 투영하므로 외부 가격 API를 호출하지 않는다.
+브라우저는 그 응답을 즉시 렌더하고 `POST /api/runs/history/{run_id}/refresh`로 회차별 latest 관측을
+독립 갱신한다. `POST /api/runs/history/{run_id}/items/{recommendation_index}/entry-price`는 미확인 entry
+한 건만 회복한다. 이 API는 모두 Dashboard consumer 경계이며 Workflow·Policy·LLM은 가격 조회·저장과
+browser 갱신을 알지 않는다.
 
 `app/filters/`의 `ArticleFilter`와 versioned `ThemeCatalog`는 정규화된 Article의 제목·본문만 읽어 투자 테마와 뉴스 주제 일치 여부를 결정한다. 대시보드 Harness는 통과 Article만 Workflow로 넘기며, `CollectionFilterPersistence`를 통해 실행 ID·선택 enum·카탈로그 버전·건수 집계만 PostgreSQL에 저장한다. Provider·Normalizer·Parser·Policy·Workflow는 이 저장소를 직접 호출하지 않는다.
 
@@ -96,7 +105,7 @@ recover 가능한 item 오류는 가능한 한 해당 item만 제외하고 sibli
 로그는 `structlog`만 사용한다. batch index, event/evidence index, 내부 식별자, 제한된 error kind 같은 운영용 메타데이터만 기록하며 기사 본문, prompt, SDK 전체 응답, API key, 개인정보, 무제한 예외 문자열을 기록하지 않는다.
 Docker dashboard 실행은 `./runtime/logs` volume에 구조화 application JSONL과 terminal execution audit JSONL을 보존한다. 이 runtime data는 Git에 포함하지 않는다.
 
-정기 추천은 별도 `schedule-worker` process가 PostgreSQL의 KST cron 설정을 lease로 claim한 뒤 기존 RSS recommendation Harness를 호출한다. 설정·lease·terminal execution status는 `ScheduledRecommendationPersistence`만 변경한다. Telegram adapter는 terminal audit 뒤의 best-effort observer이며 전송 실패가 recommendation 결과를 바꾸지 않는다.
+정기 추천은 별도 `schedule-worker` process가 PostgreSQL의 KST cron 설정을 lease로 claim한 뒤 기존 RSS recommendation Harness를 호출한다. 설정·lease·terminal execution status는 `ScheduledRecommendationPersistence`만 변경한다. Telegram adapter는 terminal audit 뒤의 best-effort observer이며 전송 실패가 recommendation 결과를 바꾸지 않는다. 대시보드에서 직접 시작한 실행도 terminal 결과와 저장된 entry snapshot을 바탕으로 같은 안전한 요약을 전송하지만, scheduled 실행은 worker observer만 전송해 중복을 막는다.
 
 대시보드와 Telegram의 운영 시각은 `Asia/Seoul`(KST)로 투영하고, persistence의 관측 시각과 거래일 기준은
 검증 가능한 UTC/거래일 값으로 보존한다. 성과 표시는 Harness가 계산한 사후 단순 가격 비교이며 수수료·세금·배당,

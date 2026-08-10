@@ -220,6 +220,7 @@ def test_manual_and_scheduled_runs_share_the_price_recording_execution_path(
         run_id: str,
         state: object,
         request: RecommendationRunRequest,
+        notify: bool = False,
     ) -> None:
         executed_run_ids.append(run_id)
         await manager._record_price_entries(

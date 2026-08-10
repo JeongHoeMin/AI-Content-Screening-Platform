@@ -1,6 +1,7 @@
 "use client";
 
 import { THEMES, TOPICS, toggle } from "@/lib/catalog";
+import { Button, Card, ChipOption, Fieldset } from "@/components/ui";
 
 const COLLECTION_SIZES = [
   { value: 10, label: "적게 · 10건" },
@@ -32,63 +33,69 @@ export function RunControls({
   onTopicsChange,
   onRun,
 }: RunControlsProps) {
-  return (
-    <div className="run-controls">
-      <button onClick={onRun} disabled={disabled}>
-        {isRunning ? "추천 분석 중…" : "오늘의 뉴스를 기준으로 추천받기"}
-      </button>
+  const selectedFilterCount = themes.length + topics.length;
 
-      <fieldset className="option-group">
-        <legend className="empty">분석 건수</legend>
-        {COLLECTION_SIZES.map((size) => (
-          <span key={size.value}>
-            <input
-              type="radio"
+  return (
+    <Card
+      title="추천 실행"
+      description="수집 범위와 필터를 고른 뒤 실행하면 결과가 아래에 실시간으로 쌓입니다."
+      actions={
+        <Button size="lg" onClick={onRun} disabled={disabled}>
+          {isRunning ? "추천 분석 중…" : "오늘의 뉴스로 추천받기"}
+        </Button>
+      }
+    >
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,auto)_minmax(0,1fr)_minmax(0,1fr)]">
+        <Fieldset legend="분석 건수">
+          {COLLECTION_SIZES.map((size) => (
+            <ChipOption
+              key={size.value}
               id={`size-${size.value}`}
               name="collection-size"
-              value={size.value}
+              type="radio"
               checked={limit === size.value}
               disabled={disabled}
+              label={size.label}
               onChange={() => onLimitChange(size.value)}
             />
-            <label htmlFor={`size-${size.value}`}>{size.label}</label>
-          </span>
-        ))}
-      </fieldset>
+          ))}
+        </Fieldset>
 
-      <fieldset className="option-group">
-        <legend className="empty">투자 테마</legend>
-        {THEMES.map((theme) => (
-          <span key={theme.value}>
-            <input
-              type="checkbox"
+        <Fieldset legend="투자 테마">
+          {THEMES.map((theme) => (
+            <ChipOption
+              key={theme.value}
               id={`theme-${theme.value}`}
-              value={theme.value}
+              type="checkbox"
               checked={themes.includes(theme.value)}
               disabled={disabled}
+              label={theme.label}
               onChange={() => onThemesChange(toggle(themes, theme.value))}
             />
-            <label htmlFor={`theme-${theme.value}`}>{theme.label}</label>
-          </span>
-        ))}
-      </fieldset>
+          ))}
+        </Fieldset>
 
-      <fieldset className="option-group">
-        <legend className="empty">뉴스 주제</legend>
-        {TOPICS.map((topic) => (
-          <span key={topic.value}>
-            <input
-              type="checkbox"
+        <Fieldset legend="뉴스 주제">
+          {TOPICS.map((topic) => (
+            <ChipOption
+              key={topic.value}
               id={`topic-${topic.value}`}
-              value={topic.value}
+              type="checkbox"
               checked={topics.includes(topic.value)}
               disabled={disabled}
+              label={topic.label}
               onChange={() => onTopicsChange(toggle(topics, topic.value))}
             />
-            <label htmlFor={`topic-${topic.value}`}>{topic.label}</label>
-          </span>
-        ))}
-      </fieldset>
-    </div>
+          ))}
+        </Fieldset>
+      </div>
+
+      <p className="mt-5 border-t border-line pt-4 text-xs text-ink-subtle">
+        {selectedFilterCount === 0
+          ? "필터를 고르지 않으면 수집된 뉴스 전체를 분석합니다."
+          : `테마·주제 필터 ${selectedFilterCount}개가 적용됩니다.`}
+        {" 실행이 끝나면 결과 요약이 Telegram으로도 전송됩니다."}
+      </p>
+    </Card>
   );
 }

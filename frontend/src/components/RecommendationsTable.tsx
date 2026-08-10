@@ -2,18 +2,13 @@
 
 import { describePricePerformance, formatKst } from "@/lib/format";
 import type { PerformanceItem, PerformanceSummary, RecommendationRow } from "@/lib/types";
+import { Badge, Card, EmptyState, TableScroll, Td, Th } from "@/components/ui";
 
 interface RecommendationsTableProps {
   runId: string | null;
   recommendations: RecommendationRow[];
   performanceByIdentity: Map<string, PerformanceItem>;
   emptyMessage: string;
-}
-
-function actionTone(action: string): string {
-  if (action.includes("buy")) return "buy";
-  if (action.includes("sell")) return "sell";
-  return "";
 }
 
 export function PerformanceSummaryPanel({
@@ -24,12 +19,11 @@ export function PerformanceSummaryPanel({
   hasResult: boolean;
 }) {
   return (
-    <section className="panel">
-      <h2>추천 성과 요약</h2>
+    <Card title="추천 성과 요약" description="추천 시점의 가격과 최신 가격을 단순 비교한 참고 정보입니다.">
       {!hasResult ? (
-        <p className="empty">추천 실행 후 가격 성과를 표시합니다.</p>
+        <EmptyState>추천 실행 후 가격 성과를 표시합니다.</EmptyState>
       ) : (
-        <>
+        <div className="space-y-1 text-sm text-ink-muted">
           <p>
             {`확인 ${summary.confirmed_count}건 · 미확인 ${summary.unavailable_count}건 · BUY ${summary.buy_count}건 · SELL ${summary.sell_count}건`}
           </p>
@@ -37,9 +31,9 @@ export function PerformanceSummaryPanel({
             {`승률 ${summary.positive_win_rate === null ? "-" : `${summary.positive_win_rate.toFixed(1)}%`} · 평균 ${summary.mean_return_percent === null ? "-" : `${summary.mean_return_percent.toFixed(1)}%`} · 중앙값 ${summary.median_return_percent === null ? "-" : `${summary.median_return_percent.toFixed(1)}%`}`}
           </p>
           <p>최신 평가: {formatKst(summary.latest_observed_at)}</p>
-        </>
+        </div>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -50,25 +44,17 @@ export function RecommendationsTable({
   emptyMessage,
 }: RecommendationsTableProps) {
   return (
-    <section className="panel">
-      <h2>매수 · 판매 추천</h2>
-      <table>
+    <Card title="매수 · 판매 추천" description="Policy가 선택한 후보와 가격 성과를 함께 확인합니다.">
+      <TableScroll>
         <thead>
           <tr>
-            <th>종목</th>
-            <th>코드</th>
-            <th>점수</th>
-            <th>추천</th>
-            <th>근거</th>
-            <th>가격 성과</th>
+            <Th>종목</Th><Th>코드</Th><Th align="right">점수</Th><Th>추천</Th><Th>근거</Th><Th>가격 성과</Th>
           </tr>
         </thead>
         <tbody>
           {recommendations.length === 0 ? (
             <tr>
-              <td colSpan={6} className="empty">
-                {emptyMessage}
-              </td>
+              <Td colSpan={6}><EmptyState>{emptyMessage}</EmptyState></Td>
             </tr>
           ) : (
             recommendations.map((item) => {
@@ -78,12 +64,12 @@ export function RecommendationsTable({
               const { basis, detail } = describePricePerformance(performance);
               return (
                 <tr key={`${item.recommendation_index}-${item.company_name}`}>
-                  <td>{item.company_name}</td>
-                  <td>{item.ticker ?? "-"}</td>
-                  <td>{item.score}</td>
-                  <td className={actionTone(item.action)}>{item.action}</td>
-                  <td>{item.reason_code}</td>
-                  <td>
+                  <Td className="font-medium">{item.company_name}</Td>
+                  <Td className="font-mono text-xs text-ink-muted">{item.ticker ?? "-"}</Td>
+                  <Td align="right">{item.score}</Td>
+                  <Td><Badge tone={item.action.includes("buy") ? "positive" : item.action.includes("sell") ? "negative" : "neutral"}>{item.action}</Badge></Td>
+                  <Td className="text-ink-muted">{item.reason_code}</Td>
+                  <Td className="text-ink-muted">
                     {basis && (
                       <>
                         {basis}
@@ -91,13 +77,13 @@ export function RecommendationsTable({
                       </>
                     )}
                     {detail}
-                  </td>
+                  </Td>
                 </tr>
               );
             })
           )}
         </tbody>
-      </table>
-    </section>
+      </TableScroll>
+    </Card>
   );
 }

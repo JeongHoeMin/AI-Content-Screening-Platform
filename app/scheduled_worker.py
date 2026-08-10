@@ -30,13 +30,22 @@ from app.persistence import (
     create_recommendation_price_persistence,
     create_workflow_execution_audit_persistence,
 )
+from app.harness.entry_price_backfill import (
+    DailyEntryPriceBackfill,
+    HistoricalClosingPriceCapture,
+    RecommendationEntryPriceBackfill,
+)
 from app.harness.recommendation_prices import (
     RecommendationPerformanceService,
     RecommendationPriceRecorder,
 )
+from app.harness.recommendation_summary import (
+    RecommendationSummaryInput,
+    build_recommendation_lines,
+)
 from app.harness.worker_heartbeat import DEFAULT_HEARTBEAT_PATH, WorkerHeartbeat
 from app.market_prices import KisRealtimePriceClient, KrxClosingPriceClient, MarketPriceService
-from app.market_prices.performance import RecommendationPerformanceItem, RecommendationPerformanceResponse
+from app.market_prices.performance import RecommendationPerformanceResponse
 from app.web.app import DashboardRunManager, RecommendationRunRequest
 
 logger = structlog.get_logger(__name__)
@@ -63,37 +72,20 @@ class DashboardScheduledRecommendationRunner:
         performance: RecommendationPerformanceResponse = (
             await self._manager.recommendation_performance()
         )
-        price_by_ticker: dict[str, RecommendationPerformanceItem] = {
-            item.ticker: item
-            for item in performance.items
-            if item.run_id == result.run_id
-        }
-        recommendations: tuple[str, ...] = tuple(
-            self._telegram_candidate(item.company_name, item.action, price_by_ticker.get(item.ticker or ""))
-            for item in result.recommendations[:10]
-        )
         return ScheduledRecommendationOutcome(
             execution_id=result.run_id,
             recommendation_count=len(result.recommendations),
-            recommendations=recommendations,
-        )
-
-    @staticmethod
-    def _telegram_candidate(
-        company_name: str,
-        action: str,
-        performance: Optional[RecommendationPerformanceItem],
-    ) -> str:
-        """Render only company, action, entry price, and basis for Telegram."""
-        if (
-            performance is None
-            or performance.entry_price is None
-            or performance.entry_basis is None
-        ):
-            return f"{company_name} · {action} · 가격 미확인 · -"
-        return (
-            f"{company_name} · {action} · {performance.entry_price:g} KRW · "
-            f"{performance.entry_basis.value}"
+            recommendations=build_recommendation_lines(
+                [
+                    RecommendationSummaryInput(
+                        recommendation_index=recommendation.recommendation_index,
+                        company_name=recommendation.company_name,
+                        action=recommendation.action,
+                    )
+                    for recommendation in result.recommendations
+                ],
+                [item for item in performance.items if item.run_id == result.run_id],
+            ),
         )
 
 
@@ -131,14 +123,42 @@ async def run_forever() -> None:
     )
     heartbeat.touch()
     heartbeat_task: asyncio.Task[None] = asyncio.create_task(heartbeat.run_forever())
+    # A recommendation whose entry lookup failed keeps no price at all, so this
+    # retries those once a day against the closing-price source instead of
+    # leaving the return permanently unknown.
+    daily_backfill: Optional[DailyEntryPriceBackfill] = _create_optional_daily_backfill(
+        database_config
+    )
     try:
         while True:
-            completed: int = await worker.run_due(datetime.now(timezone.utc))
+            now_utc: datetime = datetime.now(timezone.utc)
+            completed: int = await worker.run_due(now_utc)
             if completed:
                 logger.info("scheduled_recommendation_runs_completed", count=completed)
+            if daily_backfill is not None:
+                await daily_backfill.run_if_due(now_utc)
             await asyncio.sleep(30)
     finally:
         heartbeat_task.cancel()
+
+
+def _create_optional_daily_backfill(
+    database_config: DatabaseConfig,
+) -> Optional[DailyEntryPriceBackfill]:
+    """Keep the worker running when the closing-price source is not configured."""
+    try:
+        return DailyEntryPriceBackfill(
+            RecommendationEntryPriceBackfill(
+                HistoricalClosingPriceCapture(KrxClosingPriceClient(load_krx_config())),
+                create_recommendation_price_persistence(database_config),
+            )
+        )
+    except Exception as error:
+        logger.warning(
+            "scheduled_recommendation_entry_backfill_unavailable",
+            error_type=type(error).__name__,
+        )
+        return None
 
 
 def _create_optional_price_recorder(

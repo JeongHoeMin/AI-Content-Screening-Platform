@@ -686,3 +686,36 @@ discovery/evidence-fetch 단계뿐이다. `IR_RSS_FEEDS`가 비어 있다는 이
 않으므로, 운영자가 RSS를 전혀 등록하지 않은 상태에서도 DART 기반 discovery만으로 정상 운영할 수 있어야
 한다. 신규성 점수화, 공급망 확장 연결, 이벤트 유형별 성과 기반 자동 가중치 조정은 v1에 포함하지 않으며
 후속 ADR과 `docs/ROADMAP.md`의 별도 phase에서 설계와 승인을 거친 뒤 구현한다.
+
+# ADR-027
+
+## Title
+
+추천 이력은 저장된 스냅샷을 먼저 표시하고 가격 관측·미확인 entry 회복을 점진적으로 수행한다.
+
+## Status
+
+Accepted
+
+## Context
+
+모든 이력 회차의 latest 가격을 `GET /api/runs/history`에서 갱신하면, 하나의 가격 provider 지연이나
+실패가 이미 저장된 추천 이력 전체를 빈 화면처럼 보이게 한다. 또한 추천 시점의 entry 관측이 실패한
+레코드에 오늘의 실시간 가격을 넣으면 사후 수익률의 기준 시점이 바뀌어 감사 가능성이 깨진다.
+
+## Decision
+
+history GET은 entry/latest 스냅샷만 읽고 외부 가격 API를 호출하지 않는다. 브라우저는 즉시 모든 회차를
+표시한 뒤 회차별 refresh endpoint로 latest 가격을 병렬 갱신한다. 미확인 entry의 재조회는 해당 행만
+대상으로 하며, 원래 `observed_at`을 입력으로 KRX 일 종가를 조회한다. persistence는 `UNAVAILABLE` ENTRY
+identity에만 backfill을 허용하고 가격이 있는 entry는 변경하지 않는다. `schedule-worker`는 메모리의 KST
+날짜 guard로 이 best-effort backfill을 하루 한 번 실행한다. dashboard 직접 실행은 Telegram 자격 증명이
+있으면 terminal 뒤에 안전한 요약을 전송하고, scheduled 실행은 기존 worker observer만 전송한다.
+
+## Consequences
+
+이력 화면은 가격 provider와 무관하게 저장된 정보를 먼저 보여 주며, 한 회차·한 항목의 실패가 다른
+회차의 표시를 막지 않는다. entry 회복은 KRX 과거 종가의 가용 범위에 제한되고, 실패한 값은 계속
+`가격 미확인`으로 남는다. Telegram delivery 및 가격 회복 실패는 recommendation 결과·SSE terminal
+event를 바꾸지 않는다. 원문, API credential, raw provider payload는 이 경계와 로그·API 응답·Telegram에
+포함하지 않는다.

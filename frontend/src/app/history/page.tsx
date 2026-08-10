@@ -1,46 +1,86 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import { SiteNav } from "@/components/SiteNav";
+import { AppShell } from "@/components/AppShell";
+import { Badge, Button, Card, EmptyState, TableScroll, Td, Th } from "@/components/ui";
 import { formatKst, formatPercent, priceErrorLabel, returnTone } from "@/lib/format";
-import type { PerformanceItem, PerformanceSummary, RunHistoryResponse } from "@/lib/types";
+import { replaceHistoryItem, replaceHistoryRun } from "@/lib/history";
+import type {
+  PerformanceItem,
+  PerformanceSummary,
+  RunHistoryResponse,
+} from "@/lib/types";
 
 type LoadState = "loading" | "loaded" | "failed";
 
-function ReturnCell({ item }: { item: PerformanceItem }) {
-  if (item.entry_price === null) {
-    return <>{`가격 미확인 (사유: ${priceErrorLabel(item.entry_error_kind)})`}</>;
-  }
-  if (item.return_percent === null) {
-    return <>{`현재가 미확인 (사유: ${priceErrorLabel(item.latest_error_kind)})`}</>;
-  }
-  return (
-    <span className={returnTone(item.return_percent)}>
-      {formatPercent(item.return_percent)}
-    </span>
-  );
+function identity(item: PerformanceItem): string {
+  return `${item.run_id}-${item.recommendation_index}`;
 }
 
 function summaryLine(summary: PerformanceSummary): string {
-  const winRate =
-    summary.positive_win_rate === null
-      ? "-"
-      : `${summary.positive_win_rate.toFixed(1)}%`;
-  const mean =
-    summary.mean_return_percent === null
-      ? "-"
-      : `${summary.mean_return_percent.toFixed(1)}%`;
+  const winRate = summary.positive_win_rate === null ? "-" : `${summary.positive_win_rate.toFixed(1)}%`;
+  const mean = summary.mean_return_percent === null ? "-" : `${summary.mean_return_percent.toFixed(1)}%`;
   return `확인 ${summary.confirmed_count}건 · 미확인 ${summary.unavailable_count}건 · BUY ${summary.buy_count}건 · SELL ${summary.sell_count}건 · 승률 ${winRate} · 평균 ${mean}`;
+}
+
+function ReturnCell({ item }: { item: PerformanceItem }) {
+  if (item.entry_price === null) return <span className="text-ink-muted">진입가 확인 필요</span>;
+  if (item.return_percent === null) {
+    return <span className="text-ink-muted">현재가 미확인 · {priceErrorLabel(item.latest_error_kind)}</span>;
+  }
+  return <span className={returnTone(item.return_percent) === "positive" ? "font-semibold text-positive" : returnTone(item.return_percent) === "negative" ? "font-semibold text-negative" : "font-semibold text-ink"}>{formatPercent(item.return_percent)}</span>;
 }
 
 export default function HistoryPage() {
   const [state, setState] = useState<LoadState>("loading");
   const [history, setHistory] = useState<RunHistoryResponse | null>(null);
+  const [refreshingRuns, setRefreshingRuns] = useState<Set<string>>(new Set());
+  const [backfillingItems, setBackfillingItems] = useState<Set<string>>(new Set());
+
+  const refreshRun = useCallback(async (runId: string) => {
+    setRefreshingRuns((current) => new Set(current).add(runId));
+    try {
+      const response = await fetch(`/api/runs/history/${encodeURIComponent(runId)}/refresh`, { method: "POST" });
+      if (!response.ok) throw new Error("run_refresh_failed");
+      const refreshedRun = await response.json();
+      setHistory((current) => (current ? replaceHistoryRun(current, refreshedRun) : current));
+    } catch {
+      // Stored data remains visible; this run can be retried without reloading all history.
+    } finally {
+      setRefreshingRuns((current) => {
+        const next = new Set(current);
+        next.delete(runId);
+        return next;
+      });
+    }
+  }, []);
+
+  const backfillEntry = useCallback(async (item: PerformanceItem) => {
+    const itemIdentity = identity(item);
+    setBackfillingItems((current) => new Set(current).add(itemIdentity));
+    try {
+      const response = await fetch(
+        `/api/runs/history/${encodeURIComponent(item.run_id)}/items/${item.recommendation_index}/entry-price`,
+        { method: "POST" },
+      );
+      if (!response.ok) throw new Error("entry_backfill_failed");
+      const refreshedItem = await response.json();
+      setHistory((current) => (current ? replaceHistoryItem(current, refreshedItem) : current));
+    } catch {
+      // Keep the original error reason visible when the historical close remains unavailable.
+    } finally {
+      setBackfillingItems((current) => {
+        const next = new Set(current);
+        next.delete(itemIdentity);
+        return next;
+      });
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/runs/history")
+    void fetch("/api/runs/history")
       .then((response) => {
         if (!response.ok) throw new Error("history_load_failed");
         return response.json();
@@ -49,6 +89,7 @@ export default function HistoryPage() {
         if (cancelled) return;
         setHistory(data);
         setState("loaded");
+        data.runs.forEach((run) => void refreshRun(run.run_id));
       })
       .catch(() => {
         if (!cancelled) setState("failed");
@@ -56,79 +97,48 @@ export default function HistoryPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshRun]);
 
   return (
-    <main>
-      <h1>추천 이력</h1>
-      <p>과거 추천 실행(run)별로 매수·매도 종목의 진입가 대비 현재가 손익률을 확인합니다.</p>
-      <SiteNav current="/history" />
+    <AppShell
+      current="/history"
+      title="추천 이력"
+      description="저장된 추천 기록은 먼저 표시하고, 손익률은 회차별 현재가 확인이 끝나는 순서대로 갱신합니다."
+    >
+      {state === "loading" && <Card><EmptyState>추천 이력을 불러오고 있습니다.</EmptyState></Card>}
+      {state === "failed" && <Card><EmptyState>이력을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</EmptyState></Card>}
+      {state === "loaded" && history?.runs.length === 0 && <Card><EmptyState>아직 가격이 기록된 추천 이력이 없습니다.</EmptyState></Card>}
 
-      {state === "loading" && (
-        <section className="panel">
-          <p className="empty">
-            이력을 불러오는 중입니다. 종목별 현재가를 갱신하느라 시간이 걸릴 수 있습니다.
-          </p>
-        </section>
-      )}
-
-      {state === "failed" && (
-        <section className="panel">
-          <p className="empty">이력을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.</p>
-        </section>
-      )}
-
-      {state === "loaded" && history!.runs.length === 0 && (
-        <section className="panel">
-          <p className="empty">아직 가격이 기록된 추천 이력이 없습니다.</p>
-        </section>
-      )}
-
-      {state === "loaded" &&
-        history!.runs.map((run) => (
-          <article key={run.run_id} className="panel">
-            <div className="run-header">
-              <span className="run-time">{formatKst(run.observed_at)}</span>
-              <span className="run-summary">{summaryLine(run.summary)}</span>
-            </div>
-            {run.items.length === 0 ? (
-              <p className="empty">이 회차에는 매수·매도 추천이 없습니다.</p>
-            ) : (
-              <table>
-                <thead>
-                  <tr>
-                    <th>종목</th>
-                    <th>코드</th>
-                    <th>추천</th>
-                    <th>진입가</th>
-                    <th>현재가</th>
-                    <th>손익률</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {run.items.map((item) => (
-                    <tr key={`${run.run_id}-${item.recommendation_index}`}>
-                      <td>{item.company_name}</td>
-                      <td>{item.ticker}</td>
-                      <td className={item.action === "buy" ? "buy" : "sell"}>
-                        {item.action}
-                      </td>
-                      <td>
-                        {item.entry_price === null ? "-" : `${item.entry_price}원`}
-                      </td>
-                      <td>
-                        {item.latest_price === null ? "-" : `${item.latest_price}원`}
-                      </td>
-                      <td>
-                        <ReturnCell item={item} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </article>
-        ))}
-    </main>
+      {state === "loaded" && history?.runs.map((run) => (
+        <Card
+          key={run.run_id}
+          title={formatKst(run.observed_at)}
+          description={summaryLine(run.summary)}
+          actions={<Button variant="secondary" size="sm" onClick={() => void refreshRun(run.run_id)} disabled={refreshingRuns.has(run.run_id)}>{refreshingRuns.has(run.run_id) ? "갱신 중…" : "현재가 갱신"}</Button>}
+        >
+          {run.items.length === 0 ? <EmptyState>이 회차에는 매수·매도 추천이 없습니다.</EmptyState> : (
+            <TableScroll>
+              <thead><tr><Th>종목</Th><Th>코드</Th><Th>추천</Th><Th align="right">진입가</Th><Th align="right">현재가</Th><Th align="right">손익률</Th></tr></thead>
+              <tbody>
+                {run.items.map((item) => {
+                  const itemIdentity = identity(item);
+                  const backfilling = backfillingItems.has(itemIdentity);
+                  return <tr key={itemIdentity}>
+                    <Td className="font-medium">{item.company_name}</Td>
+                    <Td className="font-mono text-xs text-ink-muted">{item.ticker}</Td>
+                    <Td><Badge tone={item.action === "buy" ? "positive" : "negative"}>{item.action.toUpperCase()}</Badge></Td>
+                    <Td align="right">
+                      {item.entry_price === null ? <div className="flex items-center justify-end gap-2"><span className="text-ink-muted">{priceErrorLabel(item.entry_error_kind)}</span><Button size="sm" variant="ghost" title="추천 시각 기준 KRX 종가 재조회" onClick={() => void backfillEntry(item)} disabled={backfilling}>{backfilling ? "조회 중…" : "재조회"}</Button></div> : `${item.entry_price.toLocaleString()}원`}
+                    </Td>
+                    <Td align="right">{item.latest_price === null ? "-" : `${item.latest_price.toLocaleString()}원`}</Td>
+                    <Td align="right"><ReturnCell item={item} /></Td>
+                  </tr>;
+                })}
+              </tbody>
+            </TableScroll>
+          )}
+        </Card>
+      ))}
+    </AppShell>
   );
 }

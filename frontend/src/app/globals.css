@@ -1,386 +1,46 @@
-:root {
-  color-scheme: dark;
+@import "tailwindcss";
+
+/*
+ * One dark palette shared by every page. Naming is by role rather than by hue
+ * so a surface stays a surface when the shade is tuned.
+ */
+@theme {
+  --color-canvas: #070d17;
+  --color-surface: #0f1a2b;
+  --color-surface-raised: #16243a;
+  --color-surface-sunken: #0a1322;
+  --color-line: #22334a;
+  --color-line-strong: #2f4764;
+
+  --color-ink: #e9f1fc;
+  --color-ink-muted: #97abc6;
+  --color-ink-subtle: #6c81a0;
+
+  --color-accent: #4f8cff;
+  --color-accent-strong: #6ba1ff;
+  --color-accent-soft: #1b3358;
+
+  --color-positive: #3fcf8e;
+  --color-negative: #ff7a8c;
+  --color-warning: #f0b429;
+
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
 }
 
-* {
-  box-sizing: border-box;
-}
-
-body {
-  font-family: system-ui, -apple-system, sans-serif;
-  margin: 0;
-  background: #07111e;
-  color: #edf3ff;
-}
-
-main {
-  max-width: 1180px;
-  margin: auto;
-  padding: 32px;
-}
-
-h1 {
-  margin-bottom: 8px;
-}
-
-nav a {
-  color: #9fc2ff;
-  margin-right: 14px;
-}
-
-button {
-  background: #4f8cff;
-  color: #fff;
-  border: 0;
-  border-radius: 8px;
-  padding: 12px 18px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-button:disabled {
-  background: #5a6d86;
-  cursor: wait;
-}
-
-.run-controls {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.option-group {
-  display: flex;
-  gap: 6px;
-  border: 0;
-  margin: 0;
-  padding: 0;
-}
-
-.option-group input {
-  position: absolute;
-  opacity: 0;
-}
-
-.option-group label {
-  border: 1px solid #385474;
-  border-radius: 8px;
-  padding: 8px 10px;
-  color: #c7d8ee;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.option-group input:checked + label {
-  border-color: #4f8cff;
-  background: #203b61;
-  color: #fff;
-}
-
-.option-group legend {
-  color: #aec0d8;
-}
-
-.panel {
-  background: #101d2d;
-  border: 1px solid #253852;
-  border-radius: 12px;
-  padding: 20px;
-  margin: 18px 0;
-}
-
-.progress-meta {
-  display: flex;
-  gap: 20px;
-  flex-wrap: wrap;
-  color: #c7d8ee;
-}
-
-.progress-track {
-  height: 10px;
-  background: #233650;
-  border-radius: 999px;
-  overflow: hidden;
-  margin: 16px 0;
-}
-
-.progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #4f8cff, #67d5b5);
-  transition: width 0.3s;
-}
-
-.workflow-graph {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 16px;
-  align-items: center;
-}
-
-.graph-node {
-  position: relative;
-  border: 1px solid #29415f;
-  border-radius: 10px;
-  background: #132238;
-  padding: 12px;
-  min-height: 58px;
-}
-
-.graph-node::after {
-  content: "↓";
-  position: absolute;
-  left: 50%;
-  bottom: -18px;
-  color: #59779b;
-  font-size: 20px;
-  z-index: 2;
-}
-
-.graph-node:last-child::after {
-  display: none;
-}
-
-.graph-node.done {
-  border-color: #3eae79;
-  background: #153629;
-}
-
-.graph-node.skipped {
-  border-color: #64748b;
-  background: #172130;
-  color: #aebdce;
-}
-
-.graph-node.active {
-  border-color: #4f8cff;
-  box-shadow: 0 0 0 2px #4f8cff;
-}
-
-.graph-node.failed {
-  border-color: #ff7183;
-  background: #42202a;
-}
-
-.graph-index {
-  color: #aec0d8;
-  font-size: 12px;
-}
-
-.graph-name {
-  display: block;
-  font-weight: 700;
-}
-
-.graph-counts {
-  display: block;
-  font-size: 12px;
-  color: #aec0d8;
-  margin-top: 4px;
-}
-
-.retry-path {
-  margin-top: 14px;
-  border-left: 3px solid #5b83bf;
-  background: #0c1928;
-  padding: 10px 12px;
-  color: #c7d8ee;
-}
-
-.retry-path.active {
-  border-color: #ffbf68;
-  background: #352919;
-}
-
-.retry-path.failed {
-  border-color: #ff7183;
-}
-
-.retry-path strong {
-  color: #fff;
-}
-
-.stage-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 10px;
-  padding: 0;
-  list-style: none;
-}
-
-.stage {
-  border: 1px solid #29415f;
-  border-radius: 9px;
-  background: #132238;
-}
-
-.stage summary {
-  padding: 12px;
-  cursor: pointer;
-  list-style: none;
-}
-
-.stage-name {
-  font-weight: 700;
-}
-
-.stage-state {
-  display: inline-block;
-  min-width: 62px;
-  margin-right: 7px;
-  font-size: 12px;
-  color: #aec0d8;
-}
-
-.stage.done .stage-state {
-  color: #7ae5a1;
-}
-
-.stage.skipped .stage-state {
-  color: #aebdce;
-}
-
-.stage.active {
-  border-color: #4f8cff;
-  box-shadow: 0 0 0 1px #4f8cff;
-}
-
-.stage.active .stage-state {
-  color: #83b2ff;
-}
-
-.stage-guide {
-  padding: 0 12px 12px;
-  color: #c7d8ee;
-  font-size: 14px;
-  line-height: 1.55;
-}
-
-.stage-guide p {
-  margin: 6px 0;
-}
-
-.timeline li {
-  margin: 8px 0;
-}
-
-.cards {
-  display: flex;
-  gap: 14px;
-  overflow-x: auto;
-}
-
-.card {
-  min-width: 260px;
-  background: #17263a;
-  border-radius: 10px;
-  padding: 16px;
-}
-
-.analysis-card {
-  min-width: 310px;
-}
-
-.card blockquote {
-  margin: 6px 0;
-  padding-left: 10px;
-  border-left: 2px solid #385474;
-  color: #c7d8ee;
-  font-size: 13px;
-}
-
-.card a {
-  color: #9fc2ff;
-}
-
-.badge {
-  display: inline-block;
-  border-radius: 999px;
-  background: #29415f;
-  padding: 3px 8px;
-  margin: 2px 4px 2px 0;
-  font-size: 12px;
-}
-
-.empty {
-  color: #aec0d8;
-}
-
-.buy,
-.positive {
-  color: #7ae5a1;
-}
-
-.sell,
-.negative {
-  color: #ff8c9b;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-td,
-th {
-  padding: 10px;
-  border-bottom: 1px solid #29415f;
-  text-align: left;
-}
-
-.panel label {
-  display: block;
-  margin: 12px 0;
-}
-
-.panel fieldset {
-  border: 1px solid #29415f;
-  border-radius: 8px;
-  margin: 12px 0;
-}
-
-.panel fieldset legend {
-  color: #c7d8ee;
-}
-
-.panel input[type="password"],
-.panel input[type="text"],
-.panel input:not([type]),
-.panel select {
-  box-sizing: border-box;
-  width: 100%;
-  padding: 10px;
-  margin-top: 5px;
-  border-radius: 7px;
-  border: 1px solid #385474;
-  background: #07111e;
-  color: #edf3ff;
-}
-
-.run-header {
-  display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: baseline;
-}
-
-.run-time {
-  font-weight: 700;
-  font-size: 17px;
-}
-
-.run-summary {
-  color: #c7d8ee;
-  font-size: 14px;
-}
-
-@media (max-width: 720px) {
-  main {
-    padding: 18px;
+@layer base {
+  :root {
+    color-scheme: dark;
   }
 
-  .stage-list {
-    grid-template-columns: 1fr;
+  body {
+    @apply bg-canvas text-ink font-sans antialiased;
+  }
+
+  /* Prices and counts are compared column-to-column, so their glyphs must
+     occupy the same width in every row. */
+  th,
+  td {
+    font-variant-numeric: tabular-nums;
   }
 }

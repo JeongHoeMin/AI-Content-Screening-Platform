@@ -327,7 +327,9 @@ def test_service_lists_run_histories_grouped_most_recent_first() -> None:
             return None
 
     response = asyncio.run(
-        RecommendationPerformanceService(_Capture(), _Persistence()).list_run_histories()  # type: ignore[arg-type]
+        RecommendationPerformanceService(_Capture(), _Persistence()).list_run_histories(
+            refresh=True
+        )  # type: ignore[arg-type]
     )
 
     assert tuple(run.run_id for run in response.runs) == ("run-newer", "run-older")

@@ -35,6 +35,10 @@ services:
       ARTICLE_MAX_BODY_LENGTH: ${ARTICLE_MAX_BODY_LENGTH:-50000}
       SCHEDULE_SETTINGS_PASSWORD: ${SCHEDULE_SETTINGS_PASSWORD:-}
       SCHEDULE_COOKIE_SECURE: ${SCHEDULE_COOKIE_SECURE:-true}
+      # A dashboard run reports its own result, so this service needs the same
+      # delivery credentials the schedule worker uses.
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     depends_on:
       db-migrate:
         condition: service_completed_successfully

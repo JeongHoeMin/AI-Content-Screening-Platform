@@ -59,6 +59,12 @@ class RecommendationPerformancePersistence(Protocol):
     ) -> None:
         """Store replacement latest observations under the LATEST identity."""
 
+    async def backfill_entries(
+        self,
+        snapshots: Tuple[RecommendationPriceEntry, ...],
+    ) -> int:
+        """Recover entry observations that never obtained a price."""
+
     async def list_snapshots(self) -> Tuple[RecommendationPriceEntry, ...]:
         """Load safe snapshot records without exposing database implementation."""
 
@@ -165,20 +171,46 @@ class RecommendationPerformanceService:
     async def refresh_and_query(
         self,
         run_id: str | None = None,
+        refresh: bool = True,
     ) -> RecommendationPerformanceResponse:
-        """Refresh and summarize either all entries or only one requested dashboard run."""
+        """Summarize either all entries or one run, refreshing prices only when asked."""
         evaluated_at: datetime = datetime.now(timezone.utc)
-        entries, items, performances = await self._collect(run_id, evaluated_at)
+        entries, items, performances = await self._collect(run_id, evaluated_at, refresh)
         return RecommendationPerformanceResponse(
             items=items,
             summary=self._policy.summarize(performances),
             evaluated_at=evaluated_at,
         )
 
-    async def list_run_histories(self) -> RecommendationRunHistoryResponse:
-        """Group every stored run's recommendations with their price performance."""
+    async def get_run_history(
+        self,
+        run_id: str,
+        refresh: bool,
+    ) -> RecommendationRunHistoryItem | None:
+        """Project one stored run, optionally re-observing its latest prices first."""
         evaluated_at: datetime = datetime.now(timezone.utc)
-        entries, items, performances = await self._collect(None, evaluated_at)
+        entries, items, performances = await self._collect(run_id, evaluated_at, refresh)
+        if not entries:
+            return None
+        return RecommendationRunHistoryItem(
+            run_id=run_id,
+            observed_at=min(entry.snapshot.observed_at for entry in entries),
+            items=items,
+            summary=self._policy.summarize(performances),
+        )
+
+    async def list_run_histories(
+        self,
+        refresh: bool = False,
+    ) -> RecommendationRunHistoryResponse:
+        """Group every stored run's recommendations with their price performance.
+
+        The history page renders as soon as this returns, so the default reads
+        only what is already stored: refreshing every run's latest price here
+        would hold the whole page behind one network call per recommendation.
+        """
+        evaluated_at: datetime = datetime.now(timezone.utc)
+        entries, items, performances = await self._collect(None, evaluated_at, refresh)
         run_ids_in_order: list[str] = []
         performances_by_run: dict[str, list[RecommendationPerformance]] = {}
         items_by_run: dict[str, list[RecommendationPerformanceItem]] = {}
@@ -215,12 +247,13 @@ class RecommendationPerformanceService:
         self,
         run_id: str | None,
         evaluated_at: datetime,
+        refresh: bool = True,
     ) -> Tuple[
         Tuple[RecommendationPriceEntry, ...],
         Tuple[RecommendationPerformanceItem, ...],
         Tuple[RecommendationPerformance, ...],
     ]:
-        """Refresh latest prices and project entries into items/performances once."""
+        """Project entries into items/performances, re-observing prices only when asked."""
         stored: Tuple[RecommendationPriceEntry, ...] = await self._persistence.list_snapshots()
         entries: Tuple[RecommendationPriceEntry, ...] = tuple(
             item
@@ -230,7 +263,7 @@ class RecommendationPerformanceService:
         )
         latest_entries: list[RecommendationPriceEntry] = []
         entry: RecommendationPriceEntry
-        for entry in entries:
+        for entry in entries if refresh else ():
             latest_entries.append(await self._refresh_latest(entry, evaluated_at))
         if latest_entries:
             await self._persistence.upsert_latest(tuple(latest_entries))

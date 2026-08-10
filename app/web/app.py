@@ -21,6 +21,7 @@ from app.config import (
     load_krx_config,
     load_optional_database_config,
     load_optional_kis_config,
+    load_optional_telegram_config,
     load_schedule_settings_password,
 )
 from app.config.errors import ConfigurationError
@@ -42,6 +43,19 @@ from app.persistence import (
 )
 from app.harness.recommendation_prices import RecommendationPriceRecorder
 from app.harness.recommendation_prices import RecommendationPerformanceService
+from app.harness.entry_price_backfill import (
+    HistoricalClosingPriceCapture,
+    RecommendationEntryPriceBackfill,
+)
+from app.harness.recommendation_summary import (
+    RecommendationSummaryInput,
+    build_recommendation_lines,
+)
+from app.harness.telegram import (
+    TelegramBotReporter,
+    TelegramRecommendationSummary,
+    TelegramReporter,
+)
 from app.persistence.schedule_repository import ScheduleVersionConflictError
 from app.harness import Harness
 from app.harness.execution_audit import ScreeningExecutionHarness
@@ -56,7 +70,9 @@ from app.market_prices import (
     KisRealtimePriceClient,
     KrxClosingPriceClient,
     MarketPriceService,
+    RecommendationPerformanceItem,
     RecommendationPerformanceResponse,
+    RecommendationRunHistoryItem,
     RecommendationRunHistoryResponse,
 )
 from app.models.collect_posts import CollectPostsRequest
@@ -285,6 +301,8 @@ class DashboardRunManager:
         schedule_persistence: Optional[ScheduledRecommendationPersistence] = None,
         price_recorder: Optional[RecommendationPriceRecorder] = None,
         performance_service: Optional[RecommendationPerformanceService] = None,
+        entry_price_backfill: Optional[RecommendationEntryPriceBackfill] = None,
+        reporter: Optional[TelegramReporter] = None,
     ) -> None:
         self._runs: Dict[str, _RunState] = {}
         self._filter_persistence: Optional[CollectionFilterPersistence] = filter_persistence
@@ -298,6 +316,10 @@ class DashboardRunManager:
         self._performance_service: Optional[RecommendationPerformanceService] = (
             performance_service
         )
+        self._entry_price_backfill: Optional[RecommendationEntryPriceBackfill] = (
+            entry_price_backfill
+        )
+        self._reporter: Optional[TelegramReporter] = reporter
 
     _WORKFLOW_NODES: tuple[str, ...] = (
         "evaluate",
@@ -318,7 +340,7 @@ class DashboardRunManager:
         run_id: str = uuid4().hex
         state: _RunState = _RunState()
         self._runs[run_id] = state
-        asyncio.create_task(self._execute(run_id, state, request))
+        asyncio.create_task(self._execute(run_id, state, request, notify=True))
         return run_id
 
     async def run_scheduled(
@@ -330,7 +352,9 @@ class DashboardRunManager:
         state: _RunState = _RunState()
         self._runs[run_id] = state
         try:
-            await self._execute(run_id, state, request)
+            # The schedule worker reports its own terminal outcome, so this path
+            # must not also notify or every scheduled run would arrive twice.
+            await self._execute(run_id, state, request, notify=False)
             if state.error_type is not None:
                 raise RuntimeError(state.error_type)
             if state.result is None:
@@ -428,16 +452,52 @@ class DashboardRunManager:
         return await self._performance_service.refresh_and_query(run_id)
 
     async def recommendation_history(self) -> RecommendationRunHistoryResponse:
-        """List every stored run's recommendations grouped with their performance."""
+        """List stored runs without a price lookup so the page can render at once."""
         if self._performance_service is None:
             return RecommendationRunHistoryResponse(evaluated_at=datetime.now(timezone.utc))
-        return await self._performance_service.list_run_histories()
+        return await self._performance_service.list_run_histories(refresh=False)
+
+    async def refresh_run_history(self, run_id: str) -> RecommendationRunHistoryItem:
+        """Re-observe one run's latest prices so returns arrive run by run."""
+        if self._performance_service is None:
+            raise HTTPException(status_code=503, detail="Price performance is not configured")
+        history: Optional[RecommendationRunHistoryItem] = (
+            await self._performance_service.get_run_history(run_id, refresh=True)
+        )
+        if history is None:
+            raise HTTPException(status_code=404, detail="Recommendation run was not found")
+        return history
+
+    async def backfill_entry_price(
+        self,
+        run_id: str,
+        recommendation_index: int,
+    ) -> RecommendationPerformanceItem:
+        """Recover one unpriced entry from its own recommendation time and project it."""
+        if self._entry_price_backfill is None or self._performance_service is None:
+            raise HTTPException(status_code=503, detail="Price performance is not configured")
+        await self._entry_price_backfill.backfill(run_id, recommendation_index)
+        history: Optional[RecommendationRunHistoryItem] = (
+            await self._performance_service.get_run_history(run_id, refresh=True)
+        )
+        item: Optional[RecommendationPerformanceItem] = next(
+            (
+                candidate
+                for candidate in (history.items if history is not None else ())
+                if candidate.recommendation_index == recommendation_index
+            ),
+            None,
+        )
+        if item is None:
+            raise HTTPException(status_code=404, detail="Recommendation was not found")
+        return item
 
     async def _execute(
         self,
         run_id: str,
         state: _RunState,
         request: RecommendationRunRequest,
+        notify: bool = False,
     ) -> None:
         heartbeat_task: asyncio.Task[None] = asyncio.create_task(
             self._emit_heartbeats(state)
@@ -556,6 +616,8 @@ class DashboardRunManager:
                 self._selected_price_recommendations(result.candidate_selection),
                 datetime.now(timezone.utc),
             )
+            if notify:
+                await self._deliver_report(run_id, state.result)
             state.completed = True
             await self._emit(
                 state,
@@ -901,6 +963,60 @@ class DashboardRunManager:
                 error_type=type(error).__name__,
             )
 
+    async def _deliver_report(
+        self,
+        run_id: str,
+        result: DashboardRunResult,
+    ) -> None:
+        """Report a finished dashboard run without letting delivery change its outcome."""
+        if self._reporter is None:
+            return
+        try:
+            performance: RecommendationPerformanceResponse = (
+                await self._recorded_entry_performance(run_id)
+            )
+            delivery_error: Optional[str] = await self._reporter.deliver(
+                TelegramRecommendationSummary(
+                    execution_id=run_id,
+                    scheduled_for=datetime.now(timezone.utc),
+                    recommendation_count=len(result.recommendations),
+                    recommendations=build_recommendation_lines(
+                        [
+                            RecommendationSummaryInput(
+                                recommendation_index=recommendation.recommendation_index,
+                                company_name=recommendation.company_name,
+                                action=recommendation.action,
+                            )
+                            for recommendation in result.recommendations
+                        ],
+                        performance.items,
+                    ),
+                    trigger="dashboard",
+                )
+            )
+        except Exception as error:
+            logger.warning(
+                "dashboard_recommendation_report_failed",
+                run_id=run_id,
+                error_type=type(error).__name__,
+            )
+            return
+        if delivery_error is not None:
+            logger.warning(
+                "dashboard_recommendation_report_delivery_failed",
+                run_id=run_id,
+                error_type=delivery_error,
+            )
+
+    async def _recorded_entry_performance(
+        self,
+        run_id: str,
+    ) -> RecommendationPerformanceResponse:
+        """Read the entry prices just recorded without re-observing current prices."""
+        if self._performance_service is None:
+            return RecommendationPerformanceResponse(evaluated_at=datetime.now(timezone.utc))
+        return await self._performance_service.refresh_and_query(run_id, refresh=False)
+
     @staticmethod
     def _selected_price_recommendations(
         candidate_selection: CandidateSelectionResult,
@@ -1016,6 +1132,32 @@ def _create_optional_performance_service() -> Optional[RecommendationPerformance
         return None
 
 
+def _create_optional_entry_price_backfill() -> Optional[RecommendationEntryPriceBackfill]:
+    """Assemble entry-price recovery from the daily-close source only."""
+    database_config: Optional[DatabaseConfig] = load_optional_database_config()
+    if database_config is None:
+        return None
+    try:
+        return RecommendationEntryPriceBackfill(
+            HistoricalClosingPriceCapture(KrxClosingPriceClient(load_krx_config())),
+            create_recommendation_price_persistence(database_config),
+        )
+    except Exception as error:
+        logger.warning(
+            "dashboard_recommendation_entry_backfill_unavailable",
+            error_type=type(error).__name__,
+        )
+        return None
+
+
+def _create_optional_reporter() -> Optional[TelegramReporter]:
+    """Report dashboard runs only when delivery credentials are configured."""
+    telegram_config = load_optional_telegram_config()
+    if telegram_config is None:
+        return None
+    return TelegramBotReporter(telegram_config)
+
+
 def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
     """Create the dashboard API and its static single-page client."""
     run_manager: DashboardRunManager = manager or DashboardRunManager(
@@ -1024,6 +1166,8 @@ def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
         schedule_persistence=_create_optional_schedule_persistence(),
         price_recorder=_create_optional_price_recorder(),
         performance_service=_create_optional_performance_service(),
+        entry_price_backfill=_create_optional_entry_price_backfill(),
+        reporter=_create_optional_reporter(),
     )
     app = FastAPI(title="AI Content Screening Dashboard")
 
@@ -1040,6 +1184,17 @@ def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
     @app.get("/api/runs/history")
     async def get_recommendation_history() -> RecommendationRunHistoryResponse:
         return await run_manager.recommendation_history()
+
+    @app.post("/api/runs/history/{run_id}/refresh")
+    async def refresh_run_history(run_id: str) -> RecommendationRunHistoryItem:
+        return await run_manager.refresh_run_history(run_id)
+
+    @app.post("/api/runs/history/{run_id}/items/{recommendation_index}/entry-price")
+    async def backfill_entry_price(
+        run_id: str,
+        recommendation_index: int,
+    ) -> RecommendationPerformanceItem:
+        return await run_manager.backfill_entry_price(run_id, recommendation_index)
 
     @app.post("/api/settings/login", status_code=204)
     async def login_schedule_settings(
