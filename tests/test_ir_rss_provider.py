@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Mapping
 
 from app.config.trusted_sources import IrRssFeedConfig
@@ -52,6 +52,7 @@ def test_ir_rss_provider_collects_guid_and_full_content() -> None:
         sources=[CommunityType.IR_RSS],
         limit=10,
         period=timedelta(days=1),
+        ended_at=datetime(2026, 8, 5, tzinfo=timezone.utc),
     )
 
     raw_posts: list[RawPost] = asyncio.run(provider.collect(request))
@@ -87,6 +88,7 @@ def test_ir_rss_provider_collects_atom_entry_with_link_href() -> None:
         sources=[CommunityType.IR_RSS],
         limit=10,
         period=timedelta(days=1),
+        ended_at=datetime(2026, 8, 5, tzinfo=timezone.utc),
     )
 
     raw_posts = asyncio.run(provider.collect(request))

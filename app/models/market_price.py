@@ -126,4 +126,3 @@ class RecommendationPerformance(BaseModel):
     entry: RecommendationPriceSnapshot
     latest: Optional[RecommendationPriceSnapshot]
     return_percent: Optional[Decimal] = None
-

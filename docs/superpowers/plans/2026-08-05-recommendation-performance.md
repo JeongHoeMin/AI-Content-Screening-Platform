@@ -1,5 +1,7 @@
 # 추천 가격 스냅샷·성과 대시보드 Implementation Plan
 
+**Status:** Completed
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox syntax for tracking.
 
 **Goal:** KIS 실시간 현재가를 우선 기록하고 KRX 종가로 fallback하여, 추천별 사후 가격 성과와 통계를 안전하게 저장·표시한다.
@@ -107,3 +109,8 @@
 - Compose의 dashboard와 `schedule-worker`에 KIS 설정 이름만 전달하고, README·운영 문서·아키텍처·Domain·ADR에 KIS 우선/7일 KRX 종가 fallback, KST 표기, `가격 미확인`, 사후 단순 가격 비교 한계와 Harness-owned persistence 경계를 기록했다.
 - 환경 파일의 KIS 변경은 `--force-recreate dashboard schedule-worker`로 반영한다. key·secret·token·authorization header·raw payload는 문서 예시, 로그, DB, SSE, Telegram에 포함하지 않는다.
 - 검증은 기본 live-test skip을 포함한 전체 pytest, 임시 pycache compileall, diff check, Compose config 및 PostgreSQL → migration → worker smoke로 수행했다. smoke 종료는 `docker-compose down`만 사용해 named volume을 보존했다.
+
+### 2026-08-10 KST — 통합 전 회귀 안정화
+
+- `CollectPostsRequest.ended_at`을 적용한 IR RSS 수집기가 고정된 fixture 날짜를 실제 현재 시각 기준으로 제외하던 테스트 취약점을 확인했다. 두 RSS fixture request에 명시적 UTC 종료 시각을 지정해 기간 경계를 재현 가능하게 고정했다.
+- 추천 성과 기능은 Task 1–5의 커밋과 대응 테스트로 구현되어 있으며, 이 기록은 통합 전 전체 회귀와 문서 상태 정리를 위한 후속 변경이다.

@@ -154,7 +154,7 @@ UTC daily scheduler, JSONL persistence/audit·metrics·alerting, request-cap cos
 
 # 후속 운영 확장 — 투자 테마·뉴스 주제 수집 조건
 
-**Status:** In Progress
+**Status:** Completed
 
 대시보드는 반도체·AI·대체에너지 같은 투자 테마와 뉴스 주제를 함께 선택해 수집 결과를 좁힌다. 카탈로그
 기반의 결정적 filter, PostgreSQL 실행 조건 snapshot, 점수표·과거 실행·가격 성과·KST 스케줄·Telegram·실행
