@@ -4,10 +4,10 @@ id: "20260810-1104-pipeline-stage-counts"
 title: "수집 기간 기본값 7일 전환 및 대시보드 파이프라인 단계별 건수 표시"
 description: "사용자가 실행한 추천이 0건으로 끝난 원인 진단(수집 기간 24시간·좁은 이벤트 필터·테마 AND 조건) 이후, (1) 대시보드 기본 수집 기간을 24시간에서 7일(168시간, 기존 검증 상한과 동일)로 늘리고, (2) 대시보드 전체 진행 상황 파이프라인의 각 단계(수집·평가·추출·중복판정·스크리닝·교차검증·연결·분석·집계·점수화·추천·후보선택)마다 입력/통과/탈락 건수를 실시간으로 확인할 수 있도록 SSE 이벤트와 그래프 UI를 확장한다. 기존 워크플로우 노드의 Input/Output/Failure/Retry 계약과 CLI JSON 스키마는 변경하지 않는다."
 
-status: in_progress
+status: completed
 
 createdAt: "2026-08-10T11:04:51+09:00"
-updatedAt: "2026-08-10T11:06:00+09:00"
+updatedAt: "2026-08-10T11:26:00+09:00"
 
 agent:
   provider: "claude-code"
@@ -80,14 +80,40 @@ plan:
       status: completed
 
     - id: 7
-      description: "uv run pytest로 전체 테스트 스위트를 실행해 검증한다."
-      status: pending
+      description: "uv run pytest로 전체 테스트 스위트를 실행하고, docker compose로 재배포한 뒤 실제 브라우저에서 파이프라인 건수 표시를 확인한다."
+      status: completed
 
 result:
-  summary: null
-  changedFiles: []
-  verifications: []
-  completedAt: null
+  summary: "period_hours 기본값을 168(7일)로 바꾸고, WorkflowStageCounts를 통해 LangGraph 각 노드(evaluate~select_candidates)와 collect 단계의 입력/통과/탈락 건수를 SSE stage_counts로 대시보드 파이프라인 그래프에 실시간 표시하도록 구현했다. 실제 docker 배포·브라우저 실행으로 검증하는 과정에서 extract 단계 건수 공식의 실제 버그(extraction_errors 길이를 탈락 건수로 오인해 '입력 7·통과 3·탈락 7'처럼 합이 안 맞는 값이 나옴)를 발견해 기사별 이벤트 산출 여부 기준으로 수정했고, 재배포 후 '입력 7·통과 3·탈락 4'로 정상 표시됨을 확인했다. 부수적으로 대시보드 '분석 건수'(10/25/50/100) 선택이 DART 소스별 조회 건수(page_count)를 그대로 정하고 있어, 작은 건수를 선택하면 7일 기간을 늘려도 DART가 최신 소수 건만 반환해 0건이 될 수 있다는 것도 확인했다(코드 수정 없이 발견 사실만 기록, 별도 후속 과제로 남김). deduplicate 단계에서 재현되는 unexpected_error도 이번 작업과 무관한 기존 결함으로 확인했으나 원인까지는 조사하지 않았다."
+
+  changedFiles:
+    - "app/web/app.py"
+    - "app/web/dashboard_html.py"
+    - "app/workflows/screening/result.py"
+    - "app/workflows/screening/workflow.py"
+    - "app/workflows/screening/__init__.py"
+    - "app/workflows/__init__.py"
+    - "docs/WORKFLOW.md"
+    - "tests/test_web_dashboard.py"
+    - "tests/test_live_workflow_progress.py"
+    - "tests/test_screening_workflow.py"
+    - "tasks/20260810-1104-pipeline-stage-counts/task.yaml"
+
+  verifications:
+    - command: "uv run pytest -q"
+      result: passed
+      summary: "611 passed, 1 skipped (기존 무관 skip). WorkflowStageCounts 단위 테스트, extract 버그 회귀 테스트, DashboardEvent/_emit 누적 테스트, HTML 마크업 테스트 포함."
+    - command: "uv run python -m compileall -q app tests"
+      result: passed
+      summary: "문법 오류 없음."
+    - command: "docker-compose build --no-cache dashboard schedule-worker && docker-compose up -d (2회, 버그 수정 전후)"
+      result: passed
+      summary: "재배포마다 dashboard/postgres healthy, db-migrate ExitCode 0으로 정상 기동됨을 확인했다."
+    - command: "실제 브라우저(Claude Browser)로 http://localhost:8000 접속, '최대 100건' 선택 후 실행"
+      result: passed
+      summary: "뉴스·공시 수집/분석 대상 점검 단계에 '입력 7 · 통과 7 · 탈락 0', 버그 수정 후 이벤트 추출 단계에 '입력 7 · 통과 3 · 탈락 4'가 실제 라이브 데이터로 정상 표시됨을 스크린샷과 페이지 텍스트로 확인했다."
+
+  completedAt: "2026-08-10T11:26:00+09:00"
 
 blocker:
   reason: null
@@ -105,3 +131,11 @@ history:
   - at: "2026-08-10T11:35:00+09:00"
     status: in_progress
     message: "Wired stage_counts through DashboardEvent/_RunState/_emit/on_progress/_build_result. Initial test for _emit accumulation used asyncio.run() twice around a queue built outside any loop, which broke Python 3.9 asyncio.Queue's loop binding and cascaded into an unrelated test failure (test_telegram_price_summary) in full-suite runs; fixed by wrapping both _emit calls and _RunState() construction inside one asyncio.run(). Also gave DashboardRunResult.stage_counts a default_factory=dict (matching DashboardEvent) so unrelated tests that construct DashboardRunResult directly (test_telegram_price_summary.py) did not need to change."
+
+  - at: "2026-08-10T11:22:00+09:00"
+    status: testing
+    message: "Rebuilt and redeployed the docker-compose stack, ran a real recommendation through the browser. Found the period_hours change alone did not fix 0-result runs when the dashboard's small '분석 건수' selection caps DART's page_count regardless of period (noted, not fixed). Also found the extract stage formula was genuinely wrong (accepted+rejected exceeded input because extraction_errors counts per-event Parser exclusions, not per-article failures) -- fixed to use article event-yield instead, added a regression test, redeployed again, and confirmed corrected counts live in the browser. deduplicate step failed with a reproducible unexpected_error during both live runs; confirmed via container logs this is unrelated to stage_counts/period changes and left uninvestigated as out of scope."
+
+  - at: "2026-08-10T11:26:00+09:00"
+    status: completed
+    message: "All verifications passed (611 tests, compileall, two docker redeploys, live browser confirmation of correct stage counts). Task completed with known follow-up items reported to the user: DART page_count/period decoupling, and the pre-existing deduplicate unexpected_error."
