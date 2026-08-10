@@ -1,138 +1,455 @@
-# Codex Project Guidelines
+# Agent Task Workflow
 
-이 프로젝트는 Codex만 사용하여 개발한다. 모든 코드 변경은 아래 규칙을 우선 적용한다.
+이 문서는 이 프로젝트에서 작업하는 모든 AI Agent(Claude Code, Codex, 그 밖의 Agent 포함)가 따라야 하는 공통 실행 규칙을 정의한다.
 
-## Project Constitution
+`task.yaml`의 필드 의미, 허용 값, 상태 정의 및 작성 예시는 다음 문서를 참고한다.
 
-- 모든 Codex 작업은 repository root의 `PROJECT_GUIDE.md`를 프로젝트 헌법으로 먼저 참고한다.
-- 구현·리뷰·문서화·계획은 `PROJECT_GUIDE.md`의 목표, LLM/Parser/Policy 책임 분리, 부분 성공, 보안 로깅 원칙과 충돌해서는 안 된다.
-- `PROJECT_GUIDE.md`와 세부 구현 규칙이 충돌하면 사용자에게 확인한다.
+```text
+.agent/docs/task-schema.md
+```
 
-## Documentation Routing
+새 작업의 `task.yaml`은 다음 템플릿을 기준으로 생성한다.
 
-모든 작업은 `PROJECT_GUIDE.md`를 먼저 읽고, 작업 성격에 따라 아래 문서를 함께 참고한다.
+```text
+.agent/templates/task.yaml
+```
 
-- 아키텍처 경계, 의존성 방향, 조립 변경: `ARCHITECTURE.md`
-- Workflow 노드, 입력·출력, 단계 간 계약 변경: `WORKFLOW.md`
-- Domain 모델, Parser, Policy, identity 계약 변경: `DOMAIN_MODEL.md`
-- OpenAI, Prompt, structured output, 안전한 LLM 사용 변경: `LLM_GUIDELINES.md`
-- 일반 구현 규칙과 코드 배치: `DEVELOPMENT_GUIDE.md`
-- 테스트 추가·변경과 검증 명령: `TESTING_GUIDE.md`
-- 다음 PR의 범위와 우선순위 확인: `ROADMAP.md`
-- 기존 설계 선택의 배경, 제약, 되돌릴 수 있는 결정 확인: `DECISION_LOG.md`
+Agent별로 이 문서를 어떻게 적용하는지는 문서 마지막의 [19. Agent별 참고사항](#19-agent별-참고사항)을 따른다.
 
-새로운 장기 설계 결정, 책임 경계 변경, 또는 roadmap 우선순위 변경은 구현과 같은 변경 단위에서 관련 문서를 갱신한다. 세부 문서와 `PROJECT_GUIDE.md`가 충돌하면 구현을 진행하지 않고 사용자에게 확인한다.
+---
 
-## Core Rules
+## 0. 프로젝트 헌법과 문서 라우팅
 
-- Python 코드는 모든 함수, 메서드, 변수, 반환값에 명확한 type hint를 작성한다.
-- 데이터 검증, 입출력 스키마, 설정 모델, 도메인 모델에는 Pydantic을 사용한다.
-- `print` 사용은 금지한다.
-- 로깅은 `structlog`를 사용한다.
-- 프롬프트 조립 코드는 `app/prompts/`에, 프롬프트 문자열과 표현 로직은 `app/prompt_templates/`에 둔다.
-- Skill은 하나의 책임만 가진다.
-- Agent는 Skill만 호출한다.
-- Harness만 상태를 변경한다.
+모든 Agent 작업은 repository root 기준 `docs/PROJECT_GUIDE.md`를 프로젝트 헌법으로 먼저 참고한다.
 
-## Architecture Boundaries
+구현·리뷰·문서화·계획은 `docs/PROJECT_GUIDE.md`의 목표, LLM/Parser/Policy 책임 분리, 부분 성공, 보안 로깅 원칙과 충돌해서는 안 된다. `docs/PROJECT_GUIDE.md`와 세부 구현 규칙이 충돌하면 사용자에게 확인한다.
 
-### Skill
+작업 성격에 따라 아래 문서를 함께 참고한다.
 
-- 하나의 Skill은 하나의 명확한 작업만 수행한다.
-- Skill은 상태를 직접 변경하지 않는다.
-- Skill은 다른 Skill의 내부 구현에 의존하지 않는다.
-- Skill 입력과 출력은 가능하면 Pydantic 모델로 표현한다.
-- 모든 Skill은 공통 인터페이스 `async execute(request) -> result`를 따른다.
-- Skill은 Harness, LangGraph, CLI, API 같은 실행 환경을 알지 않는다.
-- Skill은 자신의 책임 범위 안에서 필요한 Service를 사용할 수 있지만, 직접 생성하지 않고 외부에서 의존성으로 주입받는다.
-- Recover 가능한 실패는 Exception 제어 흐름으로 표현하지 않고 Result의 error 관측값으로 반환한다.
-- Recover 불가능한 실패만 Exception으로 처리한다.
-- Skill은 "판단"이 아니라 자신의 책임 범위에서 관측한 사실을 반환한다.
+| 작업 성격 | 참고 문서 |
+| --- | --- |
+| 아키텍처 경계, 의존성 방향, Skill/Agent/Harness 조립 변경 | `docs/ARCHITECTURE.md` |
+| Workflow 노드, 입력·출력, 단계 간 계약 변경 | `docs/WORKFLOW.md` |
+| Domain 모델, Parser, Policy, identity 계약 변경 | `docs/DOMAIN_MODEL.md` |
+| OpenAI, Prompt, structured output, 안전한 LLM 사용 변경 | `docs/LLM_GUIDELINES.md` |
+| 일반 구현 규칙과 코드 배치 | `docs/DEVELOPMENT_GUIDE.md` |
+| 테스트 추가·변경과 검증 명령 | `docs/TESTING_GUIDE.md` |
+| 다음 PR의 범위와 우선순위 확인 | `docs/ROADMAP.md` |
+| 기존 설계 선택의 배경, 제약, 되돌릴 수 있는 결정 확인 | `docs/DECISION_LOG.md` |
+| `task.yaml` 필드 정의와 작성 규칙 | `.agent/docs/task-schema.md` |
 
-### Agent
+새로운 장기 설계 결정, 책임 경계 변경, 또는 roadmap 우선순위 변경은 구현과 같은 변경 단위에서 관련 문서를 갱신한다. 세부 문서와 `docs/PROJECT_GUIDE.md`가 충돌하면 구현을 진행하지 않고 사용자에게 확인한다.
 
-- Agent는 의사결정과 오케스트레이션만 담당한다.
-- Agent는 외부 API, 데이터베이스, 파일 시스템, 상태 저장소를 직접 변경하지 않는다.
-- Agent는 필요한 작업을 Skill 호출로만 수행한다.
-- Agent가 사용하는 프롬프트는 반드시 `app/prompts/`의 PromptBuilder를 통해 생성한다.
+---
 
-### Harness
+## 1. 기본 원칙
 
-- Harness는 실행 흐름, 상태 변경, 입출력 연결을 담당한다.
-- 상태 생성, 갱신, 저장, 복구는 Harness에서만 수행한다.
-- Harness는 Agent와 Skill의 실행 결과를 검증 가능한 방식으로 기록한다.
-- Harness는 Skill Result의 metadata와 errors를 기반으로 retry, ignore, fallback 같은 제어 결정을 내린다.
+프로젝트 파일을 생성, 수정 또는 삭제하는 모든 작업은 하나의 작업 단위 디렉토리와 연결되어야 한다.
 
-## Core Contract
+파일 변경이 필요한 경우 다음 순서를 반드시 따른다.
 
-- 프로젝트 전체 Skill 계약은 `app/core/`에 둔다.
-- `SkillRequest`는 모든 Skill request 모델의 공통 base로 사용한다.
-- `SkillResult`는 `data`, `metadata`, `errors`를 포함한다.
-- `SkillMetadata`는 `started_at`, `finished_at`, `duration_seconds` 같은 공통 실행 관측값을 포함한다.
-- Skill별 metadata는 `SkillMetadata`를 상속하거나 generic metadata 타입으로 확장한다.
-- `SkillError`는 recover 가능한 실패를 표현하는 공통 관측 모델로 사용한다.
-- Skill Result는 비즈니스 데이터와 실행 메타데이터를 분리한다.
+```text
+사용자 요청 분석
+→ 작업 디렉토리 생성
+→ task.yaml 생성
+→ 요구사항 및 작업 범위 기록
+→ 작업 계획 작성
+→ 구현 시작 상태로 변경
+→ 실제 파일 변경
+→ 검증 상태로 변경
+→ 테스트 및 검증
+→ 완료 상태로 변경
+```
 
-## Community Collection Architecture
+작업 디렉토리와 `task.yaml`을 만들기 전에 프로젝트 파일을 먼저 변경하지 않는다.
 
-- 게시글 수집은 `Provider -> RawPost -> Normalizer -> NormalizeResult -> Post` 흐름을 따른다.
-- Provider는 원본 데이터 수집만 담당한다.
-- Provider는 공통 `Post`를 직접 만들지 않고 community별 `RawPost` 모델을 반환한다.
-- `RawPost`는 단순 `payload` dict가 아니라 community별 Pydantic 도메인 모델로 정의한다.
-- Normalizer는 community별 `RawPost`를 공통 `Post`로 변환한다.
-- Normalizer는 `Post`를 직접 반환하지 않고 `NormalizeResult`를 반환한다.
-- `NormalizeResult`는 `post` 또는 recover 가능한 `error`를 담는다.
-- CollectPostsSkill은 Provider와 Normalizer 선택 로직을 직접 가지지 않고 Registry 조회만 사용한다.
-- v1에서는 Resolver를 만들지 않는다. 하나의 `CommunityType`에 여러 Provider 후보가 필요해질 때 v2에서 도입한다.
-- `ProviderRegistry`는 `CommunityType -> CommunityProvider` 매핑을 관리한다.
-- `NormalizerRegistry`는 `CommunityType -> CommunityNormalizer` 매핑을 관리한다.
-- 신규 Community 추가는 Provider, Normalizer, Registry 등록만으로 가능해야 하며 Skill 내부 조건문을 수정하지 않는다.
+이 프로젝트에는 현재(1차 적용 단계) Hook 기반 자동 검증이 연결되어 있지 않다. 아래 규칙은 Agent가 자율적으로 준수해야 하며, Hook을 통한 강제 적용은 별도 작업으로 진행한다.
 
-## CollectPostsSkill Rules
+---
 
-- CollectPostsSkill은 게시글 수집과 정규화된 관측 결과 반환만 담당한다.
-- CollectPostsSkill은 AI 판단, LLM 호출, Prompt 사용, DB 저장, Cache 저장, 정렬 정책, 중복 제거, 광고 판별을 하지 않는다.
-- CollectPostsSkill은 Provider를 병렬 실행한다.
-- Provider 하나가 실패해도 다른 Provider 실행은 계속한다.
-- Provider 실패, Normalizer 실패, Timeout 등 recover 가능한 실패는 Result errors에 기록한다.
-- 전체 Provider가 실패한 경우에만 Exception을 발생시킨다.
-- `sources`는 문자열이 아니라 `CommunityType` enum을 사용한다.
-- `period`는 문자열이 아니라 `timedelta` 또는 datetime 기반 모델을 사용한다.
+## 2. 작업 디렉토리 생성
 
-## Prompt Management
+파일 변경이 필요한 작업은 다음 형식의 디렉토리를 생성한다.
 
-- PromptBuilder 코드는 `app/prompts/` 하위에 둔다.
-- 프롬프트 문자열과 표현 로직은 `app/prompt_templates/` 하위의 Python 상수와 함수로 관리한다.
-- PromptBuilder는 입력 DTO를 `ChatMessage`로 조립만 하고 문자열 치환이나 데이터 표현을 직접 수행하지 않는다.
-- PromptTemplate은 템플릿 치환과 JSON, YAML, Markdown 같은 Prompt 표현 방식을 담당한다.
-- PromptBuilder 입력 DTO는 내부 계층 간 전달용 immutable 객체로 관리한다. 외부 경계 입력은 Pydantic으로 검증한다.
-- 프롬프트 본문은 Evaluator, Generator, Skill 같은 비-PromptTemplate 코드에 인라인으로 작성하지 않는다.
-- 프롬프트 변경은 코드 변경과 동일하게 리뷰 가능한 단위로 관리한다.
+```text
+tasks/YYYYMMDD-HHMM-작업이름/
+```
 
-## Logging
+예시:
 
-- 모든 로그는 `structlog`를 통해 남긴다.
-- 사용자 출력, 디버깅, 테스트 확인 목적으로도 `print`를 사용하지 않는다.
-- 로그에는 추적 가능한 컨텍스트를 포함하되 민감한 정보는 기록하지 않는다.
+```text
+tasks/20260810-1530-fix-scoring-bug/
+tasks/20260810-1610-add-telegram-retry/
+```
 
-## Implementation Checklist
+작성 규칙:
 
-코드 변경 전후로 다음을 확인한다.
+* 날짜와 시간은 작업을 생성한 실제 시점을 사용한다.
+* 작업 이름은 영문 소문자와 하이픈을 사용한다.
+* 공백은 사용하지 않는다.
+* 작업 내용을 식별할 수 있는 이름을 사용한다.
+* 하나의 사용자 요청에는 원칙적으로 하나의 작업 디렉토리만 생성한다.
+* 같은 작업을 이어서 수행할 때는 기존 작업 디렉토리를 사용한다.
+* 같은 목적의 작업 디렉토리를 중복 생성하지 않는다.
 
-- 새 Python 코드에 type hint가 빠진 곳은 없는가?
-- 외부 입력 또는 구조화 데이터에 Pydantic 모델을 사용했는가?
-- `print`가 추가되지 않았는가?
-- 로깅이 필요하다면 `structlog`를 사용했는가?
-- 새 프롬프트가 `app/prompt_templates/`에 저장되고 PromptBuilder가 `app/prompts/`에 있는가?
-- Skill이 하나의 책임만 가지고 있는가?
-- Agent가 Skill 외의 실행 단위를 직접 호출하지 않는가?
-- 상태 변경이 Harness 밖에서 발생하지 않는가?
+작업 디렉토리 이름과 `task.yaml`의 `id`는 반드시 동일해야 한다.
 
-## Planning Documentation
+---
 
-- 승인된 개발 계획은 구현을 시작하기 전에 반드시 `docs/` 폴더에 Markdown 문서로 작성한다.
-- 계획 문서는 PR 또는 작업 단위별로 분리한다.
-- 문서 파일명은 작업 순서와 목적이 드러나도록 작성한다.
-- 구현 중 리뷰나 수정사항이 생기면 해당 계획 문서에 시간순으로 추가 기록한다.
-- 수정사항 기록에는 변경 이유, 결정 내용, 범위 제한을 함께 남긴다.
-- 구현은 최신 계획 문서에 기록된 내용과 일치해야 한다.
+## 3. 작업 디렉토리가 필요하지 않은 경우
+
+다음 작업에는 작업 디렉토리를 생성하지 않는다.
+
+* 코드에 대한 단순 질문
+* 기존 코드의 동작 설명
+* 기술 또는 개념 설명
+* 파일을 변경하지 않는 코드 리뷰
+* 파일을 변경하지 않는 분석
+* 명령어 사용법 안내
+* 사용자가 파일 변경을 요청하지 않은 경우
+
+다음 중 하나라도 발생하면 작업 디렉토리가 필요하다.
+
+* 새 파일 생성
+* 기존 파일 수정
+* 기존 파일 삭제
+* 파일 이동
+* 파일 이름 변경
+* 코드 포맷으로 인한 파일 변경
+* 의존성 변경
+* 설정 파일 변경
+* 테스트 코드 변경
+* 문서 파일 변경 (`docs/*.md` 포함)
+
+처음에는 설명만 요청받았더라도 작업 도중 파일 변경이 필요해지면 실제 변경 전에 작업 디렉토리와 `task.yaml`을 생성한다.
+
+---
+
+## 4. task.yaml 생성
+
+작업 디렉토리를 만든 직후 다음 파일을 생성한다.
+
+```text
+tasks/<작업 ID>/task.yaml
+```
+
+다음 템플릿을 기준으로 작성한다.
+
+```text
+.agent/templates/task.yaml
+```
+
+작성 규칙:
+
+* 템플릿의 필드 구조를 임의로 변경하지 않는다.
+* 현재 작업에 맞게 필드 값을 작성한다.
+* 필수 값을 빈 문자열로 둔 상태에서 구현을 시작하지 않는다.
+* 확실하지 않은 값을 임의로 추측하지 않는다.
+* 알 수 없는 선택 값은 `null`로 기록한다.
+* 작업 디렉토리 이름과 `id`를 동일하게 작성한다.
+* 새 작업은 스키마에서 정의한 초기 상태(`planning`)로 시작한다.
+* 시간은 실제 실행 환경에서 확인한 값을 사용한다.
+* `agent.provider`에는 실제 작업 중인 Agent(`claude-code` 또는 `codex`)를 기록한다.
+* 민감한 정보는 기록하지 않는다.
+
+상세 필드 작성법은 `.agent/docs/task-schema.md`를 따른다.
+
+---
+
+## 5. 작업 상태 관리
+
+작업 상태와 허용 값은 `.agent/docs/task-schema.md`의 정의를 따른다.
+
+일반적인 작업은 다음 흐름으로 진행한다.
+
+```text
+planning → in_progress → testing → completed
+```
+
+다음 규칙을 반드시 지킨다.
+
+* 프로젝트 파일을 변경하기 전에 상태를 `in_progress`로 변경한다.
+* 테스트 또는 결과 검증을 시작하기 전에 상태를 `testing`으로 변경한다.
+* 검증이 성공한 경우에만 상태를 `completed`로 변경한다.
+* 검증 중 파일 수정이 필요하면 상태를 `in_progress`로 되돌린 후 수정한다.
+* 수정 후 다시 `testing`으로 변경하고 재검증한다.
+* 작업을 진행할 수 없으면 상태를 `blocked`로 변경하고 원인과 필요한 조치를 기록한다.
+* 작업이 취소되면 상태를 `cancelled`로 변경하고 이유를 기록한다.
+
+`planning` 상태에서는 현재 작업 디렉토리와 `task.yaml` 외의 프로젝트 파일을 생성, 수정 또는 삭제하지 않는다.
+
+### 완료 상태 변경 순서
+
+작업을 완료할 때는 다음 순서를 반드시 따른다.
+
+1. 모든 필수 작업 단계의 상태를 갱신한다.
+2. `result.summary`를 작성한다.
+3. `result.changedFiles`를 작성한다.
+4. `result.verifications`를 작성한다.
+5. `result.completedAt`을 작성한다.
+6. 완료 조건을 모두 만족하는지 확인한다.
+7. 최상위 `status`를 마지막에 `completed`로 변경한다.
+8. 완료 상태 변경을 `history`에 기록한다.
+9. `updatedAt`을 최종 갱신 시각으로 변경한다.
+
+`plan`, `result`, `completedAt` 등 완료 필드가 작성되지 않은 상태에서 최상위 `status`를 먼저 `completed`로 변경하지 않는다.
+
+---
+
+## 6. 요구사항 기록
+
+실제 구현을 시작하기 전에 사용자 요청을 `requirements.items`에 검증 가능한 문장으로 작성한다.
+
+작성 규칙:
+
+* 한 항목에는 하나의 요구사항만 작성한다.
+* 구현 완료 후 충족 여부를 판단할 수 있어야 한다.
+* 모호한 표현을 사용하지 않는다.
+* 사용자 요청에 없는 기능을 임의로 추가하지 않는다.
+* 민감한 정보는 제거하거나 `[REDACTED]`로 대체한다.
+
+---
+
+## 7. 작업 계획 기록
+
+실제 프로젝트 파일을 변경하기 전에 `plan.steps`를 작성한다.
+
+작성 규칙:
+
+* 실제 수행할 순서대로 작성한다.
+* 각 단계는 하나의 구체적인 작업을 나타낸다.
+* 단계 상태는 `.agent/docs/task-schema.md`의 정의를 따른다.
+* 작업을 시작할 때 해당 단계를 진행 중 상태로 변경한다.
+* 단계가 끝나면 완료 상태로 변경한다.
+* 단계를 생략한 경우 이유를 `history`에 기록한다.
+
+---
+
+## 8. 작업 범위 관리
+
+이번 작업에서 변경할 수 있는 경로를 `scope.allowedPaths`에 기록한다.
+
+작성 규칙:
+
+* 가능한 한 구체적인 경로를 사용한다.
+* 프로젝트 전체를 의미하는 `**`만 단독으로 허용하지 않는다.
+* 현재 작업 디렉토리를 반드시 포함한다.
+* 파일을 변경하기 전에 해당 경로가 `allowedPaths`에 포함되어 있는지 확인한다.
+* 작업 범위가 늘어나면 대상 파일을 수정하기 전에 `allowedPaths`를 먼저 갱신한다.
+* 범위 변경 이유를 `history`에 기록한다.
+
+`scope.deniedPaths`에 포함된 경로는 `allowedPaths`에도 포함되어 있더라도 수정하지 않는다. 금지 경로를 변경해야 하는 경우에는 사용자의 명시적인 요청이 있어야 한다.
+
+---
+
+## 9. `.agent` 디렉토리 및 문서 변경 시 유의사항
+
+`.agent/**`는 작업 관리 정책, 템플릿 및 가이드 문서를 보관하는 보호 경로다.
+
+일반적인 개발 작업에서는 `.agent/**` 파일을 수정, 삭제, 이동하지 않는다.
+
+다음 파일은 작업 규칙 확인을 위해 언제든 읽을 수 있다.
+
+```text
+.agent/templates/task.yaml
+.agent/docs/task-schema.md
+```
+
+다음 작업은 사용자의 명시적인 요청 없이 수행하지 않는다.
+
+* `.agent/templates/task.yaml` 수정
+* `.agent/docs/task-schema.md` 수정
+* `.agent` 내부 정책 문서 구조 변경
+* (향후 추가될 경우) Hook 설정 변경, 검증 규칙 비활성화, 정책 파일 삭제 또는 이동
+
+사용자가 작업 관리 체계 자체의 변경을 요청한 경우에는 해당 경로를 현재 작업의 `allowedPaths`에 명시적으로 추가한 후 변경한다.
+
+`docs/` 아래 규칙·아키텍처 문서(`docs/PROJECT_GUIDE.md`, `docs/ARCHITECTURE.md`, `docs/DEVELOPMENT_GUIDE.md`, `docs/DOMAIN_MODEL.md`, `docs/LLM_GUIDELINES.md`, `docs/WORKFLOW.md`, `docs/TESTING_GUIDE.md`, `docs/ROADMAP.md`, `docs/DECISION_LOG.md`)는 코드와 함께, 같은 변경 단위에서 갱신한다. 코드와 문서가 어긋나면 코드를 기준으로 조용히 덮어쓰지 말고 차이를 확인해 함께 갱신한다.
+
+별도의 PR 단위 계획 문서(`docs/pr-*.md`)를 새로 작성하는 규칙은 두지 않는다. 작업 계획은 `task.yaml`의 `requirements.items`와 `plan.steps`에 기록하는 것을 단일 기준으로 삼는다. 기존 `docs/pr-*.md` 파일들은 과거 구현 기록으로 그대로 남기되, 새 작업에 대해 같은 형식의 문서를 추가로 만들지 않는다.
+
+---
+
+## 10. 작업 이력 기록
+
+작업의 주요 상태 변화와 중요한 사건을 `history`에 시간순으로 기록한다.
+
+다음 이벤트는 반드시 기록한다.
+
+* 작업 생성
+* 구현 시작
+* 테스트 시작
+* 검증 실패
+* 수정 재개
+* 작업 범위 변경
+* 작업 차단
+* 차단 해제
+* 작업 취소
+* 작업 완료
+
+각 이력에는 이벤트 발생 시각, 당시 작업 상태, 수행 내용 또는 상태 변경 이유를 포함한다. 의미를 알 수 없는 메시지(`"진행"`, `"수정"`, `"완료"` 등)는 사용하지 않는다.
+
+---
+
+## 11. 검증 수행
+
+파일 변경이 끝나면 상태를 `testing`으로 변경하고 프로젝트에 적합한 검증을 수행한다.
+
+검증 명령은 프로젝트의 실제 설정과 기존 스크립트를 확인한 후 선택한다. 이 프로젝트에서 가능한 검증 예:
+
+```text
+uv run pytest
+uv run pytest <경로>
+uv run python -m compileall app tests
+git diff
+git status --short
+```
+
+프로젝트에 존재하지 않는 명령을 추측해서 실행하지 않는다.
+
+각 검증 결과는 `result.verifications`에 실제 실행한 명령 또는 검증 방법, 성공/실패 여부, 구체적인 결과 요약과 함께 기록한다. 검증을 실행하지 못한 경우에는 실행하지 못한 이유, 검증되지 않은 범위, 추가로 필요한 조치를 기록한다.
+
+실행하지 않은 검증을 성공했다고 기록하지 않는다. 실패한 검증을 성공으로 기록하지 않는다. Agent의 파일 읽기 도구로 확인했다면 셸 명령을 실행한 것처럼 기록하지 않는다.
+
+---
+
+## 12. 변경 파일 기록
+
+작업 과정에서 생성, 수정, 삭제, 이동 또는 이름을 변경한 모든 파일을 `result.changedFiles`에 기록한다.
+
+작성 규칙:
+
+* 프로젝트 루트 기준 상대 경로를 사용한다.
+* 현재 작업 디렉토리의 `task.yaml`을 포함한다.
+* 실제로 변경되지 않은 파일은 기록하지 않는다.
+* 삭제한 파일도 기존 경로를 기록한다.
+* Git에 표시되는 실제 변경 내용과 일치해야 한다.
+
+---
+
+## 13. 작업 완료 조건
+
+다음 조건을 모두 만족한 경우에만 작업을 `completed` 상태로 변경한다.
+
+1. 사용자 요청이 `request`에 기록되어 있다.
+2. 검증 가능한 요구사항이 `requirements.items`에 작성되어 있다.
+3. 실제 작업 계획이 `plan.steps`에 작성되어 있다.
+4. 필수 작업 단계가 완료되었다.
+5. 실제 변경 경로가 `scope.allowedPaths`에 포함되어 있다.
+6. 모든 변경 파일이 `result.changedFiles`에 기록되어 있다.
+7. 필요한 테스트 또는 검증을 수행했다.
+8. 필수 검증 결과가 성공했다.
+9. 작업 결과 요약이 작성되어 있다.
+10. 완료 시간이 작성되어 있다.
+11. 마지막 갱신 시간이 최신 상태다.
+12. 주요 상태 변경이 `history`에 기록되어 있다.
+13. 남아 있는 오류나 제한사항을 숨기지 않았다.
+14. 사용자의 요구사항 충족 여부를 확인했다.
+
+검증에 실패한 상태에서는 작업을 완료 처리하지 않는다.
+
+---
+
+## 14. 사용자에게 결과 보고
+
+작업 결과를 사용자에게 보고할 때 다음 내용을 포함한다.
+
+* 작업 ID
+* 수행한 작업 요약
+* 변경한 파일
+* 실행한 테스트 또는 검증
+* 검증 결과
+* 남아 있는 제한사항 또는 주의사항
+
+`task.yaml`이 `completed` 상태가 아닌 경우 작업이 완료됐다고 표현하지 않는다. 테스트를 실행하지 못했다면 테스트가 성공했다고 표현하지 않는다.
+
+---
+
+## 15. 기존 작업과 동시 작업 처리
+
+`tasks/` 디렉토리에 완료되지 않은 다른 작업이 존재할 수 있다.
+
+현재 사용자 요청과 연결된 작업만 변경한다.
+
+기존 작업을 이어서 수행하는 경우:
+
+* 기존 작업 목적이 현재 요청과 같은지 확인한다.
+* 기존 `task.yaml`을 읽는다.
+* 현재 상태와 남은 계획을 확인한다.
+* 새 작업 디렉토리를 중복 생성하지 않는다.
+* 작업 재개 사실을 `history`에 기록한다.
+
+현재 요청과 관련 없는 작업은 변경하지 않는다.
+
+동일한 파일을 대상으로 여러 작업이 존재하여 충돌 가능성이 있으면 임의로 진행하지 않고 사용자에게 상황을 알린다.
+
+---
+
+## 16. 민감 정보 보호
+
+다음 정보는 `task.yaml`, 작업 기록 또는 결과 문서에 원문 그대로 저장하지 않는다.
+
+* 비밀번호
+* API 키 (`OPENAI_API_KEY`, `KRX_API_KEY`, `DART_API_KEY`, `TELEGRAM_BOT_TOKEN` 등)
+* 액세스 토큰
+* 비밀 키
+* 쿠키, 세션 토큰
+* 개인 인증 정보
+* 개인정보
+* `.env`의 실제 값
+
+민감 정보는 `[REDACTED]`로 대체한다.
+
+---
+
+## 17. 규칙 우회 금지
+
+Agent는 다음 행동을 하지 않는다.
+
+* 이 문서를 읽지 않고 파일 변경을 시작하는 행위
+* 작업 디렉토리를 생성하지 않고 프로젝트 파일을 변경하는 행위
+* `task.yaml`을 생성하지 않고 프로젝트 파일을 변경하는 행위
+* 허용되지 않은 작업 상태에서 프로젝트 파일을 변경하는 행위
+* 수정 경로를 `allowedPaths`에 기록하지 않는 행위
+* `deniedPaths`를 무시하는 행위
+* 검증 없이 작업을 완료 처리하는 행위
+* 실패한 검증을 성공으로 기록하는 행위
+* 실행하지 않은 명령을 실행했다고 기록하는 행위
+* 작업 이력을 삭제하거나 사실과 다르게 작성하는 행위
+* 사용자의 요청 없이 작업 관리 규칙(`AGENTS.md`, `CLAUDE.md`, `.agent/docs/task-schema.md`, `.agent/templates/task.yaml`)을 수정하는 행위
+* 향후 Hook 또는 검증 스크립트가 추가된 이후 이를 비활성화하거나 우회하는 행위
+* 민감 정보를 작업 파일에 기록하는 행위
+
+규칙과 사용자 요청이 충돌하면 규칙을 몰래 생략하지 않는다. 충돌 내용을 사용자에게 알리고 안전하게 수행할 수 있는 범위까지만 진행한다.
+
+---
+
+## 18. 문서 역할
+
+작업 관리 관련 파일의 역할은 다음과 같다.
+
+| 파일 | 역할 |
+| --- | --- |
+| `AGENTS.md` | Claude Code, Codex 등 모든 Agent가 따라야 하는 공통 실행 규칙 |
+| `CLAUDE.md` | Claude Code가 `AGENTS.md`를 따르도록 연결하는 전용 지침 |
+| `.agent/templates/task.yaml` | 새 작업 생성 시 사용하는 템플릿 |
+| `.agent/docs/task-schema.md` | `task.yaml` 필드 정의, 허용 값 및 작성 방법 |
+| `tasks/<작업 ID>/task.yaml` | 개별 작업의 실제 상태, 범위, 계획 및 결과 기록 |
+| `docs/PROJECT_GUIDE.md` | 프로젝트 목표, 핵심 원칙, Layer 규칙 (프로젝트 헌법) |
+| `docs/ARCHITECTURE.md`, `docs/WORKFLOW.md`, `docs/DOMAIN_MODEL.md`, `docs/LLM_GUIDELINES.md`, `docs/DEVELOPMENT_GUIDE.md`, `docs/TESTING_GUIDE.md`, `docs/ROADMAP.md`, `docs/DECISION_LOG.md` | 영역별 아키텍처·구현·테스트 규칙 |
+
+공통 실행 규칙은 이 `AGENTS.md`를 단일 기준으로 사용한다. 다른 Agent 전용 문서에 동일한 공통 규칙을 중복 작성하지 않는다.
+
+---
+
+## 19. Agent별 참고사항
+
+공통 규칙은 위 1~18절을 그대로 따른다. 아래는 Agent 도구별로 다르게 동작하는 부분만 다룬다.
+
+### Codex
+
+Codex는 `AGENTS.md`를 프로젝트 루트에서 네이티브로 인식한다. 별도의 진입 문서 없이 이 문서를 직접 참고해서 작업하면 된다.
+
+### Claude Code
+
+Claude Code는 `CLAUDE.md`를 우선 읽고 `CLAUDE.md`가 이 문서(`AGENTS.md`)를 따르도록 연결한다. `CLAUDE.md`와 `AGENTS.md`가 충돌하는 경우의 우선순위는 `CLAUDE.md`에 정의되어 있다. 현재 이 프로젝트에는 `task.yaml` 없는 파일 변경을 자동으로 차단하는 Hook이 연결되어 있지 않으므로, Claude Code는 이 문서의 규칙을 스스로 준수해야 한다.

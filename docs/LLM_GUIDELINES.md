@@ -18,7 +18,7 @@ Prompt 안에 Policy 임계값이나 최종 상태 규칙을 넣지 않는다. �
 - LLM 호출은 `StructuredOutputLLM.generate(..., response_model=...)` 계약을 사용한다.
 - OpenAI SDK와 provider별 세부 사항은 `app/llms/` adapter 안에 가둔다.
 
-PromptBuilder는 immutable 입력 DTO를 ChatMessage로 조립하며, business rule을 구현하거나 Policy를 호출하지 않는다.
+PromptBuilder는 immutable 입력 DTO를 ChatMessage로 조립하며, business rule을 구현하거나 Policy를 호출하지 않는다. PromptBuilder 입력 DTO는 내부 계층 간 전달용 immutable 객체로 관리하고, 외부 경계 입력은 Pydantic으로 검증한다. 프롬프트 변경은 코드 변경과 동일하게 리뷰 가능한 단위로 관리한다.
 
 ## Structured output
 

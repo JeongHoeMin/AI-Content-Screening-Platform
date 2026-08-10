@@ -2,7 +2,7 @@
 
 ## 작업 시작
 
-작업 전 [PROJECT_GUIDE.md](PROJECT_GUIDE.md)를 읽고, 변경 성격에 맞는 루트 가이드와 `docs/`의 최신 PR 계획을 확인한다. 승인된 구현은 시작 전에 `docs/`에 작업 단위 계획을 작성한다. 구현 중 리뷰로 결정이 바뀌면 같은 계획 문서에 변경 이유, 결정, 범위 제한을 시간순으로 추가한다.
+작업 전 [PROJECT_GUIDE.md](PROJECT_GUIDE.md)를 읽고, 변경 성격에 맞는 `docs/` 가이드를 확인한다. 작업 계획은 별도의 `docs/` 계획 문서를 새로 작성하지 않고, `tasks/<작업 ID>/task.yaml`의 `requirements.items`와 `plan.steps`에 기록한다(`AGENTS.md` 참고). 구현 중 리뷰로 결정이 바뀌면 같은 `task.yaml`에 시간순으로 변경 이유, 결정, 범위 제한을 추가 기록한다.
 
 ## 코드 규칙
 
@@ -33,7 +33,7 @@ Parser는 LLM, DB, Policy를 호출하지 않는다. Policy는 Prompt나 OpenAI�
 
 1. 기존 interface, Domain 모델, Policy, Workflow 소비 지점을 읽어 계약을 파악한다.
 2. 하위 호환이 필요한 public JSON/CLI/Mock 계약을 명시한다.
-3. 계획 문서와 Parser/Policy 테스트를 먼저 또는 함께 갱신한다.
+3. `task.yaml`의 `plan.steps`와 Parser/Policy 테스트를 먼저 또는 함께 갱신한다.
 4. 구현은 dependency injection을 사용하고 bootstrap에서 조립한다.
 5. recover 가능한 item 실패와 fatal 실행 실패를 구분한다.
 6. 관련 단위·통합·회귀 테스트와 `git diff --check`를 실행한다.
@@ -42,6 +42,19 @@ Parser는 LLM, DB, Policy를 호출하지 않는다. Policy는 Prompt나 OpenAI�
 
 로그에는 correlation에 필요한 제한된 식별자와 error kind만 기록한다. 기사 원문, prompt, API key, 개인정보, raw SDK response, 무제한 exception string은 기록하지 않는다. 외부 요청에 내부 candidate ID와 workflow state를 보내지 않는다.
 
+## 체크리스트
+
+코드 변경 전후로 다음을 확인한다.
+
+- 새 Python 코드에 type hint가 빠진 곳은 없는가?
+- 외부 입력 또는 구조화 데이터에 Pydantic 모델을 사용했는가?
+- `print`가 추가되지 않았는가?
+- 로깅이 필요하다면 `structlog`를 사용했는가?
+- 새 프롬프트가 `app/prompt_templates/`에 저장되고 PromptBuilder가 `app/prompts/`에 있는가?
+- Skill이 하나의 책임만 가지고 있는가?
+- Agent가 Skill 외의 실행 단위를 직접 호출하지 않는가?
+- 상태 변경이 Harness 밖에서 발생하지 않는가?
+
 ## 문서 유지
 
-루트 문서는 반복 참조하는 안정적인 운영 규칙을 담는다. PR별 선택, 구현 순서, 수정 이력은 `docs/pr-*.md`에 남긴다. 코드와 문서의 현재 상태가 다르면 코드를 기준으로 조용히 문서를 덮어쓰지 말고 차이를 확인해 함께 갱신한다.
+`docs/` 문서는 반복 참조하는 안정적인 운영 규칙을 담는다. 작업 단위 계획과 수정 이력은 새로운 `docs/pr-*.md`를 작성하지 않고 `tasks/<작업 ID>/task.yaml`에 남긴다. 기존 `docs/pr-*.md`는 과거 구현 기록으로 유지한다. 코드와 문서의 현재 상태가 다르면 코드를 기준으로 조용히 문서를 덮어쓰지 말고 차이를 확인해 함께 갱신한다.

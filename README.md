@@ -15,7 +15,7 @@
 - **수집 조건은 결정적 코드가 소유한다.** 투자 테마(반도체·AI·대체에너지 등 종목군)와 뉴스 주제는 versioned catalog의 문자열 규칙으로 판정하며, LLM은 이 필터의 통과·제외를 결정하지 않습니다.
 - **Mock mode와 실제 LLM(OpenAI) mode는 동일한 Workflow를 공유한다.** Mock은 LLM 관측만 결정적 구현으로 대체하므로, 빠르고 재현 가능한 계약 검증 경로로 쓰입니다.
 
-더 자세한 원칙과 비목표(Non-goals)는 [PROJECT_GUIDE.md](PROJECT_GUIDE.md)를 참고하세요.
+더 자세한 원칙과 비목표(Non-goals)는 [PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md)를 참고하세요.
 
 ---
 
@@ -48,7 +48,7 @@ IR RSS 전문 수집 → 정규화 → 투자 테마·뉴스 주제 Filter → �
 | Harness | 실행 감사(audit), 재시도, 알림, 로그/DB 보존 | [app/harness/](app/harness/) |
 | Scheduled Worker | PostgreSQL cron 설정을 lease로 claim해 정기 추천 실행 | [app/scheduled_worker.py](app/scheduled_worker.py) |
 
-전체 계층 구조와 의존성 방향은 [ARCHITECTURE.md](ARCHITECTURE.md)에 상세히 설명되어 있습니다.
+전체 계층 구조와 의존성 방향은 [ARCHITECTURE.md](docs/ARCHITECTURE.md)에 상세히 설명되어 있습니다.
 
 ---
 
@@ -176,7 +176,7 @@ uv run pytest
 uv run python -m compileall app tests
 ```
 
-테스트는 LLM이 특정 문장이나 점수를 정확히 맞히는지가 아니라, transport boundary·Parser·Policy·Workflow·CLI의 **결정적 계약**을 검증합니다. 실제 OpenAI API를 호출하는 smoke test는 API key가 명시적으로 제공된 경우에만 별도로 실행됩니다. 자세한 내용은 [TESTING_GUIDE.md](TESTING_GUIDE.md)를 참고하세요.
+테스트는 LLM이 특정 문장이나 점수를 정확히 맞히는지가 아니라, transport boundary·Parser·Policy·Workflow·CLI의 **결정적 계약**을 검증합니다. 실제 OpenAI API를 호출하는 smoke test는 API key가 명시적으로 제공된 경우에만 별도로 실행됩니다. 자세한 내용은 [TESTING_GUIDE.md](docs/TESTING_GUIDE.md)를 참고하세요.
 
 ---
 
@@ -194,17 +194,19 @@ uv run python -m compileall app tests
 
 | 문서 | 내용 |
 | --- | --- |
-| [PROJECT_GUIDE.md](PROJECT_GUIDE.md) | 프로젝트 목표, 핵심 원칙, Layer 규칙, 장기 로드맵 |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | 계층 구조, 의존성 방향, LLM 경계, 실패 처리 원칙 |
-| [DEVELOPMENT_GUIDE.md](DEVELOPMENT_GUIDE.md) | 구현 세부 규칙 및 코딩 컨벤션 |
-| [DOMAIN_MODEL.md](DOMAIN_MODEL.md) | Domain 모델(Article, NewsEvent 등) 설계 |
-| [LLM_GUIDELINES.md](LLM_GUIDELINES.md) | LLM 사용 범위와 경계 |
-| [TESTING_GUIDE.md](TESTING_GUIDE.md) | 테스트 계층 및 검증 규칙 |
-| [WORKFLOW.md](WORKFLOW.md) | LangGraph Workflow 상세 |
-| [DECISION_LOG.md](DECISION_LOG.md) | 주요 설계 결정 기록 |
-| [ROADMAP.md](ROADMAP.md) | 향후 계획 |
+| [docs/PROJECT_GUIDE.md](docs/PROJECT_GUIDE.md) | 프로젝트 목표, 핵심 원칙, Layer 규칙, 장기 로드맵 |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 계층 구조, 의존성 방향, LLM 경계, 실패 처리 원칙 |
+| [docs/DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md) | 구현 세부 규칙 및 코딩 컨벤션 |
+| [docs/DOMAIN_MODEL.md](docs/DOMAIN_MODEL.md) | Domain 모델(Article, NewsEvent 등) 설계 |
+| [docs/LLM_GUIDELINES.md](docs/LLM_GUIDELINES.md) | LLM 사용 범위와 경계 |
+| [docs/TESTING_GUIDE.md](docs/TESTING_GUIDE.md) | 테스트 계층 및 검증 규칙 |
+| [docs/WORKFLOW.md](docs/WORKFLOW.md) | LangGraph Workflow 상세 |
+| [docs/DECISION_LOG.md](docs/DECISION_LOG.md) | 주요 설계 결정 기록 |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | 향후 계획 |
+| [.agent/docs/task-schema.md](.agent/docs/task-schema.md) | `task.yaml` 필드 정의 및 작성 규칙 |
 | [docs/정기-추천-및-텔레그램-운영.md](docs/정기-추천-및-텔레그램-운영.md) | 정기 실행/텔레그램 알림 운영 가이드 |
 | [docs/](docs/) | PR 단위 구현 기록 (PR-01 ~ 최신) |
+| [AGENTS.md](AGENTS.md) | Claude Code·Codex 공용 작업 절차(task.yaml 기반) |
 
 ---
 

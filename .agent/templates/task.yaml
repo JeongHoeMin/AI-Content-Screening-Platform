@@ -1,0 +1,54 @@
+schemaVersion: 1
+
+id: ""
+title: ""
+description: ""
+
+status: planning
+
+createdAt: ""
+updatedAt: ""
+
+agent:
+  provider: ""
+  model: null
+  sessionId: null
+
+request:
+  summary: ""
+  originalPrompt: ""
+
+scope:
+  allowedPaths: []
+  deniedPaths:
+    - ".env"
+    - ".env.*"
+    - "secrets/**"
+    - ".venv/**"
+    - "__pycache__/**"
+    - ".git/**"
+    - "runtime/**"
+    - "dist/**"
+    - "build/**"
+    - ".agent/**"
+
+requirements:
+  items: []
+
+plan:
+  steps: []
+
+result:
+  summary: null
+  changedFiles: []
+  verifications: []
+  completedAt: null
+
+blocker:
+  reason: null
+  requiredAction: null
+
+history:
+  - at: ""
+    status: planning
+    message: "Task created"

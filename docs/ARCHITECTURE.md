@@ -102,6 +102,71 @@ Docker dashboard 실행은 `./runtime/logs` volume에 구조화 application JSON
 검증 가능한 UTC/거래일 값으로 보존한다. 성과 표시는 Harness가 계산한 사후 단순 가격 비교이며 수수료·세금·배당,
 실제 체결 가격이나 투자 판단을 포함하지 않는다.
 
+## Skill / Agent / Harness 경계
+
+### Skill
+
+- 하나의 Skill은 하나의 명확한 작업만 수행한다.
+- Skill은 상태를 직접 변경하지 않는다.
+- Skill은 다른 Skill의 내부 구현에 의존하지 않는다.
+- Skill 입력과 출력은 가능하면 Pydantic 모델로 표현한다.
+- 모든 Skill은 공통 인터페이스 `async execute(request) -> result`를 따른다.
+- Skill은 Harness, LangGraph, CLI, API 같은 실행 환경을 알지 않는다.
+- Skill은 자신의 책임 범위 안에서 필요한 Service를 사용할 수 있지만, 직접 생성하지 않고 외부에서 의존성으로 주입받는다.
+- Recover 가능한 실패는 Exception 제어 흐름으로 표현하지 않고 Result의 error 관측값으로 반환한다.
+- Recover 불가능한 실패만 Exception으로 처리한다.
+- Skill은 "판단"이 아니라 자신의 책임 범위에서 관측한 사실을 반환한다.
+
+### Agent
+
+- Agent는 의사결정과 오케스트레이션만 담당한다.
+- Agent는 외부 API, 데이터베이스, 파일 시스템, 상태 저장소를 직접 변경하지 않는다.
+- Agent는 필요한 작업을 Skill 호출로만 수행한다.
+- Agent가 사용하는 프롬프트는 반드시 `app/prompts/`의 PromptBuilder를 통해 생성한다.
+
+### Harness
+
+- Harness는 실행 흐름, 상태 변경, 입출력 연결을 담당한다.
+- 상태 생성, 갱신, 저장, 복구는 Harness에서만 수행한다.
+- Harness는 Agent와 Skill의 실행 결과를 검증 가능한 방식으로 기록한다.
+- Harness는 Skill Result의 metadata와 errors를 기반으로 retry, ignore, fallback 같은 제어 결정을 내린다.
+
+## Core Contract
+
+- 프로젝트 전체 Skill 계약은 `app/core/`에 둔다.
+- `SkillRequest`는 모든 Skill request 모델의 공통 base로 사용한다.
+- `SkillResult`는 `data`, `metadata`, `errors`를 포함한다.
+- `SkillMetadata`는 `started_at`, `finished_at`, `duration_seconds` 같은 공통 실행 관측값을 포함한다.
+- Skill별 metadata는 `SkillMetadata`를 상속하거나 generic metadata 타입으로 확장한다.
+- `SkillError`는 recover 가능한 실패를 표현하는 공통 관측 모델로 사용한다.
+- Skill Result는 비즈니스 데이터와 실행 메타데이터를 분리한다.
+
+## Community Collection Architecture
+
+- 게시글 수집은 `Provider -> RawPost -> Normalizer -> NormalizeResult -> Post` 흐름을 따른다.
+- Provider는 원본 데이터 수집만 담당한다.
+- Provider는 공통 `Post`를 직접 만들지 않고 community별 `RawPost` 모델을 반환한다.
+- `RawPost`는 단순 `payload` dict가 아니라 community별 Pydantic 도메인 모델로 정의한다.
+- Normalizer는 community별 `RawPost`를 공통 `Post`로 변환한다.
+- Normalizer는 `Post`를 직접 반환하지 않고 `NormalizeResult`를 반환한다.
+- `NormalizeResult`는 `post` 또는 recover 가능한 `error`를 담는다.
+- CollectPostsSkill은 Provider와 Normalizer 선택 로직을 직접 가지지 않고 Registry 조회만 사용한다.
+- v1에서는 Resolver를 만들지 않는다. 하나의 `CommunityType`에 여러 Provider 후보가 필요해질 때 v2에서 도입한다.
+- `ProviderRegistry`는 `CommunityType -> CommunityProvider` 매핑을 관리한다.
+- `NormalizerRegistry`는 `CommunityType -> CommunityNormalizer` 매핑을 관리한다.
+- 신규 Community 추가는 Provider, Normalizer, Registry 등록만으로 가능해야 하며 Skill 내부 조건문을 수정하지 않는다.
+
+### CollectPostsSkill Rules
+
+- CollectPostsSkill은 게시글 수집과 정규화된 관측 결과 반환만 담당한다.
+- CollectPostsSkill은 AI 판단, LLM 호출, Prompt 사용, DB 저장, Cache 저장, 정렬 정책, 중복 제거, 광고 판별을 하지 않는다.
+- CollectPostsSkill은 Provider를 병렬 실행한다.
+- Provider 하나가 실패해도 다른 Provider 실행은 계속한다.
+- Provider 실패, Normalizer 실패, Timeout 등 recover 가능한 실패는 Result errors에 기록한다.
+- 전체 Provider가 실패한 경우에만 Exception을 발생시킨다.
+- `sources`는 문자열이 아니라 `CommunityType` enum을 사용한다.
+- `period`는 문자열이 아니라 `timedelta` 또는 datetime 기반 모델을 사용한다.
+
 ## 의존성 및 변경 원칙
 
 - Provider/SDK/LLM adapter는 Domain 모델을 만들지 않고 transport 결과만 제공한다.
