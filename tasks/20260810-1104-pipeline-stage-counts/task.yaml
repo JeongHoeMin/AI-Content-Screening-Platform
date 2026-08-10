@@ -73,7 +73,7 @@ plan:
 
     - id: 5
       description: "app/web/dashboard_html.py의 workflow-graph 렌더링에 단계별 건수 표시를 추가한다(진행 상태 리셋 시 초기화 포함). HTML 마크업 테스트를 추가한다."
-      status: pending
+      status: completed
 
     - id: 6
       description: "docs/WORKFLOW.md에 대시보드 진행 이벤트가 노드별 안전한 집계 건수를 포함한다는 내용을 반영한다."

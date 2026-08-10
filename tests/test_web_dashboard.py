@@ -92,6 +92,9 @@ def test_dashboard_page_exposes_actual_workflow_graph_and_retry_path() -> None:
     assert 'id="retry-path"' in response.text
     assert "renderWorkflowGraph" in response.text
     assert "failure_attempts" in response.text
+    assert "renderStageCounts" in response.text
+    assert "graph-counts" in response.text
+    assert "stage_counts" in response.text
 
 
 def test_dashboard_exposes_theme_and_news_topic_filters() -> None:
