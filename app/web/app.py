@@ -15,7 +15,15 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.bootstrap import ExecutionMode
-from app.config import load_optional_database_config, load_schedule_settings_password
+from app.config import (
+    DatabaseConfig,
+    KisConfig,
+    load_krx_config,
+    load_optional_database_config,
+    load_optional_kis_config,
+    load_schedule_settings_password,
+)
+from app.config.errors import ConfigurationError
 from app.config.schedule_security import (
     SCHEDULE_SESSION_COOKIE,
     has_valid_schedule_session,
@@ -28,9 +36,12 @@ from app.persistence import (
     ScheduledRecommendationPersistence,
     WorkflowExecutionAuditPersistence,
     create_collection_filter_persistence,
+    create_recommendation_price_persistence,
     create_scheduled_recommendation_persistence,
     create_workflow_execution_audit_persistence,
 )
+from app.harness.recommendation_prices import RecommendationPriceRecorder
+from app.harness.recommendation_prices import RecommendationPerformanceService
 from app.persistence.schedule_repository import ScheduleVersionConflictError
 from app.harness import Harness
 from app.harness.execution_audit import ScreeningExecutionHarness
@@ -41,6 +52,12 @@ from app.market_data import (
     create_market_screening_workflow,
     posts_to_articles,
 )
+from app.market_prices import (
+    KisRealtimePriceClient,
+    KrxClosingPriceClient,
+    MarketPriceService,
+    RecommendationPerformanceResponse,
+)
 from app.models.collect_posts import CollectPostsRequest
 from app.models.article import Article
 from app.models.collection_filter import CollectionFilter, FilterRejectionReason, InvestmentTheme, NewsTopic
@@ -49,6 +66,7 @@ from app.models.collection_filter_result import (
     CollectionFilterResult,
     CollectionFilterSnapshot,
 )
+from app.models.candidate_selection import CandidateEvaluation, CandidateSelectionResult
 from app.models.community import CommunityType
 from app.models.post import Post
 from app.workflows import ScreeningResult, WorkflowProgressEvent
@@ -170,6 +188,7 @@ class RecommendationCard(BaseModel):
     score: float
     action: str
     reason_code: str
+    recommendation_index: int = Field(default=0, ge=0)
 
 
 class NewsAnalysisCard(BaseModel):
@@ -259,6 +278,8 @@ class DashboardRunManager:
         filter_persistence: Optional[CollectionFilterPersistence] = None,
         execution_audit_persistence: Optional[WorkflowExecutionAuditPersistence] = None,
         schedule_persistence: Optional[ScheduledRecommendationPersistence] = None,
+        price_recorder: Optional[RecommendationPriceRecorder] = None,
+        performance_service: Optional[RecommendationPerformanceService] = None,
     ) -> None:
         self._runs: Dict[str, _RunState] = {}
         self._filter_persistence: Optional[CollectionFilterPersistence] = filter_persistence
@@ -267,6 +288,10 @@ class DashboardRunManager:
         )
         self._schedule_persistence: Optional[ScheduledRecommendationPersistence] = (
             schedule_persistence
+        )
+        self._price_recorder: Optional[RecommendationPriceRecorder] = price_recorder
+        self._performance_service: Optional[RecommendationPerformanceService] = (
+            performance_service
         )
 
     _WORKFLOW_NODES: tuple[str, ...] = (
@@ -388,6 +413,15 @@ class DashboardRunManager:
             raise HTTPException(status_code=500, detail="Missing recommendation result")
         return state.result
 
+    async def recommendation_performance(
+        self,
+        run_id: Optional[str] = None,
+    ) -> RecommendationPerformanceResponse:
+        """Refresh and project price performance only through the Harness service."""
+        if self._performance_service is None:
+            return RecommendationPerformanceResponse(evaluated_at=datetime.now(timezone.utc))
+        return await self._performance_service.refresh_and_query(run_id)
+
     async def _execute(
         self,
         run_id: str,
@@ -492,6 +526,11 @@ class DashboardRunManager:
                 result,
                 state.analyses,
                 filter_result,
+            )
+            await self._record_price_entries(
+                run_id,
+                self._selected_price_recommendations(result.candidate_selection),
+                datetime.now(timezone.utc),
             )
             state.completed = True
             await self._emit(
@@ -626,7 +665,8 @@ class DashboardRunManager:
             for post in posts
         ]
         recommendations: List[RecommendationCard] = []
-        for decision in result.recommendation.decisions:
+        recommendation_index: int
+        for recommendation_index, decision in enumerate(result.recommendation.decisions):
             company = decision.company_score.company
             ticker = company.ticker
             recommendations.append(
@@ -637,6 +677,7 @@ class DashboardRunManager:
                     score=decision.score,
                     action=decision.action.value,
                     reason_code=decision.reason_code.value,
+                    recommendation_index=recommendation_index,
                 )
             )
         statistics: Dict[str, Any] = result.statistics.model_dump()
@@ -808,6 +849,35 @@ class DashboardRunManager:
         )
         await self._filter_persistence.persist(snapshot)
 
+    async def _record_price_entries(
+        self,
+        run_id: str,
+        recommendations: tuple[CandidateEvaluation, ...],
+        observed_at: datetime,
+    ) -> None:
+        """Record price observations without changing a completed recommendation result."""
+        if self._price_recorder is None:
+            return
+        try:
+            await self._price_recorder.record_entries(
+                run_id,
+                recommendations,
+                observed_at,
+            )
+        except Exception as error:
+            logger.warning(
+                "dashboard_recommendation_price_recording_failed",
+                run_id=run_id,
+                error_type=type(error).__name__,
+            )
+
+    @staticmethod
+    def _selected_price_recommendations(
+        candidate_selection: CandidateSelectionResult,
+    ) -> tuple[CandidateEvaluation, ...]:
+        """Return only selected candidates in stable rank order for entry pricing."""
+        return candidate_selection.candidates
+
     @staticmethod
     def _build_filter_snapshot(
         run_id: str,
@@ -834,7 +904,7 @@ class DashboardRunManager:
 
 def _create_optional_filter_persistence() -> Optional[CollectionFilterPersistence]:
     """Configure dashboard filter persistence only when PostgreSQL is configured."""
-    database_config = load_optional_database_config()
+    database_config: Optional[DatabaseConfig] = load_optional_database_config()
     if database_config is None:
         return None
     return create_collection_filter_persistence(database_config)
@@ -856,12 +926,74 @@ def _create_optional_schedule_persistence() -> Optional[ScheduledRecommendationP
     return create_scheduled_recommendation_persistence(database_config)
 
 
+def _create_optional_price_recorder() -> Optional[RecommendationPriceRecorder]:
+    """Assemble entry-price recording only when every safe dependency is configured."""
+    database_config: Optional[DatabaseConfig] = load_optional_database_config()
+    if database_config is None:
+        return None
+    try:
+        try:
+            kis_config: Optional[KisConfig] = load_optional_kis_config()
+        except ConfigurationError:
+            logger.warning(
+                "dashboard_recommendation_price_kis_unavailable",
+                reason="partial_configuration",
+            )
+            kis_config = None
+        price_service: MarketPriceService = MarketPriceService(
+            KisRealtimePriceClient(kis_config),
+            KrxClosingPriceClient(load_krx_config()),
+        )
+        return RecommendationPriceRecorder(
+            price_service,
+            create_recommendation_price_persistence(database_config),
+        )
+    except Exception as error:
+        logger.warning(
+            "dashboard_recommendation_price_recorder_unavailable",
+            error_type=type(error).__name__,
+        )
+        return None
+
+
+def _create_optional_performance_service() -> Optional[RecommendationPerformanceService]:
+    """Assemble on-demand latest-price refresh only when DB and price adapters exist."""
+    database_config: Optional[DatabaseConfig] = load_optional_database_config()
+    if database_config is None:
+        return None
+    try:
+        try:
+            kis_config: Optional[KisConfig] = load_optional_kis_config()
+        except ConfigurationError:
+            logger.warning(
+                "dashboard_recommendation_performance_kis_unavailable",
+                reason="partial_configuration",
+            )
+            kis_config = None
+        price_service: MarketPriceService = MarketPriceService(
+            KisRealtimePriceClient(kis_config),
+            KrxClosingPriceClient(load_krx_config()),
+        )
+        return RecommendationPerformanceService(
+            price_service,
+            create_recommendation_price_persistence(database_config),
+        )
+    except Exception as error:
+        logger.warning(
+            "dashboard_recommendation_performance_unavailable",
+            error_type=type(error).__name__,
+        )
+        return None
+
+
 def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
     """Create the dashboard API and its static single-page client."""
     run_manager: DashboardRunManager = manager or DashboardRunManager(
         filter_persistence=_create_optional_filter_persistence(),
         execution_audit_persistence=_create_optional_execution_audit_persistence(),
         schedule_persistence=_create_optional_schedule_persistence(),
+        price_recorder=_create_optional_price_recorder(),
+        performance_service=_create_optional_performance_service(),
     )
     app = FastAPI(title="AI Content Screening Dashboard")
 
@@ -872,6 +1004,12 @@ def create_web_app(manager: Optional[DashboardRunManager] = None) -> FastAPI:
     @app.get("/api/health")
     async def health() -> Dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/api/recommendations/performance")
+    async def get_recommendation_performance(
+        run_id: Optional[str] = None,
+    ) -> RecommendationPerformanceResponse:
+        return await run_manager.recommendation_performance(run_id)
 
     @app.get("/settings", response_class=HTMLResponse)
     async def schedule_settings_page() -> str:

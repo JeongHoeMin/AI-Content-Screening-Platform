@@ -15,6 +15,7 @@ def test_persistence_schema_defines_required_audit_tables() -> None:
         "workflow_execution_audits",
         "scheduled_recommendation_jobs",
         "scheduled_recommendation_executions",
+        "recommendation_price_snapshots",
     }
 
 

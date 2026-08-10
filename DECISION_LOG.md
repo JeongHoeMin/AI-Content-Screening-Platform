@@ -586,3 +586,37 @@ Accepted
 ## Consequences
 
 worker 재시작과 dashboard 재시작은 shell cron 상태에 의존하지 않는다. 원문, prompt, Telegram secret과 설정 비밀번호는 정기 설정·실행 테이블과 logs에서 제외한다. HTTPS 운영에서는 secure cookie를 유지하고, 로컬 HTTP 검증 때만 명시적으로 secure cookie를 끈다.
+
+# ADR-025
+
+## Title
+
+추천 가격은 KIS 실시간 우선 관측 후 KRX 종가 fallback으로 기록한다.
+
+## Status
+
+Accepted
+
+## Context
+
+추천 시점과 사후 가격을 표시하려면 KRX 상장 종목의 현재 가격과 휴장일을 포함한 최근 거래일 종가가 필요하다.
+그러나 가격 API 호출이나 PostgreSQL 저장을 Recommendation Policy·Workflow에 넣으면 결정적 추천과 외부 side
+effect가 결합되고, credential·raw provider payload가 운영 경계 밖으로 새어 나갈 위험이 있다.
+
+## Decision
+
+KIS 자격 증명은 선택적 환경 설정으로 두고, 있을 때 `KisRealtimePriceClient`가 현재가를 먼저 관측한다. KIS가
+미설정이거나 가격을 사용할 수 없으면 `KrxClosingPriceClient`가 기존 KRX API로 7일 범위의 최근 거래일 종가를
+찾는다. 두 관측 모두 사용할 수 없으면 가격을 추정하지 않고 `UNAVAILABLE`과 제한된 오류 종류만 남긴다.
+`RecommendationPriceRecorder`와 `RecommendationPerformanceService` Harness만 recommendation 결과를 가격
+adapter·repository와 연결한다. entry snapshot은 immutable이며 latest는 별도 snapshot identity로 upsert한다.
+
+## Consequences
+
+가격 관측 실패는 sibling recommendation과 원래 실행의 부분 성공을 보존한다. 대시보드와 Telegram은 KST로
+안전한 provider/basis/가격만 투영하고 `가격 미확인`에는 수익률을 표시하지 않는다. BUY/SELL 수익률은 사후
+단순 가격 비교이므로 수수료·세금·배당·실제 체결 가격을 반영하지 않는다. KIS key/secret, access token,
+authorization header, raw HTTP payload는 설정 오류·로그·DB·SSE·Telegram에 남기지 않는다. production
+dashboard와 scheduled worker는 KIS 자격 증명이 모두 설정되면 KIS를 호출하고, 그렇지 않거나 KIS 관측을
+사용할 수 없으면 KRX fallback을 사용한다. `RUN_LIVE_MARKET_DATA_TESTS=1` opt-in은 기본 CI에서 외부 호출을
+막기 위한 live 계약 테스트에만 적용한다.

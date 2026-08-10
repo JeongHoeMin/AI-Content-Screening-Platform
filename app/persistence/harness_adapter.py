@@ -21,6 +21,10 @@ from app.persistence.schedule_repository import (
     ClaimedScheduledRecommendationJob,
     SqlAlchemyScheduledRecommendationRepository,
 )
+from app.persistence.price_repository import (
+    RecommendationPriceEntry,
+    SqlAlchemyRecommendationPriceRepository,
+)
 from app.models.scheduled_recommendation import ScheduledRecommendationJob
 
 if TYPE_CHECKING:
@@ -89,6 +93,25 @@ class ScheduledRecommendationPersistence(Protocol):
         lease_until: datetime,
     ) -> bool:
         """Extend a live worker lease without exposing database details."""
+
+
+class RecommendationPricePersistence(Protocol):
+    """Harness boundary for immutable recommendation entry price snapshots."""
+
+    async def store_entries(
+        self,
+        snapshots: Tuple[RecommendationPriceEntry, ...],
+    ) -> None:
+        """Store safe entry snapshots without overwriting prior observations."""
+
+    async def upsert_latest(
+        self,
+        snapshots: Tuple[RecommendationPriceEntry, ...],
+    ) -> None:
+        """Store safe latest snapshots without modifying entry observations."""
+
+    async def list_snapshots(self) -> Tuple[RecommendationPriceEntry, ...]:
+        """Load safe snapshots for a Harness-owned performance query."""
 
 
 class SqlAlchemyDocumentPersistence:
@@ -217,3 +240,35 @@ class SqlAlchemyScheduledRecommendationPersistence:
                 lease_owner=lease_owner,
                 lease_until=lease_until,
             )
+
+
+class SqlAlchemyRecommendationPricePersistence:
+    """Write recommendation entry price snapshots through the Harness boundary."""
+
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self._session_factory: async_sessionmaker[AsyncSession] = session_factory
+
+    async def store_entries(
+        self,
+        snapshots: Tuple[RecommendationPriceEntry, ...],
+    ) -> None:
+        async with self._session_factory.begin() as session:
+            repository: SqlAlchemyRecommendationPriceRepository = (
+                SqlAlchemyRecommendationPriceRepository(session)
+            )
+            await repository.store_entries(snapshots)
+
+    async def upsert_latest(
+        self,
+        snapshots: Tuple[RecommendationPriceEntry, ...],
+    ) -> None:
+        """Upsert only LATEST observations in a Harness-owned transaction."""
+        async with self._session_factory.begin() as session:
+            repository = SqlAlchemyRecommendationPriceRepository(session)
+            await repository.upsert_latest(snapshots)
+
+    async def list_snapshots(self) -> Tuple[RecommendationPriceEntry, ...]:
+        """Read snapshots through the database adapter, not from Policy or API code."""
+        async with self._session_factory() as session:
+            repository = SqlAlchemyRecommendationPriceRepository(session)
+            return await repository.list_snapshots()

@@ -3,6 +3,8 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from datetime import datetime, timezone
+import shutil
+import subprocess
 from typing import Optional
 
 import pytest
@@ -48,6 +50,35 @@ def test_dashboard_page_exposes_recommendation_controls() -> None:
     assert "추천 실행 후 선택된 뉴스를 표시합니다." in response.text
     assert "문단 ${escapeHtml(quote.paragraph_index)}" in response.text
     assert "event_evidence" in response.text
+
+
+def test_dashboard_renders_server_summary_with_korean_kst_labels() -> None:
+    response = TestClient(create_web_app()).get("/")
+
+    assert "성과 요약" in response.text
+    assert "확인" in response.text
+    assert "미확인" in response.text
+    assert "승률" in response.text
+    assert "중앙값" in response.text
+    assert "KST" in response.text
+
+
+def test_dashboard_formats_utc_time_as_a_deterministic_kst_value() -> None:
+    from app.web.dashboard_html import DASHBOARD_HTML
+
+    node: str | None = shutil.which("node")
+    assert node is not None
+    formatter: str = DASHBOARD_HTML.split("const formatKst=")[1].split(
+        ";const formatPricePerformance"
+    )[0]
+    completed = subprocess.run(
+        [node, "-e", f"const formatKst={formatter};process.stdout.write(formatKst('2026-08-05T15:00:00Z'));"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.stdout == "2026-08-06 00:00 KST"
 
 
 def test_dashboard_page_exposes_actual_workflow_graph_and_retry_path() -> None:
