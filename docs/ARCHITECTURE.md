@@ -40,8 +40,10 @@ Parser는 외부 응답을 검증된 관측으로만 만들고, Workflow·Policy
 entry snapshot은 변경하지 않으며 latest snapshot은 별도 identity로 저장한다. 한 종목의 가격 확인 실패는
 `UNAVAILABLE` 관측으로 남고 다른 추천이나 원래 recommendation 실행을 실패시키지 않는다. 과거에
 `UNAVAILABLE`로 저장된 entry만 `RecommendationEntryPriceBackfill`이 원래 추천 시각을 기준으로
-`KrxClosingPriceClient`의 일 종가로 회복한다. 이미 확인된 entry는 절대 덮어쓰지 않고, daily worker는
-KST 날짜마다 한 번만 이 best-effort 백필을 실행한다.
+`KrxClosingPriceClient`의 일 종가로 회복한다. 재조회가 가격을 찾지 못하거나 전송 예외가 나면 entry는
+계속 `UNAVAILABLE`로 두되, 해당 시도의 제한된 `error_kind`를 저장해 대시보드의 재조회 버튼 옆 사유를
+최신 상태로 갱신한다. 이미 확인된 entry는 절대 덮어쓰지 않고, daily worker는 KST 날짜마다 한 번만 이
+best-effort 백필을 실행한다.
 
 `GET /api/runs/history`는 저장된 entry/latest 스냅샷만 투영하므로 외부 가격 API를 호출하지 않는다.
 브라우저는 그 응답을 즉시 렌더하고 `POST /api/runs/history/{run_id}/refresh`로 회차별 latest 관측을

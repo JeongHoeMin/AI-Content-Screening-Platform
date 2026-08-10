@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { Badge, Button, Card, EmptyState, TableScroll, Td, Th } from "@/components/ui";
 import { formatKst, formatPercent, priceErrorLabel, returnTone } from "@/lib/format";
-import { replaceHistoryItem, replaceHistoryRun } from "@/lib/history";
+import { entryRetryFeedback, replaceHistoryItem, replaceHistoryRun } from "@/lib/history";
 import type {
   PerformanceItem,
   PerformanceSummary,
@@ -37,6 +37,7 @@ export default function HistoryPage() {
   const [history, setHistory] = useState<RunHistoryResponse | null>(null);
   const [refreshingRuns, setRefreshingRuns] = useState<Set<string>>(new Set());
   const [backfillingItems, setBackfillingItems] = useState<Set<string>>(new Set());
+  const [retriedItems, setRetriedItems] = useState<Set<string>>(new Set());
 
   const refreshRun = useCallback(async (runId: string) => {
     setRefreshingRuns((current) => new Set(current).add(runId));
@@ -67,6 +68,12 @@ export default function HistoryPage() {
       if (!response.ok) throw new Error("entry_backfill_failed");
       const refreshedItem = await response.json();
       setHistory((current) => (current ? replaceHistoryItem(current, refreshedItem) : current));
+      setRetriedItems((current) => {
+        const next = new Set(current);
+        if (refreshedItem.entry_price === null) next.add(itemIdentity);
+        else next.delete(itemIdentity);
+        return next;
+      });
     } catch {
       // Keep the original error reason visible when the historical close remains unavailable.
     } finally {
@@ -123,12 +130,13 @@ export default function HistoryPage() {
                 {run.items.map((item) => {
                   const itemIdentity = identity(item);
                   const backfilling = backfillingItems.has(itemIdentity);
+                  const retryFeedback = entryRetryFeedback(item, retriedItems.has(itemIdentity));
                   return <tr key={itemIdentity}>
                     <Td className="font-medium">{item.company_name}</Td>
                     <Td className="font-mono text-xs text-ink-muted">{item.ticker}</Td>
                     <Td><Badge tone={item.action === "buy" ? "positive" : "negative"}>{item.action.toUpperCase()}</Badge></Td>
                     <Td align="right">
-                      {item.entry_price === null ? <div className="flex items-center justify-end gap-2"><span className="text-ink-muted">{priceErrorLabel(item.entry_error_kind)}</span><Button size="sm" variant="ghost" title="추천 시각 기준 KRX 종가 재조회" onClick={() => void backfillEntry(item)} disabled={backfilling}>{backfilling ? "조회 중…" : "재조회"}</Button></div> : `${item.entry_price.toLocaleString()}원`}
+                      {item.entry_price === null ? <div className="flex items-center justify-end gap-2"><span className="text-ink-muted">{retryFeedback ? `${retryFeedback}: ` : ""}{priceErrorLabel(item.entry_error_kind)}</span><Button size="sm" variant="ghost" title="추천 시각 기준 KRX 종가 재조회" onClick={() => void backfillEntry(item)} disabled={backfilling}>{backfilling ? "조회 중…" : "재조회"}</Button></div> : `${item.entry_price.toLocaleString()}원`}
                     </Td>
                     <Td align="right">{item.latest_price === null ? "-" : `${item.latest_price.toLocaleString()}원`}</Td>
                     <Td align="right"><ReturnCell item={item} /></Td>

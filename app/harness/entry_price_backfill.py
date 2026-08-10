@@ -10,6 +10,7 @@ import structlog
 
 from app.market_prices.contracts import PriceLookupClient, PriceLookupObservation
 from app.models.market_price import (
+    PriceErrorKind,
     PriceSnapshotStatus,
     RecommendationPriceSnapshot,
 )
@@ -74,16 +75,20 @@ class RecommendationEntryPriceBackfill:
             run_id,
             recommendation_index,
         )
-        recovered: list[RecommendationPriceEntry] = []
+        observed: list[RecommendationPriceEntry] = []
+        recovered_count: int = 0
         entry: RecommendationPriceEntry
         for entry in pending:
             observation: Optional[PriceLookupObservation] = await self._observe(entry)
             if observation is None:
                 continue
-            recovered.append(self._recovered_entry(entry, observation))
-        if not recovered:
+            observed.append(self._recovered_entry(entry, observation))
+            if observation.status is PriceSnapshotStatus.AVAILABLE:
+                recovered_count += 1
+        if not observed:
             return 0
-        return await self._persistence.backfill_entries(tuple(recovered))
+        await self._persistence.backfill_entries(tuple(observed))
+        return recovered_count
 
     async def _pending_entries(
         self,
@@ -123,9 +128,10 @@ class RecommendationEntryPriceBackfill:
                 recommendation_index=entry.snapshot.recommendation_index,
                 error_type=type(error).__name__,
             )
-            return None
-        if observation.status is not PriceSnapshotStatus.AVAILABLE:
-            return None
+            return PriceLookupObservation.unavailable(
+                entry.snapshot.observed_at,
+                PriceErrorKind.TRANSPORT,
+            )
         return observation
 
     @staticmethod

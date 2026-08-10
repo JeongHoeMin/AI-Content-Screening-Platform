@@ -1,0 +1,124 @@
+schemaVersion: 1
+
+id: "20260810-1637-entry-price-backfill-error-feedback"
+title: "진입가 재조회 실패 사유 갱신"
+description: >-
+  미확인 진입가를 재조회할 때 KRX 조회가 다시 실패해도 최초 저장된 오류 사유가 그대로 남아
+  사용자가 실패 원인을 알 수 없다. 재조회 결과의 제한된 오류 종류를 안전하게 저장·응답하고
+  재조회 버튼 옆의 사유를 즉시 최신 값으로 갱신한다.
+
+status: completed
+
+createdAt: "2026-08-10T16:37:23+09:00"
+updatedAt: "2026-08-10T16:40:59+09:00"
+
+agent:
+  provider: "codex"
+  model: "gpt-5.6"
+  sessionId: null
+
+request:
+  summary: "진입가 재조회가 되지 않는 원인을 표시하고 재조회 버튼 옆 실패 사유를 갱신한다."
+  originalPrompt: |
+    그니까 왜 조회가안된거지? 그리고 재조회버튼눌렀을 때, 조회가 안된다면 안된사유가 해당 재 조회 버튼옆에 갱신 되어야해
+
+scope:
+  allowedPaths:
+    - "tasks/20260810-1637-entry-price-backfill-error-feedback/**"
+    - "app/harness/entry_price_backfill.py"
+    - "app/persistence/price_repository.py"
+    - "frontend/src/app/history/page.tsx"
+    - "tests/test_entry_price_backfill.py"
+    - "tests/test_recommendation_price_repository.py"
+    - "docs/ARCHITECTURE.md"
+  deniedPaths:
+    - ".env"
+    - ".env.*"
+    - "secrets/**"
+    - ".venv/**"
+    - "__pycache__/**"
+    - ".git/**"
+    - "runtime/**"
+    - "dist/**"
+    - "build/**"
+    - ".agent/**"
+
+requirements:
+  items:
+    - "미확인 진입가의 재조회가 AVAILABLE 결과를 받으면 기존과 같이 해당 entry 가격을 회복한다."
+    - "미확인 진입가의 재조회가 UNAVAILABLE 결과를 받으면 그 조회의 제한된 error_kind가 entry 스냅샷에 저장된다."
+    - "재조회 중 예외가 발생하면 transport 오류로 안전하게 기록되어 다른 항목이나 API 응답을 실패시키지 않는다."
+    - "재조회 API 응답을 받은 추천 이력 화면은 재조회 버튼 옆에 최신 실패 사유를 표시한다."
+    - "이미 AVAILABLE인 entry 스냅샷은 재조회 결과로 변경되지 않는다."
+    - "가격 백필 정책의 오류 사유 갱신 계약이 아키텍처 문서에 기록된다."
+
+plan:
+  steps:
+    - id: 1
+      description: "현재 entry backfill·저장소·이력 화면의 실패 결과 흐름과 관련 테스트를 확인한다."
+      status: completed
+    - id: 2
+      description: "UNAVAILABLE 재조회 결과와 전송 예외 결과를 entry 스냅샷에 반영해야 한다는 실패 테스트를 추가한다."
+      status: completed
+    - id: 3
+      description: "Harness와 persistence가 미확인 entry의 최신 제한 오류 사유를 저장하도록 최소 변경한다."
+      status: completed
+    - id: 4
+      description: "이력 화면이 백필 API의 갱신된 오류 사유를 버튼 옆에 유지·표시하는지 테스트하고 보완한다."
+      status: completed
+    - id: 5
+      description: "아키텍처 문서와 task 결과를 갱신하고 관련 backend·frontend 검증을 실행한다."
+      status: completed
+
+result:
+  summary: >-
+    KRX 과거 종가 재조회가 가격을 찾지 못해도 최신 제한 오류 사유를 기존 UNAVAILABLE entry에
+    저장하도록 변경했다. 전송 예외는 transport 사유로 기록한다. 백필 API는 저장된 항목을 반환하고,
+    이력 화면은 기존 행 교체 흐름으로 재조회 버튼 옆 사유를 즉시 최신 값으로 표시한다.
+  changedFiles:
+    - "app/harness/entry_price_backfill.py"
+    - "docs/ARCHITECTURE.md"
+    - "frontend/src/lib/history.test.ts"
+    - "tests/test_entry_price_backfill.py"
+    - "tasks/20260810-1637-entry-price-backfill-error-feedback/task.yaml"
+  verifications:
+    - command: "UV_CACHE_DIR=/private/tmp/ai-screening-uv-cache uv run pytest tests/test_entry_price_backfill.py tests/test_recommendation_price_repository.py tests/test_recommendation_performance.py tests/test_dashboard_performance_api.py -q"
+      result: passed
+      summary: "가격 백필·저장소·성과 API 회귀 테스트 16개가 통과했다."
+    - command: "npm test -- --run src/lib/history.test.ts"
+      result: passed
+      summary: "재조회 API 응답의 최신 entry_error_kind를 이력 행에 유지하는 프런트 단위 테스트 3개가 통과했다."
+    - command: "PYTHONPYCACHEPREFIX=/private/tmp/ai-screening-pycache UV_CACHE_DIR=/private/tmp/ai-screening-uv-cache uv run python -m compileall app tests -q"
+      result: passed
+      summary: "app 및 tests의 Python 컴파일이 성공했다."
+    - command: "UV_CACHE_DIR=/private/tmp/ai-screening-uv-cache uv run pytest -q"
+      result: passed
+      summary: "전체 테스트 632개가 통과했고, opt-in 실계약 테스트 1개는 예상대로 skip됐다."
+    - command: "npm run lint"
+      result: passed
+      summary: "frontend ESLint 오류가 없었다."
+    - command: "git diff --check"
+      result: passed
+      summary: "변경 범위에 공백 오류가 없었다."
+  completedAt: "2026-08-10T16:40:59+09:00"
+
+blocker:
+  reason: null
+  requiredAction: null
+
+history:
+  - at: "2026-08-10T16:37:23+09:00"
+    status: planning
+    message: "Task created: 재조회 결과의 실패 사유를 저장하고 버튼 옆에 갱신하는 요구사항과 범위를 기록했다."
+  - at: "2026-08-10T16:38:00+09:00"
+    status: in_progress
+    message: "구현 시작: UNAVAILABLE 재조회 결과가 버려져 최초 오류 사유가 남는 흐름을 확인하고, 최신 결과를 저장하는 회귀 테스트를 추가한다."
+  - at: "2026-08-10T16:39:55+09:00"
+    status: testing
+    message: "KRX UNAVAILABLE·전송 예외를 최신 오류 사유로 저장하고, frontend 이력 상태가 API 응답의 갱신된 사유를 유지하도록 구현했다. 관련 검증을 시작한다."
+  - at: "2026-08-10T16:40:10+09:00"
+    status: testing
+    message: "검증 환경 기록: frontend 테스트는 처음에 frontend 작업 디렉토리 기준이 아닌 경로를 넘겨 파일을 찾지 못했고, compileall은 기본 macOS 캐시 경로 권한 오류가 났다. 상대 경로와 PYTHONPYCACHEPREFIX를 수정한 뒤 재실행했다."
+  - at: "2026-08-10T16:40:59+09:00"
+    status: completed
+    message: "가격 백필·성과 API 회귀 테스트 16개, 전체 pytest 632개(1 skipped), frontend 이력 단위 테스트 3개, ESLint, compileall, diff 검증을 통과해 작업을 완료했다."

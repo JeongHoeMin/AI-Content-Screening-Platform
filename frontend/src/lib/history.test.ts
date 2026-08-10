@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { replaceHistoryItem, replaceHistoryRun } from "./history";
+import {
+  entryRetryFeedback,
+  replaceHistoryItem,
+  replaceHistoryRun,
+} from "./history";
 import type { RunHistoryItem, RunHistoryResponse } from "./types";
 
 const summary = {
@@ -71,5 +75,37 @@ describe("replaceHistoryItem", () => {
     expect(updated.runs).toHaveLength(1);
     expect(updated.runs[0].items).toHaveLength(1);
     expect(updated.runs[0].items[0].entry_price).toBe(72000);
+  });
+
+  it("keeps the latest failed entry lookup reason returned by a retry", () => {
+    const current: RunHistoryResponse = {
+      runs: [run("run-1", null)],
+      evaluated_at: "2026-08-10T07:00:00Z",
+    };
+    const retried = {
+      ...current.runs[0].items[0],
+      entry_price: null,
+      entry_error_kind: "rate_limit" as const,
+    };
+
+    const updated = replaceHistoryItem(current, retried);
+
+    expect(updated.runs[0].items[0].entry_error_kind).toBe("rate_limit");
+  });
+});
+
+describe("entryRetryFeedback", () => {
+  it("labels an unavailable item as the result of its latest retry", () => {
+    const unavailable = {
+      ...run("run-1", null).items[0],
+      entry_price: null,
+      entry_error_kind: "authentication" as const,
+    };
+
+    expect(entryRetryFeedback(unavailable, true)).toBe("재조회 결과");
+  });
+
+  it("hides retry feedback after the entry price is recovered", () => {
+    expect(entryRetryFeedback(run("run-1", null).items[0], true)).toBeNull();
   });
 });

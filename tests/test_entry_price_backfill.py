@@ -83,6 +83,72 @@ def test_entry_backfill_uses_the_original_recommendation_time_and_only_updates_u
     assert persistence.updated[0].snapshot.basis is PriceBasis.CLOSE
 
 
+def test_entry_backfill_persists_the_latest_unavailable_lookup_reason() -> None:
+    entry = _unavailable_entry()
+
+    class ClosingClient:
+        async def fetch(self, ticker: str, observed_at: datetime) -> PriceLookupObservation:
+            return PriceLookupObservation.unavailable(
+                observed_at,
+                PriceErrorKind.RATE_LIMIT,
+            )
+
+    class Persistence:
+        def __init__(self) -> None:
+            self.updated: tuple[RecommendationPriceEntry, ...] = ()
+
+        async def list_snapshots(self) -> tuple[RecommendationPriceEntry, ...]:
+            return (entry,)
+
+        async def backfill_entries(
+            self, snapshots: tuple[RecommendationPriceEntry, ...]
+        ) -> int:
+            self.updated = snapshots
+            return 0
+
+    persistence = Persistence()
+    recovered = asyncio.run(
+        RecommendationEntryPriceBackfill(
+            HistoricalClosingPriceCapture(ClosingClient()), persistence
+        ).backfill("run-1", 0)
+    )
+
+    assert recovered == 0
+    assert persistence.updated[0].snapshot.status is PriceSnapshotStatus.UNAVAILABLE
+    assert persistence.updated[0].snapshot.error_kind is PriceErrorKind.RATE_LIMIT
+
+
+def test_entry_backfill_records_transport_reason_when_krx_lookup_raises() -> None:
+    entry = _unavailable_entry()
+
+    class ClosingClient:
+        async def fetch(self, ticker: str, observed_at: datetime) -> PriceLookupObservation:
+            raise TimeoutError("timed out")
+
+    class Persistence:
+        def __init__(self) -> None:
+            self.updated: tuple[RecommendationPriceEntry, ...] = ()
+
+        async def list_snapshots(self) -> tuple[RecommendationPriceEntry, ...]:
+            return (entry,)
+
+        async def backfill_entries(
+            self, snapshots: tuple[RecommendationPriceEntry, ...]
+        ) -> int:
+            self.updated = snapshots
+            return 0
+
+    persistence = Persistence()
+    recovered = asyncio.run(
+        RecommendationEntryPriceBackfill(
+            HistoricalClosingPriceCapture(ClosingClient()), persistence
+        ).backfill("run-1", 0)
+    )
+
+    assert recovered == 0
+    assert persistence.updated[0].snapshot.error_kind is PriceErrorKind.TRANSPORT
+
+
 def test_daily_entry_backfill_runs_once_per_kst_day() -> None:
     class Backfill:
         def __init__(self) -> None:

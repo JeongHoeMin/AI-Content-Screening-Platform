@@ -38,3 +38,11 @@ export function replaceHistoryItem(
     ),
   };
 }
+
+/** Label an item whose current unavailable state came from this page's retry. */
+export function entryRetryFeedback(
+  item: PerformanceItem,
+  wasRetried: boolean,
+): string | null {
+  return wasRetried && item.entry_price === null ? "재조회 결과" : null;
+}
