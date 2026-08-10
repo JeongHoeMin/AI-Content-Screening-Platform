@@ -75,6 +75,14 @@ def test_live_progress_emits_completed_langgraph_nodes_and_writes_audit(tmp_path
         + evaluate_event.stage_counts.rejected_count
         == len(articles)
     )
+    assert (
+        extract_event.stage_counts.input_count
+        == extract_event.stage_counts.accepted_count
+        + extract_event.stage_counts.rejected_count
+    )
+    assert extract_event.stage_counts.accepted_count == sum(
+        1 for item in extract_event.article_analyses if item.event_titles
+    )
     select_candidates_event: WorkflowProgressEvent = events[-1]
     assert select_candidates_event.node == "select_candidates"
     assert (

@@ -402,6 +402,52 @@ async def test_workflow_progress_reports_per_stage_input_accepted_rejected_count
     assert select_counts.input_count == select_counts.accepted_count == select_counts.rejected_count == 0
 
 
+def test_extract_stage_counts_ignore_error_count_and_use_article_event_yield() -> None:
+    """Regression: per-event Parser exclusions can outnumber the article count,
+    so accepted/rejected must come from which articles actually yielded an event,
+    not from len(extraction_errors)."""
+    articles: Tuple[Article, ...] = tuple(build_article(index) for index in range(7))
+    evaluations: Tuple[ArticleEvaluationResult, ...] = tuple(
+        ArticleEvaluationResult(article=article, accepted=True, rejection_reason=None)
+        for article in articles
+    )
+    event: NewsEvent = NewsEvent(
+        title="Event",
+        summary="Event summary",
+        event_type=EventType.CORPORATE_EVENT,
+        companies=[ExtractedCompany(name="Samsung Electronics", relation=CompanyRelation.DIRECT)],
+        industries=["Semiconductors"],
+        keywords=["HBM"],
+        reasons=["Explicit source fact"],
+    )
+    # Only the first 3 articles produced an event; the other 4 had zero-event
+    # inferences, yet all 7 still generated an event_validation exclusion.
+    inferences: Tuple[LLMInferenceResult, ...] = tuple(
+        LLMInferenceResult(
+            article=article,
+            events=(event,) if index < 3 else (),
+            summary="Article summary",
+            reasoning="reasoning",
+            confidence=0.9,
+        )
+        for index, article in enumerate(articles)
+    )
+
+    counts = ScreeningWorkflow._stage_counts(
+        "extract",
+        {"evaluations": evaluations},
+        {
+            "inferences": inferences,
+            "events": (event, event, event),
+            "extraction_errors": ("error",) * 7,
+        },
+    )
+
+    assert counts.input_count == 7
+    assert counts.accepted_count == 3
+    assert counts.rejected_count == 4
+
+
 @pytest.mark.anyio
 async def test_workflow_skips_llm_for_empty_or_all_rejected_input() -> None:
     article: Article = build_article(1)

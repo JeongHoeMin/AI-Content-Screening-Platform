@@ -353,12 +353,20 @@ class ScreeningWorkflow:
                 Tuple[ArticleEvaluationResult, ...],
                 previous_state.get("evaluations", ()),
             )
-            events = cast(tuple, node_update.get("events", ()))
-            extraction_errors = cast(tuple, node_update.get("extraction_errors", ()))
+            accepted_article_count: int = sum(
+                1 for item in prior_evaluations if item.accepted
+            )
+            inferences = cast(
+                Tuple[LLMInferenceResult, ...],
+                node_update.get("inferences", ()),
+            )
+            articles_with_events: int = sum(1 for item in inferences if item.events)
             return WorkflowStageCounts(
-                input_count=sum(1 for item in prior_evaluations if item.accepted),
-                accepted_count=len(events),
-                rejected_count=len(extraction_errors),
+                input_count=accepted_article_count,
+                accepted_count=articles_with_events,
+                rejected_count=max(
+                    accepted_article_count - articles_with_events, 0
+                ),
             )
         if node == "deduplicate":
             if "events" not in node_update:
