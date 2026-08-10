@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
+import asyncio
 from datetime import datetime, timezone
 import shutil
 import subprocess
@@ -17,8 +18,10 @@ from app.web.app import (
     DashboardEvent,
     DashboardRunManager,
     RecommendationRunRequest,
+    _RunState,
     create_web_app,
 )
+from app.workflows import WorkflowStageCounts
 from app.workflows.screening.errors import WorkflowStageRetriesExhaustedError
 
 
@@ -218,6 +221,61 @@ def test_dashboard_event_exposes_safe_terminal_failure_detail() -> None:
 
     assert event.failure_stage == "cross_validate"
     assert event.failure_attempts == 3
+
+
+def test_dashboard_event_exposes_stage_counts_with_a_safe_default() -> None:
+    default_event: DashboardEvent = DashboardEvent(type="heartbeat", message="처리 중")
+
+    assert default_event.stage_counts == {}
+
+    event: DashboardEvent = DashboardEvent(
+        type="workflow",
+        message="evaluate 단계를 완료했습니다.",
+        stage_counts={
+            "evaluate": WorkflowStageCounts(
+                input_count=5,
+                accepted_count=3,
+                rejected_count=2,
+            )
+        },
+    )
+
+    assert event.stage_counts["evaluate"].accepted_count == 3
+    assert event.stage_counts["evaluate"].rejected_count == 2
+
+
+def test_dashboard_emit_accumulates_stage_counts_across_events() -> None:
+    async def scenario() -> tuple[DashboardEvent, DashboardEvent]:
+        manager: DashboardRunManager = DashboardRunManager()
+        state: _RunState = _RunState()
+        await manager._emit(
+            state,
+            "workflow",
+            "evaluate 단계를 완료했습니다.",
+            stage_counts={
+                "evaluate": WorkflowStageCounts(
+                    input_count=5, accepted_count=3, rejected_count=2
+                )
+            },
+        )
+        await manager._emit(
+            state,
+            "workflow",
+            "extract 단계를 완료했습니다.",
+            stage_counts={
+                "extract": WorkflowStageCounts(
+                    input_count=3, accepted_count=4, rejected_count=0
+                )
+            },
+        )
+        return state.queue.get_nowait(), state.queue.get_nowait()
+
+    first_event, second_event = asyncio.run(scenario())
+
+    assert set(first_event.stage_counts) == {"evaluate"}
+    assert set(second_event.stage_counts) == {"evaluate", "extract"}
+    assert second_event.stage_counts["evaluate"].accepted_count == 3
+    assert second_event.stage_counts["extract"].accepted_count == 4
 
 
 def test_dashboard_maps_completed_workflow_node_to_next_active_stage() -> None:

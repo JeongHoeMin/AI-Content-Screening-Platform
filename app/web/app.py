@@ -69,7 +69,7 @@ from app.models.collection_filter_result import (
 from app.models.candidate_selection import CandidateEvaluation, CandidateSelectionResult
 from app.models.community import CommunityType
 from app.models.post import Post
-from app.workflows import ScreeningResult, WorkflowProgressEvent
+from app.workflows import ScreeningResult, WorkflowProgressEvent, WorkflowStageCounts
 from app.workflows.screening.errors import WorkflowStageRetriesExhaustedError
 from app.web.dashboard_html import DASHBOARD_HTML
 from app.web.settings_html import SCHEDULE_SETTINGS_HTML
@@ -165,6 +165,7 @@ class DashboardEvent(BaseModel):
     failure_stage: Optional[str] = None
     failure_attempts: Optional[int] = Field(default=None, ge=1, le=3)
     analyses: List["NewsAnalysisCard"] = Field(default_factory=list)
+    stage_counts: Dict[str, WorkflowStageCounts] = Field(default_factory=dict)
 
 
 class NewsCard(BaseModel):
@@ -258,6 +259,7 @@ class DashboardRunResult(BaseModel):
     recommendations: List[RecommendationCard]
     statistics: Dict[str, Any]
     collection_filter: CollectionFilterSummary
+    stage_counts: Dict[str, WorkflowStageCounts] = Field(default_factory=dict)
 
 
 @dataclass
@@ -271,6 +273,7 @@ class _RunState:
     analyses: Dict[str, NewsAnalysisCard] = field(default_factory=dict)
     active_stage: str = "collect"
     completed_stage_count: int = 0
+    stage_counts: Dict[str, WorkflowStageCounts] = field(default_factory=dict)
 
 
 class DashboardRunManager:
@@ -481,6 +484,13 @@ class DashboardRunManager:
                 f"테마·주제 필터로 {len(filter_result.rejected_article_ids)}건을 제외했습니다.",
                 completed_stage_count=1,
                 analyses=initial_analyses,
+                stage_counts={
+                    "collect": WorkflowStageCounts(
+                        input_count=len(posts),
+                        accepted_count=len(filter_result.accepted_articles),
+                        rejected_count=len(filter_result.rejected_article_ids),
+                    )
+                },
             )
             await self._emit(
                 state,
@@ -512,6 +522,11 @@ class DashboardRunManager:
                     active_stage=event.next_node,
                     completed_stage_count=event.completed_node_count + 2,
                     analyses=changed_analyses,
+                    stage_counts=(
+                        {event.node: event.stage_counts}
+                        if event.stage_counts is not None
+                        else None
+                    ),
                 )
 
             result: ScreeningResult = await ScreeningExecutionHarness(
@@ -529,6 +544,7 @@ class DashboardRunManager:
                 result,
                 state.analyses,
                 filter_result,
+                state.stage_counts,
             )
             await self._record_price_entries(
                 run_id,
@@ -655,6 +671,7 @@ class DashboardRunManager:
         result: ScreeningResult,
         analyses: Dict[str, NewsAnalysisCard],
         filter_result: CollectionFilterResult,
+        stage_counts: Dict[str, WorkflowStageCounts],
     ) -> DashboardRunResult:
         news_cards: List[NewsCard] = [
             NewsCard(
@@ -700,6 +717,7 @@ class DashboardRunManager:
             recommendations=recommendations,
             statistics=statistics,
             collection_filter=filter_summary,
+            stage_counts=dict(stage_counts),
         )
 
     @staticmethod
@@ -807,11 +825,14 @@ class DashboardRunManager:
         analyses: Optional[List[NewsAnalysisCard]] = None,
         active_stage: Optional[str] = None,
         completed_stage_count: Optional[int] = None,
+        stage_counts: Optional[Dict[str, WorkflowStageCounts]] = None,
     ) -> None:
         if active_stage is not None:
             state.active_stage = active_stage
         if completed_stage_count is not None:
             state.completed_stage_count = completed_stage_count
+        if stage_counts is not None:
+            state.stage_counts.update(stage_counts)
         await state.queue.put(
             DashboardEvent(
                 type=event_type,
@@ -825,6 +846,7 @@ class DashboardRunManager:
                 failure_stage=failure_stage,
                 failure_attempts=failure_attempts,
                 analyses=analyses or [],
+                stage_counts=dict(state.stage_counts),
             )
         )
 

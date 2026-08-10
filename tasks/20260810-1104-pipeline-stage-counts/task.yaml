@@ -69,7 +69,7 @@ plan:
 
     - id: 4
       description: "app/web/app.py의 DashboardEvent·_RunState·_emit·on_progress·_execute(collect 단계)·DashboardRunResult에 stage_counts를 배선한다. tests/test_web_dashboard.py를 확장해 검증한다."
-      status: pending
+      status: completed
 
     - id: 5
       description: "app/web/dashboard_html.py의 workflow-graph 렌더링에 단계별 건수 표시를 추가한다(진행 상태 리셋 시 초기화 포함). HTML 마크업 테스트를 추가한다."
@@ -101,3 +101,7 @@ history:
   - at: "2026-08-10T11:20:00+09:00"
     status: in_progress
     message: "Allowed paths expanded to include tests/test_screening_workflow.py: added a focused unit test there for the new WorkflowStageCounts projector (deduplicate passthrough, screen accept/reject split) alongside the existing run_with_progress-style workflow tests, in addition to the planned tests/test_live_workflow_progress.py extension."
+
+  - at: "2026-08-10T11:35:00+09:00"
+    status: in_progress
+    message: "Wired stage_counts through DashboardEvent/_RunState/_emit/on_progress/_build_result. Initial test for _emit accumulation used asyncio.run() twice around a queue built outside any loop, which broke Python 3.9 asyncio.Queue's loop binding and cascaded into an unrelated test failure (test_telegram_price_summary) in full-suite runs; fixed by wrapping both _emit calls and _RunState() construction inside one asyncio.run(). Also gave DashboardRunResult.stage_counts a default_factory=dict (matching DashboardEvent) so unrelated tests that construct DashboardRunResult directly (test_telegram_price_summary.py) did not need to change."
